@@ -1,0 +1,171 @@
+%% ERD - Capstone Tracking Backend
+%% Generated from src/main/resources/db/migration (V1-V4)
+erDiagram
+    USERS ||--o{ TOPICS : "admin_id"
+    USERS |o--o{ STUDENT_GROUPS : "supervisor_id"
+    TOPICS |o--o{ STUDENT_GROUPS : "topic_id"
+    STUDENT_GROUPS ||--o{ GROUP_MEMBERS : "group_id"
+    USERS ||--o{ GROUP_MEMBERS : "user_id"
+    TOPICS ||--o{ QUESTION_BANK_ITEMS : "topic_id"
+    USERS ||--o{ QUESTION_BANK_ITEMS : "created_by"
+    USERS ||--o{ SCHEDULE_SLOTS : "instructor_id"
+    SCHEDULE_SLOTS ||--o{ BOOKINGS : "slot_id"
+    STUDENT_GROUPS ||--o{ BOOKINGS : "group_id"
+    BOOKINGS ||--|| MEETING_SESSIONS : "booking_id"
+    MEETING_SESSIONS ||--o{ REQUIREMENT_LOGS : "session_id"
+    STUDENT_GROUPS ||--o{ REQUIREMENT_LOGS : "group_id"
+    USERS |o--o{ REQUIREMENT_LOGS : "assigned_to"
+    MEETING_SESSIONS ||--|| MEETING_MINUTES : "session_id"
+    STUDENT_GROUPS ||--o{ EVALUATION_RECORDS : "group_id"
+    USERS ||--o{ EVALUATION_RECORDS : "instructor_id"
+    STUDENT_GROUPS ||--o{ ARTIFACT_SUBMISSIONS : "group_id"
+    MEETING_SESSIONS |o--o{ ARTIFACT_SUBMISSIONS : "session_id"
+    USERS ||--o{ SYSTEM_AUDIT_TRAIL : "performed_by"
+
+    USERS {
+        uuid id PK
+        varchar email UK
+        varchar full_name
+        varchar password_hash
+        varchar role
+        varchar status
+        varchar avatar_url
+        timestamp created_at
+        timestamp updated_at
+    }
+    TOPICS {
+        uuid id PK
+        varchar topic_code UK
+        varchar title
+        text description
+        varchar category
+        uuid admin_id FK
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    STUDENT_GROUPS {
+        uuid id PK
+        varchar group_code UK
+        uuid topic_id FK "nullable"
+        uuid supervisor_id FK "nullable"
+        varchar semester
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    GROUP_MEMBERS {
+        uuid id PK
+        uuid group_id FK
+        uuid user_id FK
+        boolean is_leader
+        timestamp joined_at
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    QUESTION_BANK_ITEMS {
+        uuid id PK
+        uuid topic_id FK
+        varchar category
+        text question_text
+        text guidance_notes
+        uuid created_by FK
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    SCHEDULE_SLOTS {
+        uuid id PK
+        uuid instructor_id FK
+        timestamp start_time
+        timestamp end_time
+        int duration_minutes
+        int capacity_groups
+        int booked_count
+        varchar location_type
+        varchar meeting_url
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    BOOKINGS {
+        uuid id PK
+        uuid slot_id FK
+        uuid group_id FK
+        varchar booking_status
+        timestamp booked_at
+        text notes
+        timestamp cancelled_at
+        timestamp created_at
+        timestamp updated_at
+    }
+    MEETING_SESSIONS {
+        uuid id PK
+        uuid booking_id FK "unique"
+        timestamp started_at
+        timestamp ended_at
+        text raw_notes
+        varchar session_status
+        timestamp created_at
+        timestamp updated_at
+    }
+    REQUIREMENT_LOGS {
+        uuid id PK
+        uuid session_id FK
+        uuid group_id FK
+        varchar title
+        text description
+        varchar priority
+        varchar status
+        uuid assigned_to FK "nullable"
+        timestamp created_at
+        timestamp updated_at
+    }
+    MEETING_MINUTES {
+        uuid id PK
+        uuid session_id FK "unique"
+        text generated_content
+        text final_content
+        varchar status
+        timestamp student_signed_at
+        timestamp instructor_signed_at
+        timestamp created_at
+        timestamp updated_at
+    }
+    EVALUATION_RECORDS {
+        uuid id PK
+        uuid group_id FK
+        uuid instructor_id FK
+        int topic_fit_score
+        int product_quality_score
+        int communication_score
+        double total_score
+        text feedback_notes
+        timestamp evaluated_at
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    ARTIFACT_SUBMISSIONS {
+        uuid id PK
+        uuid group_id FK
+        uuid session_id FK "nullable"
+        varchar title
+        varchar file_url
+        varchar file_type
+        int version
+        timestamp submitted_at
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    SYSTEM_AUDIT_TRAIL {
+        uuid id PK
+        varchar entity_name
+        uuid entity_id
+        varchar action
+        uuid performed_by FK
+        timestamp performed_at
+        text details_json
+    }

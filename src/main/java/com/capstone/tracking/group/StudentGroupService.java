@@ -18,7 +18,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -82,7 +85,26 @@ public class StudentGroupService {
         return studentGroupRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("StudentGroup", id));
     }
 
-    public Page<StudentGroup> list(UUID supervisorId, UUID topicId, Pageable pageable) {
+    public long countActiveMembers(UUID groupId) {
+        return groupMemberRepository.countByGroupIdAndStatus(groupId, MemberStatus.ACTIVE);
+    }
+
+    public Map<UUID, Long> countActiveMembers(Collection<UUID> groupIds) {
+        if (groupIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, Long> counts = new HashMap<>();
+        for (Object[] row : groupMemberRepository.countByGroupIds(groupIds, MemberStatus.ACTIVE)) {
+            counts.put((UUID) row[0], (Long) row[1]);
+        }
+        return counts;
+    }
+
+    /** availableOnly (groups with fewer than MAX_MEMBERS active members) takes priority over the other filters. */
+    public Page<StudentGroup> list(UUID supervisorId, UUID topicId, boolean availableOnly, Pageable pageable) {
+        if (availableOnly) {
+            return studentGroupRepository.findNotFull(MemberStatus.ACTIVE, MAX_MEMBERS, pageable);
+        }
         if (supervisorId != null) {
             return studentGroupRepository.findBySupervisorId(supervisorId, pageable);
         }
@@ -144,6 +166,15 @@ public class StudentGroupService {
                 .status(MemberStatus.ACTIVE)
                 .build();
         return groupMemberRepository.save(member);
+    }
+
+    /** A student joins a group themselves; they must not already belong to one and the group must have room. */
+    @Transactional
+    public GroupMember join(UUID groupId, User current) {
+        if (groupMemberRepository.existsByUserIdAndStatus(current.getId(), MemberStatus.ACTIVE)) {
+            throw new ConflictException("You already belong to a group");
+        }
+        return addMember(groupId, new AddMemberRequest(current.getId(), false));
     }
 
     @Transactional

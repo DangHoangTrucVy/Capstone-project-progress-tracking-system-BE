@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** FR-010: group roster management (blueprint.md §7 UC not explicit, underpins UC-002..UC-004). */
@@ -38,14 +39,19 @@ public class StudentGroupController {
                                                        @AuthenticationPrincipal User currentUser) {
         StudentGroup created = studentGroupService.create(request, currentUser);
         return ResponseEntity.created(URI.create("/api/v1/groups/" + created.getId()))
-                .body(StudentGroupResponse.from(created));
+                .body(StudentGroupResponse.from(created, studentGroupService.countActiveMembers(created.getId())));
     }
 
+    /** available=true lists only groups that still have room (fewer than 5 active members). */
     @GetMapping
     public Page<StudentGroupResponse> list(@RequestParam(required = false) UUID supervisorId,
                                             @RequestParam(required = false) UUID topicId,
+                                            @RequestParam(defaultValue = "false") boolean available,
                                             Pageable pageable) {
-        return studentGroupService.list(supervisorId, topicId, pageable).map(StudentGroupResponse::from);
+        Page<StudentGroup> page = studentGroupService.list(supervisorId, topicId, available, pageable);
+        Map<UUID, Long> counts = studentGroupService.countActiveMembers(
+                page.getContent().stream().map(StudentGroup::getId).toList());
+        return page.map(g -> StudentGroupResponse.from(g, counts.getOrDefault(g.getId(), 0L)));
     }
 
     @GetMapping("/{id}")
@@ -54,13 +60,21 @@ public class StudentGroupController {
         List<GroupMemberResponse> members = studentGroupService.listActiveMembers(id).stream()
                 .map(GroupMemberResponse::from)
                 .toList();
-        return StudentGroupResponse.from(group, members);
+        return StudentGroupResponse.from(group, members.size(), members);
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR')")
     public StudentGroupResponse update(@PathVariable UUID id, @Valid @RequestBody StudentGroupUpdateRequest request) {
-        return StudentGroupResponse.from(studentGroupService.update(id, request));
+        StudentGroup updated = studentGroupService.update(id, request);
+        return StudentGroupResponse.from(updated, studentGroupService.countActiveMembers(updated.getId()));
+    }
+
+    @PostMapping("/{id}/join")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<GroupMemberResponse> join(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        GroupMember member = studentGroupService.join(id, currentUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(GroupMemberResponse.from(member));
     }
 
     @PostMapping("/{id}/members")
