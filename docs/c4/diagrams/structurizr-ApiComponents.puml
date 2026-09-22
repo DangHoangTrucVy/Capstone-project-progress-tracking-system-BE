@@ -1,0 +1,67 @@
+@startuml
+title <size:24>Component View: Capstone Tracking System - Backend API</size>\n<size:24>Package-by-feature modules inside the Backend API, mirroring src/main/java/com/capstone/tracking/*.</size>
+
+set separator none
+left to right direction
+
+<style>
+  root {
+    BackgroundColor: #ffffff
+    FontColor: #444444
+  }
+</style>
+
+!include <C4/C4>
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+!include <C4/C4_Component>
+
+System_Boundary("CapstoneTrackingSystem_boundary", "Capstone Tracking System", $tags="") {
+  Container_Boundary("CapstoneTrackingSystem.BackendAPI_boundary", "Backend API", $tags="") {
+    Component(CapstoneTrackingSystem.BackendAPI.TopicManagement, "Topic Management", $techn="Spring MVC + Spring Data JPA", $descr="Create/list capstone topics.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.QuestionBank, "Question Bank", $techn="Spring MVC + Spring Data JPA", $descr="Per-topic question bank and guidance notes.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, "Student Group Management", $techn="Spring MVC + Spring Data JPA", $descr="Group roster: create, self-join, add/remove member; enforces the 5-active-member cap.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.AssessmentScheduling, "Assessment Scheduling", $techn="Spring MVC + Spring Data JPA", $descr="Calendly-style slot publishing and booking; pessimistic row-lock (SELECT ... FOR UPDATE) prevents over-booking.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.ArtifactSubmissions, "Artifact Submissions", $techn="Spring MVC + Spring Data JPA", $descr="Progress-artifact metadata: submit, version/supersede on re-submit with the same title, accept.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.MeetingSupport, "Meeting Support", $techn="Spring MVC + Spring Data JPA", $descr="Meeting sessions, requirement logs, and template-generated meeting minutes with 2-party sign-off.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.Evaluation, "Evaluation", $techn="Spring MVC + Spring Data JPA", $descr="3-criteria scoring (Topic Fit / Product Quality / Communication) with weighted total, published immediately on save.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.Reporting, "Reporting", $techn="Spring MVC", $descr="Aggregate progress statistics (sessions held, attendance, open/closed requirements) for Admin.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.AuditTrail, "Audit Trail", $techn="Spring + Spring Data JPA", $descr="Immutable log of state-changing actions, written inside the same transaction as the change it documents.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.AuthSecurity, "Auth & Security", $techn="Spring Security + jjwt", $descr="Registration (domain-restricted), login, JWT issuance/validation, and per-request authentication.", $tags="", $link="")
+    Component(CapstoneTrackingSystem.BackendAPI.UserManagement, "User Management", $techn="Spring MVC + Spring Data JPA", $descr="Admin CRUD for user accounts.", $tags="", $link="")
+  }
+
+  ContainerDb(CapstoneTrackingSystem.Database, "Database", $techn="PostgreSQL 16", $descr="Stores all persistent application data; schema is fully owned by Flyway migrations (Hibernate ddl-auto=validate).", $tags="", $link="")
+}
+
+Rel(CapstoneTrackingSystem.BackendAPI.AuthSecurity, CapstoneTrackingSystem.BackendAPI.UserManagement, "Looks up user accounts / roles via", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, CapstoneTrackingSystem.BackendAPI.UserManagement, "Validates member, leader and supervisor identities via", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, CapstoneTrackingSystem.BackendAPI.TopicManagement, "Links a group to its assigned topic via", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.TopicManagement, CapstoneTrackingSystem.BackendAPI.QuestionBank, "Owns the question bank items of", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.AssessmentScheduling, CapstoneTrackingSystem.BackendAPI.UserManagement, "Associates a slot with its publishing instructor via", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.AssessmentScheduling, CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, "Associates a booking with the booking group via", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.AssessmentScheduling, CapstoneTrackingSystem.BackendAPI.AuditTrail, "Records booking create/cancel to", $techn="same transaction", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.MeetingSupport, CapstoneTrackingSystem.BackendAPI.AssessmentScheduling, "Creates a meeting session from a confirmed", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.MeetingSupport, CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, "Attributes requirement logs to", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.ArtifactSubmissions, CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, "Attributes submissions to", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.ArtifactSubmissions, CapstoneTrackingSystem.BackendAPI.MeetingSupport, "Optionally links a submission to a", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.Evaluation, CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, "Scores", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.Evaluation, CapstoneTrackingSystem.BackendAPI.UserManagement, "Attributes an evaluation to the scoring instructor via", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.Reporting, CapstoneTrackingSystem.BackendAPI.AssessmentScheduling, "Aggregates booking/session statistics from", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.Reporting, CapstoneTrackingSystem.BackendAPI.MeetingSupport, "Aggregates requirement statistics from", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.Reporting, CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, "Aggregates group statistics from", $techn="", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.AuthSecurity, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.UserManagement, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.TopicManagement, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.QuestionBank, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.StudentGroupManagement, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.AssessmentScheduling, CapstoneTrackingSystem.Database, "Reads from and writes to (row-locked on booking)", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.ArtifactSubmissions, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.MeetingSupport, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.Evaluation, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.Reporting, CapstoneTrackingSystem.Database, "Runs read-only aggregate queries against", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI.AuditTrail, CapstoneTrackingSystem.Database, "Writes to", $techn="JDBC", $tags="", $link="")
+
+SHOW_LEGEND(true)
+hide stereotypes
+@enduml

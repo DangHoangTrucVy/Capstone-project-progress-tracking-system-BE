@@ -4,6 +4,11 @@ target/
 # Claude Code local settings (personal overrides, not shared)
 .claude/settings.local.json
 
+# Standalone clone of https://github.com/bitsmuggler/c4-skill.git used only as the
+# source for .claude/skills/c4-architecture and .claude/commands/c4.md — has its own
+# nested .git, don't let it get added to this repo as an embedded repository.
+/c4-skill/
+
 # IDE
 .idea/
 *.iml

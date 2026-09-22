@@ -1,0 +1,30 @@
+@startuml
+title <size:24>System Context View: Capstone Tracking System</size>\n<size:24>Who uses the Capstone Tracking System and why.</size>
+
+set separator none
+left to right direction
+
+<style>
+  root {
+    BackgroundColor: #ffffff
+    FontColor: #444444
+  }
+</style>
+
+!include <C4/C4>
+!include <C4/C4_Context>
+
+Person(Student, "Student", $descr="A member of a capstone project group. Views the group's schedule, documents, questions and evaluation.", $tags="", $link="")
+Person(GroupLeader, "Group Leader", $descr="A student who leads their group: creates/joins the group, books assessment slots, submits artifacts, and signs meeting minutes.", $tags="", $link="")
+Person(Instructor, "Instructor", $descr="A supervisor who publishes assessment slots, conducts meetings, records requirements, approves minutes, and evaluates groups.", $tags="", $link="")
+Person(Admin, "Admin", $descr="Manages user accounts, topics and the question bank; views semester-wide progress reports.", $tags="", $link="")
+System(CapstoneTrackingSystem, "Capstone Tracking System", $descr="Centralises assessment scheduling, group/artifact management, in-meeting support (requirements + auto-generated minutes), and 3-dimensional evaluation for capstone supervision.", $tags="", $link="")
+
+Rel(Student, CapstoneTrackingSystem, "Views group progress, documents, and questions via", $techn="", $tags="", $link="")
+Rel(GroupLeader, CapstoneTrackingSystem, "Books slots, submits artifacts, and signs meeting minutes via", $techn="", $tags="", $link="")
+Rel(Instructor, CapstoneTrackingSystem, "Publishes slots, runs meetings, and evaluates groups via", $techn="", $tags="", $link="")
+Rel(Admin, CapstoneTrackingSystem, "Manages users, topics, question bank, and reports via", $techn="", $tags="", $link="")
+
+SHOW_LEGEND(true)
+hide stereotypes
+@enduml

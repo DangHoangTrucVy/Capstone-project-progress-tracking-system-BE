@@ -1,0 +1,39 @@
+@startuml
+title <size:24>Container View: Capstone Tracking System</size>\n<size:24>Internal structure: web client, backend API, database.</size>
+
+set separator none
+left to right direction
+
+<style>
+  root {
+    BackgroundColor: #ffffff
+    FontColor: #444444
+  }
+</style>
+
+!include <C4/C4>
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+
+Person(Student, "Student", $descr="A member of a capstone project group. Views the group's schedule, documents, questions and evaluation.", $tags="", $link="")
+Person(GroupLeader, "Group Leader", $descr="A student who leads their group: creates/joins the group, books assessment slots, submits artifacts, and signs meeting minutes.", $tags="", $link="")
+Person(Instructor, "Instructor", $descr="A supervisor who publishes assessment slots, conducts meetings, records requirements, approves minutes, and evaluates groups.", $tags="", $link="")
+Person(Admin, "Admin", $descr="Manages user accounts, topics and the question bank; views semester-wide progress reports.", $tags="", $link="")
+
+System_Boundary("CapstoneTrackingSystem_boundary", "Capstone Tracking System", $tags="") {
+  ContainerDb(CapstoneTrackingSystem.Database, "Database", $techn="PostgreSQL 16", $descr="Stores all persistent application data; schema is fully owned by Flyway migrations (Hibernate ddl-auto=validate).", $tags="", $link="")
+  Container(CapstoneTrackingSystem.WebApplication, "Web Application", $techn="SPA (framework TBD)", $descr="Single-page app used by all roles to browse slots, manage groups, and review meetings. Not part of this repository — inferred from the API's CORS allow-list (localhost:3000 / 5173).", $tags="", $link="")
+  Container(CapstoneTrackingSystem.BackendAPI, "Backend API", $techn="Java 17 / Spring Boot 3.3.4", $descr="Serves the REST API for auth, scheduling, groups, artifacts, meetings, evaluation and reporting. Exposes an OpenAPI/Swagger UI for interactive docs.", $tags="", $link="")
+}
+
+Rel(Student, CapstoneTrackingSystem.WebApplication, "Uses", $techn="HTTPS", $tags="", $link="")
+Rel(GroupLeader, CapstoneTrackingSystem.WebApplication, "Uses", $techn="HTTPS", $tags="", $link="")
+Rel(Instructor, CapstoneTrackingSystem.WebApplication, "Uses", $techn="HTTPS", $tags="", $link="")
+Rel(Admin, CapstoneTrackingSystem.WebApplication, "Uses", $techn="HTTPS", $tags="", $link="")
+Rel(CapstoneTrackingSystem.WebApplication, CapstoneTrackingSystem.BackendAPI, "Makes API calls to", $techn="JSON/HTTPS, JWT Bearer", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI, CapstoneTrackingSystem.Database, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(CapstoneTrackingSystem.BackendAPI, CapstoneTrackingSystem.Database, "Applies versioned schema migrations to", $techn="Flyway", $tags="", $link="")
+
+SHOW_LEGEND(true)
+hide stereotypes
+@enduml

@@ -1,0 +1,35 @@
+@startuml
+title <size:24>Deployment View: Capstone Tracking System - Docker Compose (local / single-host dev)</size>\n<size:24>How the system is deployed today, per docker-compose.yml.</size>
+
+set separator none
+left to right direction
+
+<style>
+  root {
+    BackgroundColor: #ffffff
+    FontColor: #444444
+  }
+</style>
+
+!include <C4/C4>
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+!include <C4/C4_Deployment>
+
+Deployment_Node(DockerComposelocalsinglehostdev.DockerHost, "Docker Host", $type="Docker", $descr="Developer machine or single server running Docker Engine", $tags="", $link="") {
+  Deployment_Node(DockerComposelocalsinglehostdev.DockerHost.appcontainer, "app container", $type="eclipse-temurin:17-jre-alpine", $descr="capstone-tracking-app", $tags="", $link="") {
+    Container(DockerComposelocalsinglehostdev.DockerHost.appcontainer.BackendAPI_1, "Backend API", $techn="Java 17 / Spring Boot 3.3.4", $descr="Serves the REST API for auth, scheduling, groups, artifacts, meetings, evaluation and reporting. Exposes an OpenAPI/Swagger UI for interactive docs.", $tags="", $link="")
+  }
+
+  Deployment_Node(DockerComposelocalsinglehostdev.DockerHost.postgrescontainer, "postgres container", $type="postgres:16-alpine", $descr="capstone-tracking-db", $tags="", $link="") {
+    ContainerDb(DockerComposelocalsinglehostdev.DockerHost.postgrescontainer.Database_1, "Database", $techn="PostgreSQL 16", $descr="Stores all persistent application data; schema is fully owned by Flyway migrations (Hibernate ddl-auto=validate).", $tags="", $link="")
+  }
+
+}
+
+Rel(DockerComposelocalsinglehostdev.DockerHost.appcontainer.BackendAPI_1, DockerComposelocalsinglehostdev.DockerHost.postgrescontainer.Database_1, "Reads from and writes to", $techn="JDBC", $tags="", $link="")
+Rel(DockerComposelocalsinglehostdev.DockerHost.appcontainer.BackendAPI_1, DockerComposelocalsinglehostdev.DockerHost.postgrescontainer.Database_1, "Applies versioned schema migrations to", $techn="Flyway", $tags="", $link="")
+
+SHOW_LEGEND(true)
+hide stereotypes
+@enduml
