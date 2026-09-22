@@ -1,0 +1,146 @@
+<mxfile host="app.diagrams.net" modified="2026-09-22T00:00:00.000Z" agent="claude-code" version="24.0.0" type="device">
+  <diagram name="ERD" id="erd-capstone-tracking">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="users" value="&lt;b&gt;users&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;email (UK)&lt;/div&gt;&lt;div&gt;full_name&lt;/div&gt;&lt;div&gt;password_hash&lt;/div&gt;&lt;div&gt;role&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;avatar_url&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="240" height="198" as="geometry" />
+        </mxCell>
+
+        <mxCell id="topics" value="&lt;b&gt;topics&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;topic_code (UK)&lt;/div&gt;&lt;div&gt;title&lt;/div&gt;&lt;div&gt;description&lt;/div&gt;&lt;div&gt;category&lt;/div&gt;&lt;div&gt;admin_id (FK -&amp;gt; users)&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="340" y="40" width="240" height="198" as="geometry" />
+        </mxCell>
+
+        <mxCell id="student_groups" value="&lt;b&gt;student_groups&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;group_code (UK)&lt;/div&gt;&lt;div&gt;topic_id (FK -&amp;gt; topics, null)&lt;/div&gt;&lt;div&gt;supervisor_id (FK -&amp;gt; users, null)&lt;/div&gt;&lt;div&gt;semester&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="640" y="40" width="240" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="group_members" value="&lt;b&gt;group_members&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;group_id (FK -&amp;gt; student_groups)&lt;/div&gt;&lt;div&gt;user_id (FK -&amp;gt; users)&lt;/div&gt;&lt;div&gt;is_leader&lt;/div&gt;&lt;div&gt;joined_at&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;&lt;div&gt;UK (group_id, user_id)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="940" y="40" width="240" height="198" as="geometry" />
+        </mxCell>
+
+        <mxCell id="question_bank_items" value="&lt;b&gt;question_bank_items&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;topic_id (FK -&amp;gt; topics)&lt;/div&gt;&lt;div&gt;category&lt;/div&gt;&lt;div&gt;question_text&lt;/div&gt;&lt;div&gt;guidance_notes&lt;/div&gt;&lt;div&gt;created_by (FK -&amp;gt; users)&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="298" width="240" height="198" as="geometry" />
+        </mxCell>
+
+        <mxCell id="schedule_slots" value="&lt;b&gt;schedule_slots&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;instructor_id (FK -&amp;gt; users)&lt;/div&gt;&lt;div&gt;start_time&lt;/div&gt;&lt;div&gt;end_time&lt;/div&gt;&lt;div&gt;duration_minutes&lt;/div&gt;&lt;div&gt;capacity_groups&lt;/div&gt;&lt;div&gt;booked_count&lt;/div&gt;&lt;div&gt;location_type&lt;/div&gt;&lt;div&gt;meeting_url&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="340" y="298" width="240" height="252" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bookings" value="&lt;b&gt;bookings&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;slot_id (FK -&amp;gt; schedule_slots)&lt;/div&gt;&lt;div&gt;group_id (FK -&amp;gt; student_groups)&lt;/div&gt;&lt;div&gt;booking_status&lt;/div&gt;&lt;div&gt;booked_at&lt;/div&gt;&lt;div&gt;notes&lt;/div&gt;&lt;div&gt;cancelled_at&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="640" y="298" width="240" height="198" as="geometry" />
+        </mxCell>
+
+        <mxCell id="meeting_sessions" value="&lt;b&gt;meeting_sessions&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;booking_id (FK -&amp;gt; bookings, UK)&lt;/div&gt;&lt;div&gt;started_at&lt;/div&gt;&lt;div&gt;ended_at&lt;/div&gt;&lt;div&gt;raw_notes&lt;/div&gt;&lt;div&gt;session_status&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="940" y="298" width="240" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="requirement_logs" value="&lt;b&gt;requirement_logs&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;session_id (FK -&amp;gt; meeting_sessions)&lt;/div&gt;&lt;div&gt;group_id (FK -&amp;gt; student_groups)&lt;/div&gt;&lt;div&gt;title&lt;/div&gt;&lt;div&gt;description&lt;/div&gt;&lt;div&gt;priority&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;assigned_to (FK -&amp;gt; users, null)&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="40" y="610" width="240" height="216" as="geometry" />
+        </mxCell>
+
+        <mxCell id="meeting_minutes" value="&lt;b&gt;meeting_minutes&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;session_id (FK -&amp;gt; meeting_sessions, UK)&lt;/div&gt;&lt;div&gt;generated_content&lt;/div&gt;&lt;div&gt;final_content&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;student_signed_at&lt;/div&gt;&lt;div&gt;instructor_signed_at&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="340" y="610" width="240" height="198" as="geometry" />
+        </mxCell>
+
+        <mxCell id="evaluation_records" value="&lt;b&gt;evaluation_records&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;group_id (FK -&amp;gt; student_groups)&lt;/div&gt;&lt;div&gt;instructor_id (FK -&amp;gt; users)&lt;/div&gt;&lt;div&gt;topic_fit_score&lt;/div&gt;&lt;div&gt;product_quality_score&lt;/div&gt;&lt;div&gt;communication_score&lt;/div&gt;&lt;div&gt;total_score&lt;/div&gt;&lt;div&gt;feedback_notes&lt;/div&gt;&lt;div&gt;evaluated_at&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="640" y="610" width="240" height="252" as="geometry" />
+        </mxCell>
+
+        <mxCell id="artifact_submissions" value="&lt;b&gt;artifact_submissions&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;group_id (FK -&amp;gt; student_groups)&lt;/div&gt;&lt;div&gt;session_id (FK -&amp;gt; meeting_sessions, null)&lt;/div&gt;&lt;div&gt;title&lt;/div&gt;&lt;div&gt;file_url&lt;/div&gt;&lt;div&gt;file_type&lt;/div&gt;&lt;div&gt;version&lt;/div&gt;&lt;div&gt;submitted_at&lt;/div&gt;&lt;div&gt;status&lt;/div&gt;&lt;div&gt;created_at&lt;/div&gt;&lt;div&gt;updated_at&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="940" y="610" width="240" height="234" as="geometry" />
+        </mxCell>
+
+        <mxCell id="system_audit_trail" value="&lt;b&gt;system_audit_trail&lt;/b&gt;&lt;hr size=1&gt;&lt;div&gt;id (PK)&lt;/div&gt;&lt;div&gt;entity_name&lt;/div&gt;&lt;div&gt;entity_id&lt;/div&gt;&lt;div&gt;action&lt;/div&gt;&lt;div&gt;performed_by (FK -&amp;gt; users)&lt;/div&gt;&lt;div&gt;performed_at&lt;/div&gt;&lt;div&gt;details_json&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="922" width="240" height="162" as="geometry" />
+        </mxCell>
+
+        <!-- Relationships (crow's foot): startArrow near the "one" side, endArrow near the "many" side.
+             ERzeroToOne/ERzeroToMany mark optional (nullable) foreign keys. -->
+
+        <mxCell id="e1" value="admin_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="users" target="topics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2" value="supervisor_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERzeroToOne;startFill=0;endArrow=ERmany;endFill=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="users" target="student_groups">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e3" value="topic_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERzeroToOne;startFill=0;endArrow=ERmany;endFill=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="topics" target="student_groups">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e4" value="group_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="student_groups" target="group_members">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e5" value="user_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.75;exitY=1;entryX=0.25;entryY=0;curved=1;" edge="1" parent="1" source="users" target="group_members">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e6" value="topic_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="topics" target="question_bank_items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e7" value="created_by" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.25;exitY=1;entryX=0;entryY=0.25;curved=1;" edge="1" parent="1" source="users" target="question_bank_items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e8" value="instructor_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.5;exitY=1;entryX=0;entryY=0.15;curved=1;" edge="1" parent="1" source="users" target="schedule_slots">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e9" value="slot_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="schedule_slots" target="bookings">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e10" value="group_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;curved=1;" edge="1" parent="1" source="student_groups" target="bookings">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e11" value="booking_id (1:1)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERone;endFill=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="bookings" target="meeting_sessions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e12" value="session_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.5;exitY=1;entryX=1;entryY=0.2;curved=1;" edge="1" parent="1" source="meeting_sessions" target="requirement_logs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e13" value="group_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="student_groups" target="requirement_logs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e14" value="assigned_to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERzeroToOne;startFill=0;endArrow=ERmany;endFill=0;exitX=0;exitY=0.9;entryX=0.5;entryY=1;curved=1;" edge="1" parent="1" source="users" target="requirement_logs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e15" value="session_id (1:1)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERone;endFill=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="meeting_sessions" target="meeting_minutes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e16" value="group_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="student_groups" target="evaluation_records">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e17" value="instructor_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.6;exitY=1;entryX=0.5;entryY=0;curved=1;" edge="1" parent="1" source="users" target="evaluation_records">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e18" value="group_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.9;exitY=1;entryX=0.5;entryY=0;curved=1;" edge="1" parent="1" source="student_groups" target="artifact_submissions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e19" value="session_id" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERzeroToOne;startFill=0;endArrow=ERmany;endFill=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="meeting_sessions" target="artifact_submissions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e20" value="performed_by" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=9;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;exitX=0.1;exitY=1;entryX=0.5;entryY=1;curved=1;" edge="1" parent="1" source="users" target="system_audit_trail">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
