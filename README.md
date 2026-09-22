@@ -60,20 +60,15 @@ phải refactor lại.
 | 1 | Student Groups | `POST/GET /api/v1/groups`, `GET/PUT /api/v1/groups/{id}`, `POST/DELETE /api/v1/groups/{id}/members[/{memberId}]` | Full — create/edit = Admin/Instructor |
 | 2 | Schedule Slots | `POST/GET /api/v1/slots`, `GET /api/v1/slots/{id}` | Full — matches API-001/API-002, no-overlap rule (§5 step 1) |
 | 2 | Bookings | `POST /api/v1/slots/{id}/book`, `DELETE /api/v1/bookings/{id}` | Full — matches API-003/API-004, pessimistic-lock capacity enforcement (NFR-002/R-001), late-cancellation window |
-| — | Audit Trail | *(internal — `AuditService`, no endpoint yet)* | Recorder built and wired into booking create/cancel; extend the same call into Sprint 3–5 services as they're built |
-| 3 | Artifact Submissions | — | **Data layer only**: `ArtifactSubmission` entity + repository |
-| 4 | Meetings & Minutes | — | **Data layer only**: `MeetingSession`, `RequirementLog`, `MeetingMinute` entities + repositories |
-| 5 | Evaluation & Reporting | — | **Data layer only**: `EvaluationRecord` entity + repository |
+| — | Audit Trail | *(internal — `AuditService`, no endpoint yet)* | Recorder built and wired into every Sprint 1–5 mutating service |
+| 3 | Artifact Submissions | `POST/GET /api/v1/groups/{groupId}/artifacts`, `GET /api/v1/artifacts/{id}`, `POST /api/v1/artifacts/{id}/accept` | Full — matches API-005 (client supplies `fileUrl`; no file storage in this codebase); resubmitting the same title auto-supersedes the previous version |
+| 4 | Meetings & Minutes | `POST /api/v1/bookings/{bookingId}/meetings`, `GET/PUT.../start`/`.../end /api/v1/meetings/{id}`, `POST/GET /api/v1/meetings/{id}/requirements`, `PUT /api/v1/requirements/{id}`, `POST /api/v1/meetings/{id}/minutes/generate`, `PUT .../minutes/sign`, `GET .../minutes` | Full — matches API-007/008/009; minutes generation is a deterministic template, not a real AI call; sign-off is the same endpoint for both Leader (submit) and Instructor (approve/reject) |
+| 5 | Evaluation & Reporting | `POST/GET /api/v1/groups/{groupId}/evaluations`, `GET /api/v1/evaluations/{id}`, `GET /api/v1/reports/summary` | Full — matches API-010/API-011; evaluations are created already Published (one-click "Save and Publish" per UC-004); reports summary scoped to Admin (no "Dept Head" role exists) |
 
 RBAC roles: `ADMIN`, `INSTRUCTOR`, `GROUP_LEADER`, `STUDENT`, enforced with
-`@PreAuthorize` per blueprint.md §11.
-
-"Data layer only" means the JPA entity, its lifecycle enum(s), and its Spring Data
-repository exist and are covered by the Flyway migration — but there's no service/
-controller yet. Building one of those sprints out is: add a `dto/` package next to
-the entity, a service that follows `BookingService`'s shape (validate → mutate →
-`auditService.record(...)` inside the same `@Transactional`), and a controller whose
-`@PreAuthorize` matches the role column in blueprint.md §9's API contract.
+`@PreAuthorize` per blueprint.md §11. All 5 sprints now have full service/controller
+layers, each following `BookingService`'s shape (validate → mutate →
+`auditService.record(...)` inside the same `@Transactional`).
 
 ### Run it in IntelliJ IDEA
 
@@ -97,7 +92,8 @@ the entity, a service that follows `BookingService`'s shape (validate → mutate
 4. **Run**: click the green ▶ next to `CapstoneTrackingBackendApplication.main()`, or
    `mvn spring-boot:run` from a terminal.
 5. **Verify**: open http://localhost:8080/swagger-ui.html — you should see all endpoints
-   grouped by tag (Auth, Users, Topics, Question Bank, Student Groups, Schedule Slots, Bookings).
+   grouped by tag (Auth, Users, Topics, Question Bank, Student Groups, Schedule Slots, Bookings,
+   Artifact Submissions, Meetings, Requirement Logs, Meeting Minutes, Evaluations, Reports).
 
 On first boot, Flyway runs, in order:
 - `V1__init_schema.sql` — Sprint 1 tables (users, topics, student_groups, group_members, question_bank_items)
