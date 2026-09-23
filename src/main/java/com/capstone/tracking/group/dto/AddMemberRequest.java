@@ -1,11 +1,18 @@
 package com.capstone.tracking.group.dto;
 
-import jakarta.validation.constraints.NotNull;
-
 import java.util.UUID;
 
 public record AddMemberRequest(
-        @NotNull UUID userId,
+        UUID userId,
+        String email,
+        String identifier,
         boolean isLeader
 ) {
+    public AddMemberRequest(UUID userId, boolean isLeader) {
+        this(userId, null, null, isLeader);
+    }
+
+    public AddMemberRequest(String identifier, boolean isLeader) {
+        this(null, null, identifier, isLeader);
+    }
 }

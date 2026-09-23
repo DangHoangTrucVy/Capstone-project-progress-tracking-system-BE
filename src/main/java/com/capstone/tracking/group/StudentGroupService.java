@@ -10,6 +10,7 @@ import com.capstone.tracking.topic.Topic;
 import com.capstone.tracking.topic.TopicService;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
+import com.capstone.tracking.user.UserRepository;
 import com.capstone.tracking.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,6 +23,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -39,6 +41,7 @@ public class StudentGroupService {
     private final GroupMemberRepository groupMemberRepository;
     private final TopicService topicService;
     private final UserService userService;
+    private final UserRepository userRepository;
 
     /**
      * A STUDENT creating a group becomes its leader: they are added as the active leader member and
@@ -139,7 +142,7 @@ public class StudentGroupService {
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request) {
         StudentGroup group = getById(groupId);
-        User user = userService.getById(request.userId());
+        User user = resolveUser(request);
 
         if (user.getRole() != Role.STUDENT && user.getRole() != Role.GROUP_LEADER) {
             throw new BadRequestException("Only Student/Group Leader accounts can be added as group members");
@@ -166,6 +169,43 @@ public class StudentGroupService {
                 .status(MemberStatus.ACTIVE)
                 .build();
         return groupMemberRepository.save(member);
+    }
+
+    private User resolveUser(AddMemberRequest request) {
+        if (request.userId() != null) {
+            return userService.getById(request.userId());
+        }
+
+        String input = request.identifier() != null && !request.identifier().isBlank()
+                ? request.identifier().trim()
+                : (request.email() != null && !request.email().isBlank() ? request.email().trim() : null);
+
+        if (input == null) {
+            throw new BadRequestException("A valid user identifier (email, student code, or userId) must be provided");
+        }
+
+        // 1. Try finding by email
+        Optional<User> byEmail = userRepository.findByEmailIgnoreCase(input);
+        if (byEmail.isPresent()) {
+            return byEmail.get();
+        }
+
+        // 2. If input doesn't contain '@', try matching as student code (email prefix before '@')
+        if (!input.contains("@")) {
+            List<User> matchingPrefix = userRepository.findByEmailStartingWithIgnoreCase(input + "@");
+            if (!matchingPrefix.isEmpty()) {
+                return matchingPrefix.get(0);
+            }
+        }
+
+        // 3. Try parsing as UUID if input might be a UUID string
+        try {
+            UUID id = UUID.fromString(input);
+            return userService.getById(id);
+        } catch (IllegalArgumentException ignored) {
+        }
+
+        throw ResourceNotFoundException.of("Student", input);
     }
 
     /** A student joins a group themselves; they must not already belong to one and the group must have room. */
