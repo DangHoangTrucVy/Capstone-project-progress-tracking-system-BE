@@ -14,6 +14,7 @@ import com.capstone.tracking.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -120,6 +121,14 @@ public class StudentGroupService {
 
     @Transactional
     public StudentGroup update(UUID id, StudentGroupUpdateRequest request) {
+        return update(id, request, null);
+    }
+
+    @Transactional
+    public StudentGroup update(UUID id, StudentGroupUpdateRequest request, User actingUser) {
+        if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
+            requireGroupLeader(id, actingUser);
+        }
         StudentGroup group = getById(id);
         if (request.topicId() != null) {
             group.setTopic(topicService.getById(request.topicId()));
@@ -138,6 +147,14 @@ public class StudentGroupService {
      */
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request) {
+        return addMember(groupId, request, null);
+    }
+
+    @Transactional
+    public GroupMember addMember(UUID groupId, AddMemberRequest request, User actingUser) {
+        if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
+            requireGroupLeader(groupId, actingUser);
+        }
         StudentGroup group = getById(groupId);
         User user = userService.getById(request.userId());
 
@@ -174,11 +191,19 @@ public class StudentGroupService {
         if (groupMemberRepository.existsByUserIdAndStatus(current.getId(), MemberStatus.ACTIVE)) {
             throw new ConflictException("You already belong to a group");
         }
-        return addMember(groupId, new AddMemberRequest(current.getId(), false));
+        return addMember(groupId, new AddMemberRequest(current.getId(), false), null);
     }
 
     @Transactional
     public void removeMember(UUID groupId, UUID memberId) {
+        removeMember(groupId, memberId, null);
+    }
+
+    @Transactional
+    public void removeMember(UUID groupId, UUID memberId, User actingUser) {
+        if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
+            requireGroupLeader(groupId, actingUser);
+        }
         GroupMember member = groupMemberRepository.findById(memberId)
                 .filter(m -> m.getGroup().getId().equals(groupId))
                 .orElseThrow(() -> ResourceNotFoundException.of("GroupMember", memberId));
@@ -186,6 +211,12 @@ public class StudentGroupService {
         member.setStatus(MemberStatus.REMOVED);
         if (member.isLeader() && member.getUser().getRole() == Role.GROUP_LEADER) {
             member.getUser().setRole(Role.STUDENT);
+        }
+    }
+
+    private void requireGroupLeader(UUID groupId, User actingUser) {
+        if (!groupMemberRepository.existsByGroupIdAndUserIdAndIsLeaderTrueAndStatus(groupId, actingUser.getId(), MemberStatus.ACTIVE)) {
+            throw new AccessDeniedException("You are not the leader of this group");
         }
     }
 

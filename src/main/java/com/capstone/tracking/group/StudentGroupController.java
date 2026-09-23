@@ -64,9 +64,11 @@ public class StudentGroupController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR')")
-    public StudentGroupResponse update(@PathVariable UUID id, @Valid @RequestBody StudentGroupUpdateRequest request) {
-        StudentGroup updated = studentGroupService.update(id, request);
+    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','GROUP_LEADER')")
+    public StudentGroupResponse update(@PathVariable UUID id,
+                                       @Valid @RequestBody StudentGroupUpdateRequest request,
+                                       @AuthenticationPrincipal User currentUser) {
+        StudentGroup updated = studentGroupService.update(id, request, currentUser);
         return StudentGroupResponse.from(updated, studentGroupService.countActiveMembers(updated.getId()));
     }
 
@@ -79,15 +81,19 @@ public class StudentGroupController {
 
     @PostMapping("/{id}/members")
     @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','GROUP_LEADER')")
-    public ResponseEntity<GroupMemberResponse> addMember(@PathVariable UUID id, @Valid @RequestBody AddMemberRequest request) {
-        GroupMember member = studentGroupService.addMember(id, request);
+    public ResponseEntity<GroupMemberResponse> addMember(@PathVariable UUID id,
+                                                         @Valid @RequestBody AddMemberRequest request,
+                                                         @AuthenticationPrincipal User currentUser) {
+        GroupMember member = studentGroupService.addMember(id, request, currentUser);
         return ResponseEntity.status(HttpStatus.CREATED).body(GroupMemberResponse.from(member));
     }
 
     @DeleteMapping("/{id}/members/{memberId}")
     @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','GROUP_LEADER')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void removeMember(@PathVariable UUID id, @PathVariable UUID memberId) {
-        studentGroupService.removeMember(id, memberId);
+    public void removeMember(@PathVariable UUID id,
+                             @PathVariable UUID memberId,
+                             @AuthenticationPrincipal User currentUser) {
+        studentGroupService.removeMember(id, memberId, currentUser);
     }
 }
