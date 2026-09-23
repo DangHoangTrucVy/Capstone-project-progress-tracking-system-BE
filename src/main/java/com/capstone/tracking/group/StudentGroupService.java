@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -161,14 +162,26 @@ public class StudentGroupService {
         if (user.getRole() != Role.STUDENT && user.getRole() != Role.GROUP_LEADER) {
             throw new BadRequestException("Only Student/Group Leader accounts can be added as group members");
         }
-        if (groupMemberRepository.existsByGroupIdAndUserIdAndStatus(groupId, user.getId(), MemberStatus.ACTIVE)) {
-            throw new ConflictException("User " + user.getEmail() + " is already an active member of this group");
-        }
         if (groupMemberRepository.countByGroupIdAndStatus(groupId, MemberStatus.ACTIVE) >= MAX_MEMBERS) {
             throw new ConflictException("Group is full: a group can have at most " + MAX_MEMBERS + " members");
         }
         if (request.isLeader() && groupMemberRepository.existsByGroupIdAndIsLeaderTrueAndStatus(groupId, MemberStatus.ACTIVE)) {
             throw new ConflictException("This group already has an active leader; demote them before assigning a new one");
+        }
+
+        Optional<GroupMember> existingOpt = groupMemberRepository.findByGroupIdAndUserId(groupId, user.getId());
+        if (existingOpt.isPresent()) {
+            GroupMember existing = existingOpt.get();
+            if (existing.getStatus() == MemberStatus.ACTIVE) {
+                throw new ConflictException("User " + user.getEmail() + " is already an active member of this group");
+            }
+            if (request.isLeader()) {
+                user.setRole(Role.GROUP_LEADER);
+            }
+            existing.setStatus(MemberStatus.ACTIVE);
+            existing.setLeader(request.isLeader());
+            existing.setJoinedAt(Instant.now());
+            return groupMemberRepository.save(existing);
         }
 
         if (request.isLeader()) {
