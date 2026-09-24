@@ -6,13 +6,17 @@ import com.capstone.tracking.common.exception.ResourceNotFoundException;
 import com.capstone.tracking.scheduling.dto.SlotCreateRequest;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /** Sprint 2 — API-001 / API-002. See blueprint.md §5 step 1 for the no-overlap rule this enforces. */
@@ -54,6 +58,22 @@ public class ScheduleSlotService {
     }
 
     public Page<ScheduleSlot> search(UUID instructorId, SlotStatus status, Instant fromDate, Instant toDate, Pageable pageable) {
-        return scheduleSlotRepository.search(instructorId, status, fromDate, toDate, pageable);
+        Specification<ScheduleSlot> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (instructorId != null) {
+                predicates.add(cb.equal(root.get("instructor").get("id"), instructorId));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (fromDate != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("startTime"), fromDate));
+            }
+            if (toDate != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("startTime"), toDate));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return scheduleSlotRepository.findAll(spec, pageable);
     }
 }
