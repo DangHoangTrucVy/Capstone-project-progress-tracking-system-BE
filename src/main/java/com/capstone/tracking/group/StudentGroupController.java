@@ -6,6 +6,7 @@ import com.capstone.tracking.group.dto.StudentGroupCreateRequest;
 import com.capstone.tracking.group.dto.StudentGroupResponse;
 import com.capstone.tracking.group.dto.StudentGroupUpdateRequest;
 import com.capstone.tracking.user.User;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -72,6 +73,7 @@ public class StudentGroupController {
         return StudentGroupResponse.from(updated, studentGroupService.countActiveMembers(updated.getId()));
     }
 
+    @Operation(summary = "Student self-joins a group", description = "Allows an authenticated student to join an open group with capacity.")
     @PostMapping("/{id}/join")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<GroupMemberResponse> join(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {

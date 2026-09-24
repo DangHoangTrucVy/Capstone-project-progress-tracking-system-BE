@@ -240,6 +240,10 @@ public class StudentGroupService {
     /** A student joins a group themselves; they must not already belong to one and the group must have room. */
     @Transactional
     public GroupMember join(UUID groupId, User current) {
+        StudentGroup group = getById(groupId);
+        if (group.getStatus() == GroupStatus.COMPLETED || group.getStatus() == GroupStatus.ARCHIVED) {
+            throw new ConflictException("Cannot join a group that is " + group.getStatus().name().toLowerCase());
+        }
         if (groupMemberRepository.existsByUserIdAndStatus(current.getId(), MemberStatus.ACTIVE)) {
             throw new ConflictException("You already belong to a group");
         }
