@@ -16,4 +16,4 @@ app:
     access-token-exp-minutes: 60
     refresh-token-exp-days: 7
   security:
-    allowed-email-domain: fpt.edu.vn
+    allowed-email-domain: fpt.edu.vn,gmail.com
