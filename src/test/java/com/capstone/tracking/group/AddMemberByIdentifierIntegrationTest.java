@@ -87,6 +87,15 @@ class AddMemberByIdentifierIntegrationTest {
                         .content(objectMapper.writeValueAsString(Map.of("userId", s3Id, "isLeader", false))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.userEmail").value("s3-ident@fpt.edu.vn"));
+
+        // 6. Add student registered with @gmail.com email -> success (201)
+        register("student.capstone@gmail.com", "Gmail Student");
+        mockMvc.perform(post("/api/v1/groups/" + groupId + "/members")
+                        .header("Authorization", "Bearer " + leaderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("identifier", "student.capstone@gmail.com", "isLeader", false))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userEmail").value("student.capstone@gmail.com"));
     }
 
     private JsonNode json(String body) throws Exception {

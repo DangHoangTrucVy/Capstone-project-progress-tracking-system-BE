@@ -47,7 +47,7 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
   security:
-    allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn}
+    allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn,gmail.com}
 
 springdoc:
   swagger-ui:

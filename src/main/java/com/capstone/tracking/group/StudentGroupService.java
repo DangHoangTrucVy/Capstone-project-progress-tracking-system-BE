@@ -234,7 +234,7 @@ public class StudentGroupService {
         } catch (IllegalArgumentException ignored) {
         }
 
-        throw ResourceNotFoundException.of("Student", input);
+        throw new ResourceNotFoundException("Student with email or student code '" + input + "' not found");
     }
 
     /** A student joins a group themselves; they must not already belong to one and the group must have room. */
