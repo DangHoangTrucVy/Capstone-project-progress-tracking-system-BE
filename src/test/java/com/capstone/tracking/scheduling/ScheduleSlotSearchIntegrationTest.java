@@ -99,6 +99,101 @@ class ScheduleSlotSearchIntegrationTest {
                 .andExpect(jsonPath("$.content").isArray());
     }
 
+    @Test
+    void createAndGetSlotByIdAndVerifyInList() throws Exception {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        Instant start = now.plus(3, ChronoUnit.DAYS);
+        Instant end = start.plus(1, ChronoUnit.HOURS);
+
+        var payload = Map.of(
+                "startTime", start.toString(),
+                "endTime", end.toString(),
+                "durationMinutes", 45,
+                "capacity", 3,
+                "locationType", "ONLINE",
+                "meetingUrl", "https://meet.google.com/abc-xyz"
+        );
+
+        // Test 2: POST /api/v1/slots -> 201 Created
+        String responseContent = mockMvc.perform(post("/api/v1/slots")
+                        .header("Authorization", "Bearer " + instructorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.instructorId").value(instructor.getId().toString()))
+                .andExpect(jsonPath("$.instructorName").value("GV Slot Search"))
+                .andExpect(jsonPath("$.durationMinutes").value(45))
+                .andExpect(jsonPath("$.capacity").value(3))
+                .andExpect(jsonPath("$.bookedCount").value(0))
+                .andExpect(jsonPath("$.status").value("AVAILABLE"))
+                .andReturn().getResponse().getContentAsString();
+
+        String slotId = objectMapper.readTree(responseContent).get("id").asText();
+
+        // Test 3: GET /api/v1/slots/{id} -> 200 OK
+        mockMvc.perform(get("/api/v1/slots/" + slotId)
+                        .header("Authorization", "Bearer " + instructorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(slotId))
+                .andExpect(jsonPath("$.instructorName").value("GV Slot Search"))
+                .andExpect(jsonPath("$.capacity").value(3))
+                .andExpect(jsonPath("$.meetingUrl").value("https://meet.google.com/abc-xyz"));
+
+        // Test 4: GET /api/v1/slots -> contains created slot
+        mockMvc.perform(get("/api/v1/slots")
+                        .param("instructorId", instructor.getId().toString())
+                        .header("Authorization", "Bearer " + instructorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id == '" + slotId + "')]").exists());
+    }
+
+    @Test
+    void createSlotWithEndTimeBeforeStartTimeReturnsBadRequest() throws Exception {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        Instant start = now.plus(2, ChronoUnit.DAYS);
+        Instant end = start.minus(1, ChronoUnit.HOURS); // invalid: end before start
+
+        var payload = Map.of(
+                "startTime", start.toString(),
+                "endTime", end.toString(),
+                "durationMinutes", 30,
+                "capacity", 1,
+                "locationType", "OFFLINE"
+        );
+
+        mockMvc.perform(post("/api/v1/slots")
+                        .header("Authorization", "Bearer " + instructorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createOverlappingSlotReturnsConflict() throws Exception {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        Instant start = now.plus(4, ChronoUnit.DAYS);
+        Instant end = start.plus(2, ChronoUnit.HOURS);
+
+        createSlot(start, end);
+
+        // Try creating an overlapping slot
+        var overlappingPayload = Map.of(
+                "startTime", start.plus(30, ChronoUnit.MINUTES).toString(),
+                "endTime", end.plus(30, ChronoUnit.MINUTES).toString(),
+                "durationMinutes", 30,
+                "capacity", 1,
+                "locationType", "ONLINE",
+                "meetingUrl", "https://meet.google.com/overlap"
+        );
+
+        mockMvc.perform(post("/api/v1/slots")
+                        .header("Authorization", "Bearer " + instructorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(overlappingPayload)))
+                .andExpect(status().isConflict());
+    }
+
     private void createSlot(Instant start, Instant end) throws Exception {
         var payload = Map.of(
                 "startTime", start.toString(),
