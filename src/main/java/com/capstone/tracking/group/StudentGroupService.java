@@ -10,10 +10,12 @@ import com.capstone.tracking.topic.Topic;
 import com.capstone.tracking.topic.TopicService;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
+import com.capstone.tracking.user.UserRepository;
 import com.capstone.tracking.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -39,6 +42,7 @@ public class StudentGroupService {
     private final GroupMemberRepository groupMemberRepository;
     private final TopicService topicService;
     private final UserService userService;
+    private final UserRepository userRepository;
 
     /**
      * A STUDENT creating a group becomes its leader: they are added as the active leader member and
@@ -120,6 +124,14 @@ public class StudentGroupService {
 
     @Transactional
     public StudentGroup update(UUID id, StudentGroupUpdateRequest request) {
+        return update(id, request, null);
+    }
+
+    @Transactional
+    public StudentGroup update(UUID id, StudentGroupUpdateRequest request, User actingUser) {
+        if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
+            requireGroupLeader(id, actingUser);
+        }
         StudentGroup group = getById(id);
         if (request.topicId() != null) {
             group.setTopic(topicService.getById(request.topicId()));
@@ -138,20 +150,40 @@ public class StudentGroupService {
      */
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request) {
+        return addMember(groupId, request, null);
+    }
+
+    @Transactional
+    public GroupMember addMember(UUID groupId, AddMemberRequest request, User actingUser) {
+        if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
+            requireGroupLeader(groupId, actingUser);
+        }
         StudentGroup group = getById(groupId);
-        User user = userService.getById(request.userId());
+        User user = resolveUser(request);
 
         if (user.getRole() != Role.STUDENT && user.getRole() != Role.GROUP_LEADER) {
             throw new BadRequestException("Only Student/Group Leader accounts can be added as group members");
-        }
-        if (groupMemberRepository.existsByGroupIdAndUserIdAndStatus(groupId, user.getId(), MemberStatus.ACTIVE)) {
-            throw new ConflictException("User " + user.getEmail() + " is already an active member of this group");
         }
         if (groupMemberRepository.countByGroupIdAndStatus(groupId, MemberStatus.ACTIVE) >= MAX_MEMBERS) {
             throw new ConflictException("Group is full: a group can have at most " + MAX_MEMBERS + " members");
         }
         if (request.isLeader() && groupMemberRepository.existsByGroupIdAndIsLeaderTrueAndStatus(groupId, MemberStatus.ACTIVE)) {
             throw new ConflictException("This group already has an active leader; demote them before assigning a new one");
+        }
+
+        Optional<GroupMember> existingOpt = groupMemberRepository.findByGroupIdAndUserId(groupId, user.getId());
+        if (existingOpt.isPresent()) {
+            GroupMember existing = existingOpt.get();
+            if (existing.getStatus() == MemberStatus.ACTIVE) {
+                throw new ConflictException("User " + user.getEmail() + " is already an active member of this group");
+            }
+            if (request.isLeader()) {
+                user.setRole(Role.GROUP_LEADER);
+            }
+            existing.setStatus(MemberStatus.ACTIVE);
+            existing.setLeader(request.isLeader());
+            existing.setJoinedAt(Instant.now());
+            return groupMemberRepository.save(existing);
         }
 
         if (request.isLeader()) {
@@ -168,17 +200,66 @@ public class StudentGroupService {
         return groupMemberRepository.save(member);
     }
 
+    private User resolveUser(AddMemberRequest request) {
+        if (request.userId() != null) {
+            return userService.getById(request.userId());
+        }
+
+        String input = request.identifier() != null && !request.identifier().isBlank()
+                ? request.identifier().trim()
+                : (request.email() != null && !request.email().isBlank() ? request.email().trim() : null);
+
+        if (input == null) {
+            throw new BadRequestException("A valid user identifier (email, student code, or userId) must be provided");
+        }
+
+        // 1. Try finding by email
+        Optional<User> byEmail = userRepository.findByEmailIgnoreCase(input);
+        if (byEmail.isPresent()) {
+            return byEmail.get();
+        }
+
+        // 2. If input doesn't contain '@', try matching as student code (email prefix before '@')
+        if (!input.contains("@")) {
+            List<User> matchingPrefix = userRepository.findByEmailStartingWithIgnoreCase(input + "@");
+            if (!matchingPrefix.isEmpty()) {
+                return matchingPrefix.get(0);
+            }
+        }
+
+        // 3. Try parsing as UUID if input might be a UUID string
+        try {
+            UUID id = UUID.fromString(input);
+            return userService.getById(id);
+        } catch (IllegalArgumentException ignored) {
+        }
+
+        throw new ResourceNotFoundException("Student with email or student code '" + input + "' not found");
+    }
+
     /** A student joins a group themselves; they must not already belong to one and the group must have room. */
     @Transactional
     public GroupMember join(UUID groupId, User current) {
+        StudentGroup group = getById(groupId);
+        if (group.getStatus() == GroupStatus.COMPLETED || group.getStatus() == GroupStatus.ARCHIVED) {
+            throw new ConflictException("Cannot join a group that is " + group.getStatus().name().toLowerCase());
+        }
         if (groupMemberRepository.existsByUserIdAndStatus(current.getId(), MemberStatus.ACTIVE)) {
             throw new ConflictException("You already belong to a group");
         }
-        return addMember(groupId, new AddMemberRequest(current.getId(), false));
+        return addMember(groupId, new AddMemberRequest(current.getId(), false), null);
     }
 
     @Transactional
     public void removeMember(UUID groupId, UUID memberId) {
+        removeMember(groupId, memberId, null);
+    }
+
+    @Transactional
+    public void removeMember(UUID groupId, UUID memberId, User actingUser) {
+        if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
+            requireGroupLeader(groupId, actingUser);
+        }
         GroupMember member = groupMemberRepository.findById(memberId)
                 .filter(m -> m.getGroup().getId().equals(groupId))
                 .orElseThrow(() -> ResourceNotFoundException.of("GroupMember", memberId));
@@ -186,6 +267,12 @@ public class StudentGroupService {
         member.setStatus(MemberStatus.REMOVED);
         if (member.isLeader() && member.getUser().getRole() == Role.GROUP_LEADER) {
             member.getUser().setRole(Role.STUDENT);
+        }
+    }
+
+    private void requireGroupLeader(UUID groupId, User actingUser) {
+        if (!groupMemberRepository.existsByGroupIdAndUserIdAndIsLeaderTrueAndStatus(groupId, actingUser.getId(), MemberStatus.ACTIVE)) {
+            throw new AccessDeniedException("You are not the leader of this group");
         }
     }
 

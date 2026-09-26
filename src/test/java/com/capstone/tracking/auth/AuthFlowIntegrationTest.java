@@ -67,7 +67,7 @@ class AuthFlowIntegrationTest {
     @Test
     void registrationOutsideAllowedDomainIsRejected() throws Exception {
         var payload = Map.of(
-                "email", "someone@gmail.com",
+                "email", "someone@yahoo.com",
                 "fullName", "Outsider",
                 "password", "Password123"
         );

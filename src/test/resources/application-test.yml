@@ -18,4 +18,4 @@ app:
   storage:
     local-dir: target/test-uploads
   security:
-    allowed-email-domain: fpt.edu.vn
+    allowed-email-domain: fpt.edu.vn,gmail.com

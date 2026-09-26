@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.lang.Nullable;
 
 import java.time.Instant;
 import java.util.List;
@@ -17,6 +18,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ScheduleSlotRepository extends JpaRepository<ScheduleSlot, UUID>, JpaSpecificationExecutor<ScheduleSlot> {
+
+    @Override
+    @EntityGraph(attributePaths = {"instructor"})
+    Page<ScheduleSlot> findAll(@Nullable Specification<ScheduleSlot> spec, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"instructor"})
+    Optional<ScheduleSlot> findById(UUID id);
 
     /**
      * NFR-002 / R-001: takes a row-level write lock (SELECT ... FOR UPDATE) on the slot for the
@@ -42,16 +51,4 @@ public interface ScheduleSlotRepository extends JpaRepository<ScheduleSlot, UUID
     List<ScheduleSlot> findOverlapping(@Param("instructorId") UUID instructorId,
                                         @Param("startTime") Instant startTime,
                                         @Param("endTime") Instant endTime);
-
-    /**
-     * API-002 slot search goes through {@link ScheduleSlotSpecifications}. The instructor is fetched
-     * eagerly because SlotResponse reads its name after the transaction has closed (open-in-view is off).
-     */
-    @Override
-    @EntityGraph(attributePaths = "instructor")
-    Page<ScheduleSlot> findAll(Specification<ScheduleSlot> spec, Pageable pageable);
-
-    @Override
-    @EntityGraph(attributePaths = "instructor")
-    Optional<ScheduleSlot> findById(UUID id);
 }

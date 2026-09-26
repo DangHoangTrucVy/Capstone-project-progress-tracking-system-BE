@@ -57,7 +57,7 @@ app:
     max-file-size: ${UPLOAD_MAX_FILE_SIZE:20MB}
     allowed-extensions: pdf,doc,docx,ppt,pptx,xls,xlsx,zip,rar,png,jpg,jpeg,txt,md
   security:
-    allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn}
+    allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn,gmail.com}
 
 springdoc:
   swagger-ui:

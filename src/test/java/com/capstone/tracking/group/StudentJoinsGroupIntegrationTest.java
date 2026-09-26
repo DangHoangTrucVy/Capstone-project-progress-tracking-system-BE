@@ -60,6 +60,31 @@ class StudentJoinsGroupIntegrationTest {
         assertFalse(availableCodes(leaderToken).contains("JN-1"));
     }
 
+    @Test
+    void cannotJoinArchivedGroup() throws Exception {
+        String leaderToken = register("arch-leader@fpt.edu.vn");
+        JsonNode group = json(mockMvc.perform(post("/api/v1/groups")
+                        .header("Authorization", "Bearer " + leaderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("groupCode", "ARCH-1", "semester", "Spring2026"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString());
+        String groupId = group.get("id").asText();
+
+        // Update group status to ARCHIVED
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/groups/" + groupId)
+                        .header("Authorization", "Bearer " + leaderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("status", "ARCHIVED"))))
+                .andExpect(status().isOk());
+
+        // Student attempts to join archived group -> 409 Conflict
+        String studentToken = register("arch-student@fpt.edu.vn");
+        join(groupId, studentToken)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("CONFLICT"));
+    }
+
     private org.springframework.test.web.servlet.ResultActions join(String groupId, String token) throws Exception {
         return mockMvc.perform(post("/api/v1/groups/" + groupId + "/join").header("Authorization", "Bearer " + token));
     }
