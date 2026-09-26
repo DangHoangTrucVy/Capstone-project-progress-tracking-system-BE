@@ -1,6 +1,8 @@
 package com.capstone.tracking.common.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -18,6 +20,7 @@ import java.util.List;
  * Central place that turns every exception into the {@link ErrorResponse} JSON shape
  * described in blueprint.md §9 (API and Integration Contract) instead of a raw stack trace.
  */
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -67,8 +70,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
+        log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
+        // Report the root cause (e.g. the PSQLException) rather than the wrapper, whose message
+        // is mostly the generated SQL and hides the actual reason.
+        Throwable cause = NestedExceptionUtils.getMostSpecificCause(ex);
         ErrorResponse body = ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "INTERNAL_ERROR",
-                "Unexpected error: " + ex.getMessage(), request.getRequestURI());
+                "Unexpected error: " + cause.getMessage(), request.getRequestURI());
         return ResponseEntity.internalServerError().body(body);
     }
 }
