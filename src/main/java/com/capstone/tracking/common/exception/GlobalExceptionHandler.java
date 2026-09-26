@@ -6,6 +6,7 @@ import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AccountStatusException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -45,6 +46,14 @@ public class GlobalExceptionHandler {
         ErrorResponse body = ErrorResponse.of(HttpStatus.UNAUTHORIZED.value(), "INVALID_CREDENTIALS",
                 "Email or password is incorrect", request.getRequestURI());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+    }
+
+    /** Suspended / inactive accounts (User.isAccountNonLocked / isEnabled) trying to log in. */
+    @ExceptionHandler(AccountStatusException.class)
+    public ResponseEntity<ErrorResponse> handleAccountStatus(AccountStatusException ex, HttpServletRequest request) {
+        ErrorResponse body = ErrorResponse.of(HttpStatus.FORBIDDEN.value(), "ACCOUNT_LOCKED",
+                "This account is suspended or inactive", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
     @ExceptionHandler(AccessDeniedException.class)

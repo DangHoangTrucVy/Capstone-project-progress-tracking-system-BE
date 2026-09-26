@@ -1,0 +1,8 @@
+# Local development profile: SPRING_PROFILES_ACTIVE=dev
+# Adds db/seed on top of the real migrations so the frontend has sample data to work with.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
+    # V1000 sorts after every real migration; without this, the next real one (V5, V6, ...) would be
+    # rejected on a dev DB that has already applied the seed.
+    out-of-order: true
