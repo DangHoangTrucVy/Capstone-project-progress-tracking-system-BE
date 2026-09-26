@@ -3,6 +3,8 @@ package com.capstone.tracking.artifact;
 import com.capstone.tracking.common.BaseEntity;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.meeting.MeetingSession;
+import com.capstone.tracking.milestone.Milestone;
+import com.capstone.tracking.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -20,9 +22,9 @@ import lombok.Setter;
 import java.time.Instant;
 
 /**
- * blueprint.md §8 Data Model -> ArtifactSubmission entity (Sprint 3 — API-005). Data layer only for now.
- * {@code fileUrl} points at object storage (S3/MinIO) per the DB-scaling notes — this table never stores
- * the file bytes themselves.
+ * blueprint.md §8 Data Model -> ArtifactSubmission entity (API-005): a group document, optionally tied to a
+ * milestone and/or meeting session. Either an uploaded FILE (bytes live in FileStorage, this row keeps only
+ * the storage key) or a LINK. The API exposes it as both "artifacts" and "documents".
  */
 @Entity
 @Table(name = "artifact_submissions")
@@ -45,8 +47,32 @@ public class ArtifactSubmission extends BaseEntity {
     @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "milestone_id")
+    private Milestone milestone;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    @Builder.Default
+    private ArtifactSourceType sourceType = ArtifactSourceType.LINK;
+
+    /** External URL for LINK documents; null for FILE ones (served from /api/v1/artifacts/{id}/file). */
     private String fileUrl;
+
+    /** FILE only: where FileStorage keeps the bytes, plus what the client uploaded. */
+    @Column(length = 500)
+    private String storageKey;
+
+    private String originalFilename;
+
+    @Column(length = 100)
+    private String contentType;
+
+    private Long sizeBytes;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "submitted_by")
+    private User submittedBy;
 
     private String fileType;
 

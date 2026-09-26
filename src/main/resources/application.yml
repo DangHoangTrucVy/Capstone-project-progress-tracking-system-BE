@@ -30,6 +30,12 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+  servlet:
+    multipart:
+      # Must stay >= app.storage.max-file-size; oversize requests are rejected here with 413 before reaching a controller.
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:20MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:25MB}
+
   jackson:
     default-property-inclusion: non_null
     time-zone: UTC
@@ -46,6 +52,10 @@ app:
     refresh-token-exp-days: ${JWT_REFRESH_EXP_DAYS:7}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+  storage:
+    local-dir: ${STORAGE_LOCAL_DIR:./uploads}
+    max-file-size: ${UPLOAD_MAX_FILE_SIZE:20MB}
+    allowed-extensions: pdf,doc,docx,ppt,pptx,xls,xlsx,zip,rar,png,jpg,jpeg,txt,md
   security:
     allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn}
 

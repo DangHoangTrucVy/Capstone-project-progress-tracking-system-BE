@@ -15,5 +15,7 @@ app:
     secret: test-only-secret-key-must-be-at-least-32-bytes-long
     access-token-exp-minutes: 60
     refresh-token-exp-days: 7
+  storage:
+    local-dir: target/test-uploads
   security:
     allowed-email-domain: fpt.edu.vn

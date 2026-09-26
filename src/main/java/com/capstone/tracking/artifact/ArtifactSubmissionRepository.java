@@ -11,6 +11,8 @@ public interface ArtifactSubmissionRepository extends JpaRepository<ArtifactSubm
 
     Page<ArtifactSubmission> findByGroupId(UUID groupId, Pageable pageable);
 
+    Page<ArtifactSubmission> findByGroupIdAndMilestoneId(UUID groupId, UUID milestoneId, Pageable pageable);
+
     /** Backs the resubmission/versioning rule in ArtifactSubmissionService#create. */
     Optional<ArtifactSubmission> findTopByGroup_IdAndTitleOrderByVersionDesc(UUID groupId, String title);
 }

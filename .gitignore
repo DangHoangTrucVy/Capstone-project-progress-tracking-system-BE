@@ -1,4 +1,7 @@
 target/
+
+# Uploaded documents (app.storage.local-dir)
+/uploads/
 *.class
 
 # Claude Code local settings (personal overrides, not shared)

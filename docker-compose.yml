@@ -33,8 +33,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-dev-only-secret-key-please-override-in-prod-min-32-bytes}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn,gmail.com}
+      STORAGE_LOCAL_DIR: /app/uploads
     ports:
       - "8080:8080"
+    volumes:
+      - capstone_tracking_uploads:/app/uploads
 
 volumes:
   capstone_tracking_data:
+  capstone_tracking_uploads:
