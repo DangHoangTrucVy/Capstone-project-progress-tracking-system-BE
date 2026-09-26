@@ -54,6 +54,6 @@ public class ScheduleSlotService {
     }
 
     public Page<ScheduleSlot> search(UUID instructorId, SlotStatus status, Instant fromDate, Instant toDate, Pageable pageable) {
-        return scheduleSlotRepository.search(instructorId, status, fromDate, toDate, pageable);
+        return scheduleSlotRepository.findAll(ScheduleSlotSpecifications.search(instructorId, status, fromDate, toDate), pageable);
     }
 }
