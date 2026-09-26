@@ -21,6 +21,9 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, UUID> 
 
     boolean existsByUserIdAndStatus(UUID userId, MemberStatus status);
 
+    /** Whether the user is an active member of a group working on the given topic. */
+    boolean existsByUserIdAndStatusAndGroup_Topic_Id(UUID userId, MemberStatus status, UUID topicId);
+
     long countByGroupIdAndStatus(UUID groupId, MemberStatus status);
 
     @Query("select m.group.id, count(m) from GroupMember m "

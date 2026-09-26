@@ -21,14 +21,15 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/topics/{topicId}/questions")
 @RequiredArgsConstructor
-@Tag(name = "Question Bank", description = "Per-topic question bank managed by Admin, browsed by Instructor")
+@Tag(name = "Question Bank", description = "Per-topic question bank managed by Admin, browsed by Instructor; Group Leaders can send questions for their own topic")
 @SecurityRequirement(name = "bearerAuth")
 public class QuestionBankController {
 
     private final QuestionBankService questionBankService;
 
+    /** Admin: any topic. Group Leader: only their own group's topic (checked in the service). */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
     public ResponseEntity<QuestionResponse> create(@PathVariable UUID topicId,
                                                      @Valid @RequestBody QuestionCreateRequest request,
                                                      @AuthenticationPrincipal User currentUser) {

@@ -5,14 +5,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AccountStatusException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
@@ -38,6 +41,26 @@ public class GlobalExceptionHandler {
                 .toList();
         ErrorResponse body = ErrorResponse.ofValidation(
                 HttpStatus.BAD_REQUEST.value(), "Validation failed", request.getRequestURI(), errors);
+        return ResponseEntity.badRequest().body(body);
+    }
+
+    /**
+     * Malformed requests the controllers never see: a path/query value of the wrong type (e.g. a
+     * "null"/"undefined" UUID from the frontend), a missing required query param, or an unreadable
+     * JSON body / unknown enum value. These used to fall through to the 500 handler.
+     */
+    @ExceptionHandler({MethodArgumentTypeMismatchException.class, MissingServletRequestParameterException.class,
+            HttpMessageNotReadableException.class})
+    public ResponseEntity<ErrorResponse> handleMalformedRequest(Exception ex, HttpServletRequest request) {
+        String message;
+        if (ex instanceof MethodArgumentTypeMismatchException e) {
+            message = "Invalid value '" + e.getValue() + "' for parameter '" + e.getName() + "'";
+        } else if (ex instanceof MissingServletRequestParameterException e) {
+            message = "Missing required parameter '" + e.getParameterName() + "'";
+        } else {
+            message = "Malformed request body: " + NestedExceptionUtils.getMostSpecificCause(ex).getMessage();
+        }
+        ErrorResponse body = ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "BAD_REQUEST", message, request.getRequestURI());
         return ResponseEntity.badRequest().body(body);
     }
 
