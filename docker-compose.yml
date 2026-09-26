@@ -17,6 +17,31 @@ services:
       timeout: 5s
       retries: 10
 
+  # Floci: local AWS emulator (S3 for documents, SQS for domain events). Console: http://localhost:4566/_floci/ui
+  floci:
+    image: floci/floci:latest
+    container_name: capstone-tracking-floci
+    restart: unless-stopped
+    environment:
+      FLOCI_STORAGE_MODE: hybrid          # keep buckets/queues across restarts
+      FLOCI_STORAGE_PERSISTENT_PATH: /data
+    ports:
+      - "4566:4566"
+    volumes:
+      - capstone_tracking_floci:/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: capstone-tracking-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   app:
     build:
       context: .
@@ -26,6 +51,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      floci:
+        condition: service_started
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/capstone_tracking
       DB_USERNAME: capstone_user
@@ -34,6 +63,18 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn,gmail.com}
       STORAGE_LOCAL_DIR: /app/uploads
+      # Infrastructure tier: S3 + SQS on Floci, cache + login rate limit on Redis.
+      STORAGE_TYPE: s3
+      S3_CREATE_BUCKET: "true"
+      MESSAGING_TYPE: sqs
+      SQS_CREATE_QUEUE: "true"
+      AWS_ENDPOINT_URL: http://floci:4566
+      AWS_REGION: ap-southeast-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      REDIS_ENABLED: "true"
+      REDIS_HOST: redis
+      CACHE_TYPE: redis
     ports:
       - "8080:8080"
     volumes:
@@ -42,3 +83,4 @@ services:
 volumes:
   capstone_tracking_data:
   capstone_tracking_uploads:
+  capstone_tracking_floci:

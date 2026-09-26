@@ -43,7 +43,7 @@ public class MilestoneController {
     /** Ordered by sequenceNo; a semester has only a handful of milestones, so no paging. */
     @GetMapping
     public List<MilestoneResponse> list(@RequestParam(required = false) String semester) {
-        return milestoneService.list(semester).stream().map(MilestoneResponse::from).toList();
+        return milestoneService.listResponses(semester);
     }
 
     @GetMapping("/{id}")

@@ -9,6 +9,7 @@ Hệ thống hỗ trợ quản lý lịch đánh giá, theo dõi tiến độ v�
 
 - 📄 [**Intent Specification (`intent.md`)**](intent.md): Bối cảnh bài toán, mô hình tham chiếu tương tự Calendly và kết quả kỳ vọng.
 - 📐 [**Software Development Blueprint (`blueprint.md`)**](blueprint.md): Bản vẽ kiến trúc & kỹ thuật chi tiết 15 mục (Requirements, Use Cases, User Stories, Data Model, API Contract, NFR, Traceability Matrix).
+- 🏗️ [**Các tầng kiến trúc (`docs/architecture-layers.md`)**](docs/architecture-layers.md): Docker, CI/CD, AWS (S3/SQS qua Floci), Redis — bật/tắt và cách chạy.
 - 🤖 [**BA Blueprint Agent Framework (`BA-Blueprint-Agent/`)**](BA-Blueprint-Agent/README.md): Bộ khung quản trị chất lượng (Quality Gates), 10 kỹ năng phân tích nghiệp vụ và quy trình đồng bộ GitHub Delivery.
 
 ---
@@ -48,6 +49,7 @@ phải refactor lại.
 - springdoc-openapi (Swagger UI)
 - Lombok
 - JUnit 5 + MockMvc + H2 (test profile)
+- AWS SDK v2 (S3, SQS) — [Floci](https://github.com/floci-io/floci) locally and in CI; Redis (cache, login rate limit); GitHub Actions CI
 
 ### What's implemented
 

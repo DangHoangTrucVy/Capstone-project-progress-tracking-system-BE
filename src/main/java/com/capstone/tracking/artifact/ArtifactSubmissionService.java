@@ -13,11 +13,14 @@ import com.capstone.tracking.meeting.MeetingSession;
 import com.capstone.tracking.meeting.MeetingSessionRepository;
 import com.capstone.tracking.milestone.Milestone;
 import com.capstone.tracking.milestone.MilestoneService;
+import com.capstone.tracking.notification.DomainEvent;
+import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.storage.FileStorage;
 import com.capstone.tracking.storage.FileStorage.StoredFile;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -46,6 +49,7 @@ public class ArtifactSubmissionService {
     private final MilestoneService milestoneService;
     private final FileStorage fileStorage;
     private final AuditService auditService;
+    private final ApplicationEventPublisher events;
 
     /** JSON form: a LINK document. */
     @Transactional
@@ -164,6 +168,8 @@ public class ArtifactSubmissionService {
 
         auditService.record("ArtifactSubmission", artifact.getId(), AuditAction.CREATE, actingUser,
                 Map.of("groupId", groupId, "version", version, "sourceType", artifact.getSourceType()));
+        events.publishEvent(DomainEvent.of(DomainEventType.DOCUMENT_SUBMITTED, groupId, artifact.getId(),
+                actingUser.getId(), title));
         return artifact;
     }
 

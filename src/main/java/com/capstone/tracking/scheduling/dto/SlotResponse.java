@@ -4,6 +4,7 @@ import com.capstone.tracking.scheduling.LocationType;
 import com.capstone.tracking.scheduling.ScheduleSlot;
 import com.capstone.tracking.scheduling.SlotStatus;
 
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -20,7 +21,7 @@ public record SlotResponse(
         LocationType locationType,
         String meetingUrl,
         SlotStatus status
-) {
+) implements Serializable {
     public static SlotResponse from(ScheduleSlot s) {
         return new SlotResponse(s.getId(), s.getInstructor().getId(), s.getInstructor().getFullName(),
                 s.getStartTime(), s.getEndTime(), s.getDurationMinutes(), s.getCapacityGroups(),

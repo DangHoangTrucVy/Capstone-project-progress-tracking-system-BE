@@ -4,9 +4,13 @@ import com.capstone.tracking.audit.AuditAction;
 import com.capstone.tracking.audit.AuditService;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
+import com.capstone.tracking.config.CacheConfig;
 import com.capstone.tracking.milestone.dto.MilestoneCreateRequest;
+import com.capstone.tracking.milestone.dto.MilestoneResponse;
 import com.capstone.tracking.user.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -24,6 +28,7 @@ public class MilestoneService {
     private final AuditService auditService;
 
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.MILESTONES, allEntries = true)
     public Milestone create(MilestoneCreateRequest request, User actingUser) {
         if (milestoneRepository.existsBySemesterAndCodeIgnoreCase(request.semester(), request.code())) {
             throw new ConflictException("Milestone " + request.code() + " already exists in " + request.semester());
@@ -43,6 +48,11 @@ public class MilestoneService {
 
     public Milestone getById(UUID id) {
         return milestoneRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("Milestone", id));
+    }
+
+    @Cacheable(cacheNames = CacheConfig.MILESTONES, key = "#semester == null ? 'all' : #semester")
+    public List<MilestoneResponse> listResponses(String semester) {
+        return list(semester).stream().map(MilestoneResponse::from).toList();
     }
 
     public List<Milestone> list(String semester) {

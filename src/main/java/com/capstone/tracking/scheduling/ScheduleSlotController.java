@@ -2,6 +2,7 @@ package com.capstone.tracking.scheduling;
 
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.scheduling.dto.SlotCreateRequest;
+import com.capstone.tracking.scheduling.dto.SlotPage;
 import com.capstone.tracking.scheduling.dto.SlotResponse;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -9,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -45,8 +47,8 @@ public class ScheduleSlotController {
                                       @RequestParam(required = false) String fromDate,
                                       @RequestParam(required = false) String toDate,
                                       Pageable pageable) {
-        return scheduleSlotService.search(instructorId, status, parseInstant(fromDate), parseInstant(toDate), pageable)
-                .map(SlotResponse::from);
+        SlotPage page = scheduleSlotService.searchPage(instructorId, status, parseInstant(fromDate), parseInstant(toDate), pageable);
+        return new PageImpl<>(page.content(), pageable, page.totalElements());
     }
 
     /** Query params come in as plain ISO-8601 strings (e.g. 2026-10-01T08:00:00Z) and are parsed explicitly
@@ -64,6 +66,6 @@ public class ScheduleSlotController {
 
     @GetMapping("/{id}")
     public SlotResponse getById(@PathVariable UUID id) {
-        return SlotResponse.from(scheduleSlotService.getById(id));
+        return scheduleSlotService.getResponse(id);
     }
 }

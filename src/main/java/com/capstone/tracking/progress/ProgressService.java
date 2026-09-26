@@ -10,6 +10,8 @@ import com.capstone.tracking.group.GroupMemberRepository;
 import com.capstone.tracking.group.MemberStatus;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupService;
+import com.capstone.tracking.notification.DomainEvent;
+import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.progress.dto.ProgressFeedbackRequest;
 import com.capstone.tracking.progress.dto.ProgressReportRequest;
 import com.capstone.tracking.progress.dto.ProgressReportResponse;
@@ -18,6 +20,7 @@ import com.capstone.tracking.progress.dto.ProgressTaskRequest;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +46,7 @@ public class ProgressService {
     private final StudentGroupService studentGroupService;
     private final GroupMemberRepository groupMemberRepository;
     private final AuditService auditService;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public ProgressReportResponse create(UUID groupId, ProgressReportRequest request, User actingUser) {
@@ -59,6 +63,8 @@ public class ProgressService {
 
         auditService.record("WeeklyProgressReport", report.getId(), AuditAction.CREATE, actingUser,
                 Map.of("groupId", groupId, "weekNumber", request.weekNumber()));
+        events.publishEvent(DomainEvent.of(DomainEventType.PROGRESS_REPORTED, groupId, report.getId(),
+                actingUser.getId(), "tuần " + request.weekNumber()));
         return ProgressReportResponse.from(report);
     }
 
@@ -94,6 +100,8 @@ public class ProgressService {
         report.setFeedbackAt(Instant.now());
 
         auditService.record("WeeklyProgressReport", report.getId(), AuditAction.UPDATE, actingUser, Map.of("feedback", true));
+        events.publishEvent(DomainEvent.of(DomainEventType.PROGRESS_FEEDBACK, report.getGroup().getId(), report.getId(),
+                actingUser.getId(), "tuần " + report.getWeekNumber()));
         return ProgressReportResponse.from(report);
     }
 

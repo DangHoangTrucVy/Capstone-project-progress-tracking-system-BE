@@ -1,13 +1,11 @@
 package com.capstone.tracking.storage;
 
-import com.capstone.tracking.common.exception.ApiException;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.PathResource;
 import org.springframework.core.io.Resource;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -16,18 +14,17 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.Locale;
-import java.util.UUID;
 
-/** Stores uploads on the local disk under {@code app.storage.local-dir} (a Docker volume in docker-compose). */
+/** Stores uploads on the local disk under {@code app.storage.local-dir} (a Docker volume in docker-compose / on Railway). */
 @Component
+@ConditionalOnProperty(prefix = "app.storage", name = "type", havingValue = "local", matchIfMissing = true)
 public class LocalFileStorage implements FileStorage {
 
     private final Path root;
-    private final StorageProperties properties;
+    private final UploadPolicy uploadPolicy;
 
-    public LocalFileStorage(StorageProperties properties) {
-        this.properties = properties;
+    public LocalFileStorage(StorageProperties properties, UploadPolicy uploadPolicy) {
+        this.uploadPolicy = uploadPolicy;
         this.root = Path.of(properties.localDir()).toAbsolutePath().normalize();
         try {
             Files.createDirectories(root);
@@ -38,29 +35,15 @@ public class LocalFileStorage implements FileStorage {
 
     @Override
     public StoredFile store(MultipartFile file, String directory) {
-        if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Uploaded file is empty");
-        }
-        if (file.getSize() > properties.maxFileSize().toBytes()) {
-            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE",
-                    "File exceeds the " + properties.maxFileSize().toMegabytes() + "MB limit");
-        }
-        String originalName = StringUtils.cleanPath(file.getOriginalFilename() == null ? "" : file.getOriginalFilename());
-        String extension = StringUtils.getFilenameExtension(originalName);
-        if (extension == null || !properties.allowedExtensions().contains(extension.toLowerCase(Locale.ROOT))) {
-            throw new BadRequestException("File type not allowed. Allowed: " + String.join(", ", properties.allowedExtensions()));
-        }
-
-        // The stored name never comes from the client, so a crafted filename cannot escape the upload root.
-        String key = directory + "/" + UUID.randomUUID() + "." + extension.toLowerCase(Locale.ROOT);
-        Path target = resolve(key);
+        UploadPolicy.Accepted accepted = uploadPolicy.accept(file, directory);
+        Path target = resolve(accepted.key());
         try (InputStream in = file.getInputStream()) {
             Files.createDirectories(target.getParent());
             Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to store uploaded file", e);
         }
-        return new StoredFile(key, originalName, file.getContentType(), file.getSize());
+        return new StoredFile(accepted.key(), accepted.originalFilename(), file.getContentType(), file.getSize());
     }
 
     @Override

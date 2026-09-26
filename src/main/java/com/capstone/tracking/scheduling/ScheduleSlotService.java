@@ -7,7 +7,12 @@ import com.capstone.tracking.scheduling.dto.SlotCreateRequest;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import jakarta.persistence.criteria.Predicate;
+import com.capstone.tracking.config.CacheConfig;
+import com.capstone.tracking.scheduling.dto.SlotPage;
+import com.capstone.tracking.scheduling.dto.SlotResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -28,6 +33,7 @@ public class ScheduleSlotService {
     private final ScheduleSlotRepository scheduleSlotRepository;
 
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true)
     public ScheduleSlot create(SlotCreateRequest request, User instructor) {
         if (instructor.getRole() != Role.INSTRUCTOR && instructor.getRole() != Role.ADMIN) {
             throw new BadRequestException("Only Instructor/Admin accounts can publish assessment slots");
@@ -55,6 +61,20 @@ public class ScheduleSlotService {
 
     public ScheduleSlot getById(UUID id) {
         return scheduleSlotRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("ScheduleSlot", id));
+    }
+
+    /** Cached by id; evicted when a booking changes the slot's counters (BookingService). */
+    @Cacheable(cacheNames = CacheConfig.SLOT, key = "#id")
+    public SlotResponse getResponse(UUID id) {
+        return SlotResponse.from(getById(id));
+    }
+
+    /** Cached per filter + page; evicted whenever a slot is created, booked or cancelled. */
+    @Cacheable(cacheNames = CacheConfig.SLOT_SEARCH, key = "#instructorId + ':' + #status + ':' + #fromDate + ':' + #toDate"
+            + " + ':' + #pageable.pageNumber + ':' + #pageable.pageSize + ':' + #pageable.sort")
+    public SlotPage searchPage(UUID instructorId, SlotStatus status, Instant fromDate, Instant toDate, Pageable pageable) {
+        Page<ScheduleSlot> page = search(instructorId, status, fromDate, toDate, pageable);
+        return new SlotPage(page.getContent().stream().map(SlotResponse::from).toList(), page.getTotalElements());
     }
 
     public Page<ScheduleSlot> search(UUID instructorId, SlotStatus status, Instant fromDate, Instant toDate, Pageable pageable) {

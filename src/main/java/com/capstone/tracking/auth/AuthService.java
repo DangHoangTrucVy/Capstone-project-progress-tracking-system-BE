@@ -14,6 +14,7 @@ import com.capstone.tracking.user.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
+    private final LoginAttemptLimiter loginAttemptLimiter;
 
     @Value("${app.jwt.access-token-exp-minutes}")
     private long accessTokenExpMinutes;
@@ -63,8 +65,15 @@ public class AuthService {
     }
 
     public LoginResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.email().toLowerCase(), request.password()));
+        String email = request.email().toLowerCase();
+        loginAttemptLimiter.checkAllowed(email);
+        try {
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, request.password()));
+        } catch (BadCredentialsException e) {
+            loginAttemptLimiter.recordFailure(email);
+            throw e;
+        }
+        loginAttemptLimiter.reset(email);
 
         User user = userRepository.findByEmailIgnoreCase(request.email())
                 .orElseThrow(() -> new BadRequestException("Email or password is incorrect"));

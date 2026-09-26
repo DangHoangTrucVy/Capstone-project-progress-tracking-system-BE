@@ -5,17 +5,25 @@ import com.capstone.tracking.audit.AuditService;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
+import com.capstone.tracking.config.CacheConfig;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupService;
+import com.capstone.tracking.notification.DomainEvent;
+import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.scheduling.dto.BookRequest;
 import com.capstone.tracking.scheduling.dto.CancelBookingRequest;
 import com.capstone.tracking.user.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,8 +43,12 @@ public class BookingService {
     private final ScheduleSlotRepository scheduleSlotRepository;
     private final StudentGroupService studentGroupService;
     private final AuditService auditService;
+    private final ApplicationEventPublisher events;
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true),
+            @CacheEvict(cacheNames = CacheConfig.SLOT, key = "#slotId")})
     public Booking book(UUID slotId, BookRequest request, User actingUser) {
         StudentGroup group = studentGroupService.getById(request.groupId());
 
@@ -72,11 +84,16 @@ public class BookingService {
 
         auditService.record("Booking", booking.getId(), AuditAction.CREATE, actingUser,
                 Map.of("slotId", slotId, "groupId", group.getId()));
+        events.publishEvent(DomainEvent.of(DomainEventType.BOOKING_CONFIRMED, group.getId(), booking.getId(),
+                actingUser.getId(), slotLabel(slot)).withInstructor(slot.getInstructor().getId()));
 
         return booking;
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true),
+            @CacheEvict(cacheNames = CacheConfig.SLOT, allEntries = true)})
     public void cancel(UUID bookingId, CancelBookingRequest request, User actingUser) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
@@ -103,5 +120,15 @@ public class BookingService {
 
         auditService.record("Booking", booking.getId(), AuditAction.CANCEL, actingUser,
                 Map.of("reason", request.reason()));
+        events.publishEvent(DomainEvent.of(DomainEventType.BOOKING_CANCELLED, booking.getGroup().getId(), booking.getId(),
+                actingUser.getId(), slotLabel(slot)).withInstructor(slot.getInstructor().getId()));
+    }
+
+    private static final DateTimeFormatter SLOT_LABEL =
+            DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
+
+    /** Notification text is read by Vietnamese users, so the slot time is shown in Vietnam time. */
+    private static String slotLabel(ScheduleSlot slot) {
+        return "lúc " + SLOT_LABEL.format(slot.getStartTime());
     }
 }
