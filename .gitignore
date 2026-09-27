@@ -28,6 +28,7 @@ target/
 
 # Env
 .env
+.env.prod
 *.log
 
 # Maven

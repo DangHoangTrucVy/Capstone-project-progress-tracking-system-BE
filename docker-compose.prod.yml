@@ -1,0 +1,62 @@
+# Production-like stack for self-hosting on a PC, exposed through Cloudflare Tunnel (no open ports).
+# Run: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# Secrets live in .env.prod (copy from .env.prod.example; never commit it).
+name: capstone-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-capstone_tracking}
+      POSTGRES_USER: ${POSTGRES_USER:-capstone_user}
+      # :? fails fast with a clear message instead of Postgres dying with "Database is uninitialized"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Missing POSTGRES_PASSWORD - did you pass --env-file .env.prod?}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No "ports": the database is reachable only from the app container.
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-capstone_tracking}
+      DB_USERNAME: ${POSTGRES_USER:-capstone_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Missing POSTGRES_PASSWORD in .env.prod}
+      JWT_SECRET: ${JWT_SECRET:?Missing JWT_SECRET in .env.prod}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Missing CORS_ALLOWED_ORIGINS in .env.prod}
+      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn,gmail.com}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      # Behind Cloudflare's HTTPS: lets Swagger and redirects build https:// URLs.
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      STORAGE_TYPE: local
+      STORAGE_LOCAL_DIR: /app/uploads
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx1g
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      # Loopback only, for testing on this PC; the public entry point is the tunnel.
+      - "127.0.0.1:${APP_LOCAL_PORT:-8081}:8080"
+    volumes:
+      - uploads:/app/uploads
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Missing CLOUDFLARE_TUNNEL_TOKEN in .env.prod}
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  uploads:
