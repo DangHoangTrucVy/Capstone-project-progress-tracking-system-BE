@@ -28,7 +28,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class câu AuthService {
+public class AuthService {
 
     private final UserRepository userRepository;
     private final AuthenticationManager authenticationManager;
