@@ -1,5 +1,7 @@
 package com.capstone.tracking;
 
+import com.capstone.tracking.auth.AuthService;
+import com.capstone.tracking.auth.dto.LoginRequest;
 import com.capstone.tracking.support.PostgresTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PostgresMigrationTest {
 
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private AuthService authService;
 
     @Test
     void everyMigrationAppliesOnPostgres() {
@@ -45,5 +48,14 @@ class PostgresMigrationTest {
         jdbc.update("update student_groups set status = 'FORMED' where group_code = 'SE-F26-04'");
         assertThatThrownBy(() -> jdbc.update("update users set campus = 'HUE' where email = 'hoidong@fpt.edu.vn'"))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void seededDevCouncilAccountsCanSignInWithPassword() {
+        for (int i = 1; i <= 5; i++) {
+            String email = "council0" + i + "@fpt.edu.vn";
+            assertThat(authService.login(new LoginRequest(email, "Council@123")).user().role().name())
+                    .isEqualTo("COUNCIL");
+        }
     }
 }

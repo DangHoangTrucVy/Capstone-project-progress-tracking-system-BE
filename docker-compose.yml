@@ -60,9 +60,11 @@ services:
       DB_USERNAME: capstone_user
       DB_PASSWORD: capstone_pass
       JWT_SECRET: ${JWT_SECRET:-change-this-dev-only-secret-key-please-override-in-prod-min-32-bytes}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn}
-      PASSWORD_LOGIN_ENABLED: ${PASSWORD_LOGIN_ENABLED:-false}
+      # Local stack = dev: seeds sample data + admin/hoidong/council01..05 accounts, which need password login.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      PASSWORD_LOGIN_ENABLED: ${PASSWORD_LOGIN_ENABLED:-true}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
