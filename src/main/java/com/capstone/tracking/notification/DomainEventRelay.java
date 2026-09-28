@@ -1,14 +1,15 @@
 package com.capstone.tracking.notification;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
-
 /**
  * Forwards domain events to the {@link EventSink} only once the business transaction has committed, so nothing is
- * announced for work that rolled back. A sink failure is logged, never surfaced: the user's action already succeeded.
+ * announced for work that rolled back. The event is durably recorded before commit; failed delivery is retried.
  */
 @Slf4j
 @Component
@@ -16,14 +17,14 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class DomainEventRelay {
 
     private final DomainEventOutboxRepository repository;
-    private final com.fasterxml.jackson.databind.ObjectMapper mapper;
+    private final ObjectMapper mapper;
     private final DomainEventDispatcher dispatcher;
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void persist(DomainEvent event) {
         try {
             repository.save(new DomainEventOutbox(event.eventId(), mapper.writeValueAsString(event)));
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException("Cannot persist domain event", e);
         }
     }

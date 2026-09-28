@@ -19,9 +19,7 @@ import java.util.UUID;
 /**
  * FR-010: user management + RBAC (blueprint.md §6, §11).
  * Only Admin can create/edit accounts directly; every authenticated user can read their own profile
- * via /api/v1/auth/me (see AuthController) instead of this admin surface. Listing/lookup is also open
- * to Instructor/Group Leader, since group creation (StudentGroupController) needs to resolve
- * candidate supervisors and members by role.
+ * via /api/v1/auth/me. Admin owns account lookup, group provisioning and roster management.
  */
 @RestController
 @RequestMapping("/api/v1/users")

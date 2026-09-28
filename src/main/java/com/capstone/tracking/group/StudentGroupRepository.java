@@ -1,18 +1,19 @@
 package com.capstone.tracking.group;
 
+import jakarta.persistence.LockModeType;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.UUID;
-
 public interface StudentGroupRepository extends JpaRepository<StudentGroup, UUID> {
 
-    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select g from StudentGroup g where g.id = :id")
-    java.util.Optional<StudentGroup> lockById(@Param("id") UUID id);
+    Optional<StudentGroup> lockById(@Param("id") UUID id);
 
     boolean existsByGroupCodeIgnoreCase(String groupCode);
 

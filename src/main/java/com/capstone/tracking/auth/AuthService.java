@@ -8,12 +8,10 @@ import com.capstone.tracking.auth.dto.LoginResponse;
 import com.capstone.tracking.auth.dto.RegisterRequest;
 import com.capstone.tracking.common.exception.ApiException;
 import com.capstone.tracking.common.exception.BadRequestException;
-import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.security.JwtTokenProvider;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
-import com.capstone.tracking.user.UserStatus;
 import com.capstone.tracking.user.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,7 +21,6 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +31,6 @@ import java.util.List;
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginAttemptLimiter loginAttemptLimiter;
@@ -77,7 +73,7 @@ public class AuthService {
 
     /**
      * Giai đoạn 1: sign in with the school's Google Workspace account. The role comes from the account an Admin
-     * provisioned for that email (Instructor, Council, Admin); an unknown school email signs up as a Student. The
+     * provisioned for that email; unknown accounts and ordinary student members cannot sign in. The
      * campus picked on the first sign-in is pinned to the account, and signing in under another campus is refused.
      */
     @Transactional

@@ -3,13 +3,18 @@ package com.capstone.tracking.scheduling;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
-import com.capstone.tracking.scheduling.dto.SlotCreateRequest;
-import com.capstone.tracking.user.Role;
-import com.capstone.tracking.user.User;
-import jakarta.persistence.criteria.Predicate;
 import com.capstone.tracking.config.CacheConfig;
+import com.capstone.tracking.scheduling.dto.SlotCreateRequest;
 import com.capstone.tracking.scheduling.dto.SlotPage;
 import com.capstone.tracking.scheduling.dto.SlotResponse;
+import com.capstone.tracking.user.Role;
+import com.capstone.tracking.user.User;
+import com.capstone.tracking.user.UserRepository;
+import jakarta.persistence.criteria.Predicate;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -18,12 +23,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
 /** Sprint 2 — API-001 / API-002. See blueprint.md §5 step 1 for the no-overlap rule this enforces. */
 @Service
 @RequiredArgsConstructor
@@ -31,7 +30,7 @@ import java.util.UUID;
 public class ScheduleSlotService {
 
     private final ScheduleSlotRepository scheduleSlotRepository;
-    private final com.capstone.tracking.user.UserRepository users;
+    private final UserRepository users;
 
     @Transactional
     @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true)

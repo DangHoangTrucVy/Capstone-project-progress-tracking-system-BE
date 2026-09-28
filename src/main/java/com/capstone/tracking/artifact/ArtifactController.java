@@ -2,12 +2,17 @@ package com.capstone.tracking.artifact;
 
 import com.capstone.tracking.artifact.ArtifactSubmissionService.DownloadableFile;
 import com.capstone.tracking.artifact.dto.ArtifactCreateRequest;
+import com.capstone.tracking.artifact.dto.ArtifactFeedbackRequest;
 import com.capstone.tracking.artifact.dto.ArtifactResponse;
+import com.capstone.tracking.group.StudentGroupService;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -21,16 +26,12 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.util.UUID;
-
 /**
  * API-005: group documents (reports, slides, source links...). Every group-scoped route is also exposed as
  * {@code /documents}, the name the frontend uses; both hit the same data.
@@ -42,7 +43,7 @@ import java.util.UUID;
 public class ArtifactController {
 
     private final ArtifactSubmissionService artifactSubmissionService;
-    private final com.capstone.tracking.group.StudentGroupService groups;
+    private final StudentGroupService groups;
 
     @Operation(summary = "Submit a link document (JSON)")
     @PostMapping(value = {"/api/v1/groups/{groupId}/artifacts", "/api/v1/groups/{groupId}/documents"},
@@ -102,10 +103,10 @@ public class ArtifactController {
         return ArtifactResponse.from(artifactSubmissionService.accept(id, currentUser));
     }
 
-    @org.springframework.web.bind.annotation.PutMapping({"/api/v1/artifacts/{id}/feedback", "/api/v1/documents/{id}/feedback"})
+    @PutMapping({"/api/v1/artifacts/{id}/feedback", "/api/v1/documents/{id}/feedback"})
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public ArtifactResponse feedback(@PathVariable UUID id,
-            @Valid @RequestBody com.capstone.tracking.artifact.dto.ArtifactFeedbackRequest request,
+            @Valid @RequestBody ArtifactFeedbackRequest request,
             @AuthenticationPrincipal User currentUser) {
         return ArtifactResponse.from(artifactSubmissionService.feedback(id, request, currentUser));
     }

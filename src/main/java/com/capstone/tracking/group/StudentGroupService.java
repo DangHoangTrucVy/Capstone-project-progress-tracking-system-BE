@@ -12,13 +12,6 @@ import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
 import com.capstone.tracking.user.UserService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
@@ -26,7 +19,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 /**
  * FR-010 group/member management underpinning every later sprint (Booking, ArtifactSubmission, etc.
  * all key off StudentGroup / GroupMember per blueprint.md §8).
@@ -77,7 +76,7 @@ public class StudentGroupService {
     }
 
     /** Serialize changes to a group's bookings, submissions and roster inside the caller's transaction. */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    @Transactional(propagation = Propagation.MANDATORY)
     public StudentGroup lockById(UUID id) {
         return studentGroupRepository.lockById(id).orElseThrow(() -> ResourceNotFoundException.of("StudentGroup", id));
     }

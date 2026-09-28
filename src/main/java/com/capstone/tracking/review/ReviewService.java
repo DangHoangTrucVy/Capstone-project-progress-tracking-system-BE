@@ -6,6 +6,7 @@ import com.capstone.tracking.common.VnTime;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
+import com.capstone.tracking.defense.DefenseSessionRepository;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupService;
 import com.capstone.tracking.notification.DomainEvent;
@@ -14,16 +15,11 @@ import com.capstone.tracking.review.dto.ReviewCloneRequest;
 import com.capstone.tracking.review.dto.ReviewResultRequest;
 import com.capstone.tracking.review.dto.ReviewScheduleRequest;
 import com.capstone.tracking.review.dto.ReviewSessionResponse;
+import com.capstone.tracking.scheduling.ScheduleGuard;
+import com.capstone.tracking.semester.SemesterCalendarService;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,7 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 /**
  * Giai đoạn 5 — Reviews 1, 2 and 3. An Admin schedules each group's review (time, room, panel); Review 2 can be cloned
  * from Review 1. The panel records the result; for Review 3 (the closed council: 3 lecturers, one chair) the chair's
@@ -44,17 +45,15 @@ import java.util.UUID;
 public class ReviewService {
 
     static final int CLOSED_COUNCIL_SIZE = 3;
-    /** Longest review we expect; bounds the overlap query window. */
-    private static final Duration MAX_SESSION = Duration.ofHours(8);
 
     private final ReviewSessionRepository sessionRepository;
     private final StudentGroupService studentGroupService;
     private final UserService userService;
     private final AuditService auditService;
     private final ApplicationEventPublisher events;
-    private final com.capstone.tracking.scheduling.ScheduleGuard scheduleGuard;
-    private final com.capstone.tracking.semester.SemesterCalendarService calendars;
-    private final com.capstone.tracking.defense.DefenseSessionRepository defenses;
+    private final ScheduleGuard scheduleGuard;
+    private final SemesterCalendarService calendars;
+    private final DefenseSessionRepository defenses;
 
     @Transactional
     public ReviewSessionResponse schedule(ReviewScheduleRequest request, User actingUser) {
@@ -72,11 +71,8 @@ public class ReviewService {
     @Transactional
     public List<ReviewSessionResponse> cloneRound(ReviewCloneRequest request, User actingUser) {
         scheduleGuard.acquire();
-        if (request.fromRound() == request.toRound()) {
-            throw new BadRequestException("fromRound and toRound must differ");
-        }
-        if (request.toRound() == ReviewRound.REVIEW_3) {
-            throw new BadRequestException("Review 3 (closed council) is scheduled per group with its own 3-member panel");
+        if (request.fromRound() != ReviewRound.REVIEW_1 || request.toRound() != ReviewRound.REVIEW_2) {
+            throw new BadRequestException("Only Review 1 can be cloned to Review 2; schedule Review 3 with its own panel");
         }
         List<ReviewSessionResponse> created = new ArrayList<>();
         for (ReviewSession source : sessionRepository.findByRoundAndGroup_SemesterOrderByScheduledAtAsc(

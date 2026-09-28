@@ -92,6 +92,8 @@ class WorkflowCompletionIntegrationTest extends WorkflowTestSupport {
         LocalDate start = LocalDate.of(2035, 1, 1);
         Instant week3 = start.plusDays(14).atTime(9, 0).atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
         Map<String,Object> review = review(group, lecturer, "REVIEW_1", week3);
+        putAs("/api/v1/semesters/" + "x".repeat(21), admin, Map.of("startDate", start.toString()))
+                .andExpect(status().isBadRequest());
         postJson("/api/v1/reviews", admin, review).andExpect(status().isBadRequest());
         putAs("/api/v1/semesters/" + group.getSemester(), lecturer, Map.of("startDate", start.toString()))
                 .andExpect(status().isForbidden());
@@ -180,6 +182,37 @@ class WorkflowCompletionIntegrationTest extends WorkflowTestSupport {
                 .revisionDeadline(Instant.now().minusSeconds(1)).build());
         postJson("/api/v1/reviews/" + council.getId() + "/revision-complete", admin, Map.of()).andExpect(status().isConflict());
         getAs("/api/v1/groups/" + g.getId() + "/overview", admin).andExpect(jsonPath("$.defenseTrack").value("DEFENSE_2"));
+    }
+
+    @Test
+    void parallelLimitCountsConcurrentSessionsRatherThanAllIntersectingSessions() throws Exception {
+        User admin = user("parallel-admin", Role.ADMIN);
+        Instant at = Instant.now().plus(Duration.ofDays(3000));
+        for (int i = 0; i < 5; i++) {
+            StudentGroup g = group("PARALLEL-" + i, admin, true);
+            readyForDefense(g);
+            User chair = user("parallel-chair-" + i, Role.COUNCIL);
+            Map<String,Object> request = new HashMap<>(defense(g, chair, at.plusSeconds(1800L * i)));
+            request.put("room", "parallel-" + i + "-" + suffix);
+            postJson("/api/v1/defenses", admin, request).andExpect(status().isCreated());
+        }
+        // Intersects five sequential sessions, but only two run at any one instant.
+        StudentGroup longGroup = group("PARALLEL-LONG", admin, true);
+        readyForDefense(longGroup);
+        User chair = user("parallel-long-chair", Role.COUNCIL);
+        Map<String,Object> longRequest = new HashMap<>(defense(longGroup, chair, at));
+        longRequest.put("durationMinutes", 150);
+        longRequest.put("room", "parallel-long-" + suffix);
+        postJson("/api/v1/defenses", admin, longRequest).andExpect(status().isCreated());
+        // A separate window with five simultaneous sessions really is full.
+        Instant busy = at.plus(Duration.ofDays(1));
+        for (int i = 0; i < 6; i++) {
+            StudentGroup g = group("BUSY-" + i, admin, true);
+            readyForDefense(g);
+            Map<String,Object> request = new HashMap<>(defense(g, user("busy-chair-" + i, Role.COUNCIL), busy));
+            request.put("room", "busy-" + i + "-" + suffix);
+            postJson("/api/v1/defenses", admin, request).andExpect(i < 5 ? status().isCreated() : status().isConflict());
+        }
     }
 
     private void readyForDefense(StudentGroup g) {

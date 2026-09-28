@@ -13,6 +13,7 @@ import java.util.UUID;
 public interface ReviewSessionRepository extends JpaRepository<ReviewSession, UUID> {
 
     boolean existsByGroup_Semester(String semester);
+    List<ReviewSession> findByGroup_Semester(String semester);
 
     List<ReviewSession> findByScheduledAtLessThan(Instant end);
 

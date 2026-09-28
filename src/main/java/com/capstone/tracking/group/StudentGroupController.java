@@ -5,11 +5,16 @@ import com.capstone.tracking.group.dto.GroupMemberResponse;
 import com.capstone.tracking.group.dto.StudentGroupCreateRequest;
 import com.capstone.tracking.group.dto.StudentGroupResponse;
 import com.capstone.tracking.group.dto.StudentGroupUpdateRequest;
+import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.net.URI;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,12 +23,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
-import java.net.URI;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 /** FR-010: group roster management (blueprint.md §7 UC not explicit, underpins UC-002..UC-004). */
 @RestController
 @RequestMapping("/api/v1/groups")
@@ -49,7 +48,7 @@ public class StudentGroupController {
                                             @RequestParam(required = false) UUID topicId,
                                             @RequestParam(defaultValue = "false") boolean available,
                                             Pageable pageable, @AuthenticationPrincipal User currentUser) {
-        Page<StudentGroup> page = currentUser.getRole() == com.capstone.tracking.user.Role.GROUP_LEADER
+        Page<StudentGroup> page = currentUser.getRole() == Role.GROUP_LEADER
                 ? studentGroupService.listForMember(currentUser.getId(), pageable)
                 : studentGroupService.list(supervisorId, topicId, available, pageable);
         Map<UUID, Long> counts = studentGroupService.countActiveMembers(
@@ -76,7 +75,7 @@ public class StudentGroupController {
         return StudentGroupResponse.from(updated, studentGroupService.countActiveMembers(updated.getId()));
     }
 
-    @Operation(summary = "Student self-joins a group", description = "Allows an authenticated student to join an open group with capacity.")
+    @Operation(summary = "Legacy self-join endpoint (disabled; Admin manages the roster)")
     @PostMapping("/{id}/join")
     @PreAuthorize("denyAll()")
     public ResponseEntity<GroupMemberResponse> join(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {

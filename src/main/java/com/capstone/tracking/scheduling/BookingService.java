@@ -12,14 +12,8 @@ import com.capstone.tracking.notification.DomainEvent;
 import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.scheduling.dto.BookRequest;
 import com.capstone.tracking.scheduling.dto.CancelBookingRequest;
+import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
-import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Caching;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -28,7 +22,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.UUID;
-
+import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 /**
  * Sprint 2 — API-003 / API-004, the highest-risk piece of the whole system per NFR-002 and R-001
  * ("≥50 nhóm đồng thời đặt vào một slot cuối cùng"). {@link #book} is the one place that must not
@@ -118,11 +118,11 @@ public class BookingService {
         Booking booking = bookingRepository.lockById(bookingId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
 
-        if (actingUser.getRole() == com.capstone.tracking.user.Role.GROUP_LEADER) {
+        if (actingUser.getRole() == Role.GROUP_LEADER) {
             studentGroupService.requireActiveLeader(booking.getGroup().getId(), actingUser);
-        } else if (actingUser.getRole() != com.capstone.tracking.user.Role.ADMIN
+        } else if (actingUser.getRole() != Role.ADMIN
                 && !booking.getSlot().getInstructor().getId().equals(actingUser.getId())) {
-            throw new org.springframework.security.access.AccessDeniedException("Only the group's leader or slot instructor can cancel");
+            throw new AccessDeniedException("Only the group's leader or slot instructor can cancel");
         }
 
         if (booking.getBookingStatus() != BookingStatus.CONFIRMED) {

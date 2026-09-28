@@ -19,17 +19,11 @@ import com.capstone.tracking.review.ClosedCouncilOutcome;
 import com.capstone.tracking.review.PanelSelection;
 import com.capstone.tracking.review.ReviewService;
 import com.capstone.tracking.review.ReviewSession;
+import com.capstone.tracking.review.ReviewSessionRepository;
+import com.capstone.tracking.scheduling.ScheduleGuard;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,7 +32,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 /**
  * Giai đoạn 6 — final defenses. Who may defend when is decided by the closed council (Review 3):
  * attempt 1 needs READY_FOR_DEFENSE_1, or REVISE_BEFORE_DEFENSE_1 with the revision confirmed; attempt 2 is for
@@ -51,7 +51,6 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class DefenseService {
 
-    private static final Duration MAX_SESSION = Duration.ofHours(8);
 
     private final DefenseSessionRepository sessionRepository;
     private final StudentGroupService studentGroupService;
@@ -59,8 +58,8 @@ public class DefenseService {
     private final UserService userService;
     private final AuditService auditService;
     private final ApplicationEventPublisher events;
-    private final com.capstone.tracking.scheduling.ScheduleGuard scheduleGuard;
-    private final com.capstone.tracking.review.ReviewSessionRepository reviewSessions;
+    private final ScheduleGuard scheduleGuard;
+    private final ReviewSessionRepository reviewSessions;
 
     @Value("${app.defense.max-parallel:5}")
     private int maxParallel;

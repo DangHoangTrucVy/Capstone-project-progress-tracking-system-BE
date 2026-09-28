@@ -5,6 +5,10 @@ Hệ thống hỗ trợ quản lý lịch đánh giá, theo dõi tiến độ v�
 
 ---
 
+## Quy trình đang áp dụng
+
+Xem [hợp đồng backend và hướng dẫn tích hợp](docs/workflow-implementation.md): Admin cấp tài khoản/nhóm/Leader, Google Workspace mặc định, chỉ Leader thao tác thay nhóm, deadline duyệt đề tài, feedback bài nộp, lịch review theo tuần và thông báo có outbox. Các mô tả sprint bên dưới là lịch sử phát triển; tài liệu quy trình này mô tả quyền và API hiện hành.
+
 ## 📌 Tài liệu dự án
 
 - 📄 [**Intent Specification (`intent.md`)**](intent.md): Bối cảnh bài toán, mô hình tham chiếu tương tự Calendly và kết quả kỳ vọng.
@@ -55,15 +59,15 @@ phải refactor lại.
 
 | Sprint | Area | Endpoints | Status |
 |---|---|---|---|
-| 1 | Auth | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` | Full — register restricted to `@fpt.edu.vn` (configurable), always creates a STUDENT |
+| 1 | Auth | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` | Registration disabled; Google Workspace login for provisioned staff/Leader; password fallback opt-in |
 | 1 | Users | `POST/GET /api/v1/users`, `GET/PUT /api/v1/users/{id}` | Full — Admin-only |
 | 1 | Topics | `POST/GET /api/v1/topics`, `GET/PUT /api/v1/topics/{id}` | Full — create/edit = Admin, read = any role |
 | 1 | Question Bank | `POST/GET /api/v1/topics/{topicId}/questions` | Full — matches API-006 |
-| 1 | Student Groups | `POST/GET /api/v1/groups`, `GET/PUT /api/v1/groups/{id}`, `POST/DELETE /api/v1/groups/{id}/members[/{memberId}]` | Full — create/edit = Admin/Instructor |
+| 1 | Student Groups | `POST/GET /api/v1/groups`, `GET/PUT /api/v1/groups/{id}`, `POST/DELETE /api/v1/groups/{id}/members[/{memberId}]` | Full — group/roster changes = Admin |
 | 2 | Schedule Slots | `POST/GET /api/v1/slots`, `GET /api/v1/slots/{id}` | Full — matches API-001/API-002, no-overlap rule (§5 step 1) |
 | 2 | Bookings | `POST /api/v1/slots/{id}/book`, `DELETE /api/v1/bookings/{id}` | Full — matches API-003/API-004, pessimistic-lock capacity enforcement (NFR-002/R-001), late-cancellation window |
 | — | Audit Trail | *(internal — `AuditService`, no endpoint yet)* | Recorder built and wired into every Sprint 1–5 mutating service |
-| 3 | Artifact Submissions | `POST/GET /api/v1/groups/{groupId}/artifacts`, `GET /api/v1/artifacts/{id}`, `POST /api/v1/artifacts/{id}/accept` | Full — matches API-005 (client supplies `fileUrl`; no file storage in this codebase); resubmitting the same title auto-supersedes the previous version |
+| 3 | Artifact Submissions | `POST/GET /api/v1/groups/{groupId}/artifacts`, `GET /api/v1/artifacts/{id}`, `POST /api/v1/artifacts/{id}/accept` | Full — matches API-005 (supports link or multipart upload, local/S3 storage); resubmitting the same title auto-supersedes the previous version |
 | 4 | Meetings & Minutes | `POST /api/v1/bookings/{bookingId}/meetings`, `GET/PUT.../start`/`.../end /api/v1/meetings/{id}`, `POST/GET /api/v1/meetings/{id}/requirements`, `PUT /api/v1/requirements/{id}`, `POST /api/v1/meetings/{id}/minutes/generate`, `PUT .../minutes/sign`, `GET .../minutes` | Full — matches API-007/008/009; minutes generation is a deterministic template, not a real AI call; sign-off is the same endpoint for both Leader (submit) and Instructor (approve/reject) |
 | 5 | Evaluation & Reporting | `POST/GET /api/v1/groups/{groupId}/evaluations`, `GET /api/v1/evaluations/{id}`, `GET /api/v1/reports/summary` | Full — matches API-010/API-011; evaluations are created already Published (one-click "Save and Publish" per UC-004); reports summary scoped to Admin (no "Dept Head" role exists) |
 
@@ -71,7 +75,7 @@ phải refactor lại.
 
 | Giai đoạn | Endpoints | Rules |
 |---|---|---|
-| 1 Đăng nhập | `GET /api/v1/auth/campuses`, `POST /api/v1/auth/google` `{idToken, campus}` | Google Workspace ID token (set `GOOGLE_CLIENT_IDS`); role comes from the account Admin provisioned for the email (unknown school email → STUDENT); campus pinned on first sign-in |
+| 1 Đăng nhập | `GET /api/v1/auth/campuses`, `POST /api/v1/auth/google` `{idToken, campus}` | Google Workspace ID token (set `GOOGLE_CLIENT_IDS`); role comes from the account Admin provisioned for the email (unknown email → denied; Admin provisions accounts); campus pinned on first sign-in |
 | 2 Đề tài | `POST/GET /api/v1/groups/{id}/topic-proposals`, `GET /api/v1/topic-proposals`, `POST /api/v1/topic-proposals/{id}/forward`, `POST /api/v1/topic-proposals/{id}/decision`, `POST/GET /api/v1/proposal-rounds`, `PUT /api/v1/proposal-rounds/{id}/close` | Leader submits 10 topics → supervisor forwards 1 → COUNCIL approves (becomes the group's Topic) or rejects with feedback. Council deadline 14 days (round 1) / 10 days (rounds 2–4). Max 4 rounds; rounds 2–4 need an Admin-opened window |
 | 3 Đặt lịch | existing slot/booking endpoints | 1 slot = 1 group; only the group's leader books; ≥ 24h ahead; ≤ 1 slot/day; the previous meeting must be ended (booking → ATTENDED) before booking again |
 | 4 Tiến độ | `POST/GET /api/v1/groups/{id}/warning-flags`, `PUT /api/v1/warning-flags/{id}/resolve`, `GET /api/v1/groups/{id}/overview` | Supervisor flags a late group or an inactive member; Overview returns badges, the milestone progress bar, meetings, reviews, defenses |
@@ -116,7 +120,7 @@ On first boot, Flyway runs, in order:
   meeting_sessions, requirement_logs, meeting_minutes, evaluation_records, artifact_submissions,
   system_audit_trail)
 
-Log in as the seeded admin:
+For local/bootstrap access, explicitly set `PASSWORD_LOGIN_ENABLED=true` before using the seeded admin:
 
 ```
 email:    admin@fpt.edu.vn
@@ -164,12 +168,6 @@ so they don't need Postgres running.
   booking can't be cancelled inside the 2-hour window (400). This is a correctness test, not a load
   test — NFR-002 also calls for a k6/JMeter run at ≥50 concurrent requests before Sprint 2 ships.
 
-> **A note on how this codebase was produced:** it was generated and hand-reviewed in a
-> sandboxed environment without access to Maven Central, so `mvn compile`/`mvn test`
-> could not be executed there to double-check it end to end. Run `mvn clean test` as your
-> first step after opening the project — if anything doesn't compile, it is most likely a
-> small dependency-version mismatch, easy to spot from the error and fix from there.
-
 ### Design notes / where the blueprint mapped to code
 
 - **NFR-002 / R-001 (no over-booking under concurrency)**: `ScheduleSlotRepository.findByIdForUpdate`
@@ -184,18 +182,12 @@ so they don't need Postgres running.
   an existing transaction (`Propagation.MANDATORY`) so the audit row and the state change it documents
   always commit or roll back together. Extend the same one-line call into the Sprint 4/5 services
   (`MeetingMinute` approval, `EvaluationRecord` scoring) as they're built.
-- **RBAC**: enforced with `@PreAuthorize` at the controller layer rather than in services, so the
-  permission model is visible directly on each endpoint. Known simplification carried over from
-  Sprint 1: a `GROUP_LEADER` can call booking/member endpoints for *any* group ID, not just their
-  own — role checks don't yet verify resource ownership. Add an ownership check (e.g. a custom
-  `@PreAuthorize("@groupSecurity.isLeaderOf(#groupId)")`) before this goes further than local dev.
+- **RBAC**: controller role checks plus service ownership checks. Student accounts are roster records; only the Leader signs in for the group. See the current workflow contract above.
 - **Connection pool**: capped deliberately small in `application.yml` (`maximum-pool-size: 15`) —
   NFR-002's 50-concurrent-groups scenario is a burst of short row-locked transactions, not 50 held-open
   connections; a bigger pool just moves the queuing from the pool to Postgres's own lock manager.
   Re-tune once you have a real k6 run to look at.
-- **Google SSO (A-005)**: `JwtTokenProvider`/`AuthService` are structured so a Google-issued identity
-  can be exchanged for the same JWT this API already issues — that OAuth2 exchange itself isn't
-  implemented here; `spring-boot-starter-oauth2-client` is the natural next dependency for it.
+- **Google SSO (A-005)**: implemented through Google ID token verification and provisioned accounts. Set `GOOGLE_CLIENT_IDS`; password login defaults off (`PASSWORD_LOGIN_ENABLED=true` is an explicit local/bootstrap fallback).
 - **EvaluationRecord is Restricted Confidential (§11)**: the entity itself has a javadoc reminder never
   to return it directly from a controller — build a DTO for it the way `UserResponse`/`TopicResponse`
   already do, before wiring up Sprint 5's endpoints.

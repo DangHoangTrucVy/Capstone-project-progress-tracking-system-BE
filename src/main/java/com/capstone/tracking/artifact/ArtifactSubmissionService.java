@@ -1,6 +1,7 @@
 package com.capstone.tracking.artifact;
 
 import com.capstone.tracking.artifact.dto.ArtifactCreateRequest;
+import com.capstone.tracking.artifact.dto.ArtifactFeedbackRequest;
 import com.capstone.tracking.audit.AuditAction;
 import com.capstone.tracking.audit.AuditService;
 import com.capstone.tracking.common.exception.BadRequestException;
@@ -15,10 +16,14 @@ import com.capstone.tracking.milestone.Milestone;
 import com.capstone.tracking.milestone.MilestoneService;
 import com.capstone.tracking.notification.DomainEvent;
 import com.capstone.tracking.notification.DomainEventType;
-import com.capstone.tracking.storage.FileStorage;
 import com.capstone.tracking.storage.FileStorage.StoredFile;
+import com.capstone.tracking.storage.FileStorage;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
@@ -31,12 +36,6 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
-import java.util.function.Consumer;
-
 /** API-005: group members submit documents (uploaded files or links) per milestone; Instructor/Admin accept them. */
 @Service
 @RequiredArgsConstructor
@@ -105,7 +104,7 @@ public class ArtifactSubmissionService {
     }
 
     @Transactional
-    public ArtifactSubmission feedback(UUID id, com.capstone.tracking.artifact.dto.ArtifactFeedbackRequest request, User actingUser) {
+    public ArtifactSubmission feedback(UUID id, ArtifactFeedbackRequest request, User actingUser) {
         ArtifactSubmission artifact = getById(id);
         studentGroupService.requireSupervisorOrAdmin(artifact.getGroup(), actingUser);
         if (artifact.getStatus() == ArtifactStatus.SUPERCEDED) {
