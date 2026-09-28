@@ -77,7 +77,7 @@ phải refactor lại.
 | 4 Tiến độ | `POST/GET /api/v1/groups/{id}/warning-flags`, `PUT /api/v1/warning-flags/{id}/resolve`, `GET /api/v1/groups/{id}/overview` | Supervisor flags a late group or an inactive member; Overview returns badges, the milestone progress bar, meetings, reviews, defenses |
 | 5 Review | `POST /api/v1/reviews`, `POST /api/v1/reviews/clone`, `GET /api/v1/reviews[?round=]`, `GET /api/v1/reviews/mine`, `GET /api/v1/groups/{id}/reviews`, `POST /api/v1/reviews/{id}/result`, `POST /api/v1/reviews/{id}/revision-complete` | Review 2 cloned from Review 1 (`offsetDays`). Review 3 = 3 lecturers incl. 1 chair; the chair sorts the group: `READY_FOR_DEFENSE_1` / `REVISE_BEFORE_DEFENSE_1` / `DEFER_TO_DEFENSE_2` |
 | 6 Bảo vệ | `POST /api/v1/defenses`, `POST /api/v1/defenses/rolling`, `GET /api/v1/defenses[?attempt=]`, `GET /api/v1/defenses/mine`, `GET /api/v1/groups/{id}/defenses`, `POST /api/v1/defenses/{id}/result` | Eligibility from Review 3; rolling schedule (one room + committee, groups back to back); no room/lecturer double-booking; ≤ `DEFENSE_MAX_PARALLEL` at once; fail attempt 2 → group `FAILED` |
-| Thông báo | `GET /api/v1/notifications/stream?access_token=` (SSE) + existing notification endpoints | Approvals, rejections, flags, review/defense results are also emailed: To leader, CC members + supervisor (`MAIL_ENABLED=true` + SMTP settings; otherwise logged) |
+| Thông báo | `GET /api/v1/notifications/stream?access_token=` (SSE) + existing notification endpoints | Real-time across instances via Redis pub/sub when `REDIS_ENABLED=true` (single instance: in-memory). Approvals, rejections, flags, review/defense results are also emailed — To leader, CC members + supervisor — through the `email_outbox` table: queued in the notification's transaction, sent by a background dispatcher every `MAIL_DISPATCH_DELAY_MS`, retried with backoff (5 attempts, then `FAILED` with `last_error`). `MAIL_ENABLED=true` + SMTP settings to really send; otherwise logged |
 
 RBAC roles: `ADMIN`, `INSTRUCTOR`, `COUNCIL`, `GROUP_LEADER`, `STUDENT`, enforced with
 `@PreAuthorize` per blueprint.md §11. All 5 sprints now have full service/controller
@@ -148,6 +148,8 @@ Booking itself needs a `GROUP_LEADER` token — see `BookingFlowIntegrationTest`
 full worked example (create instructor, group, leader, slot, then book/cancel).
 
 ### Running tests
+
+`PostgresMigrationTest` and the `*PostgresTest` classes start a real PostgreSQL 16 in-process (zonky embedded-postgres, no Docker needed), apply every Flyway migration + the dev seed, validate the entities against it and re-run the workflow flows on it.
 
 ```bash
 mvn test

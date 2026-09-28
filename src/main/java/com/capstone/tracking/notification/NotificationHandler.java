@@ -7,7 +7,8 @@ import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupRepository;
 import com.capstone.tracking.notification.dto.NotificationResponse;
 import com.capstone.tracking.notification.email.EmailMessage;
-import com.capstone.tracking.notification.email.EmailSender;
+import com.capstone.tracking.notification.email.EmailOutbox;
+import com.capstone.tracking.notification.email.EmailOutboxRepository;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
@@ -31,11 +32,12 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Turns a {@link DomainEvent} into in-app notifications for the people who should hear about it, pushes them to open
- * notification streams and, for {@link DomainEventType#isEmailed() emailed} types, emails the group (To the leader,
- * CC the other members and the supervisor). Runs after the business transaction committed (in-process) or from the
- * SQS consumer, so it always opens its own transaction. Idempotent per (event, recipient): SQS delivers at least once,
- * and a redelivered event that creates no new notification sends no second email.
+ * Turns a {@link DomainEvent} into in-app notifications for the people who should hear about it, broadcasts them to
+ * open notification streams (after commit) and, for {@link DomainEventType#isEmailed() emailed} types, queues an email
+ * to the group (To the leader, CC the other members and the supervisor) in the {@link EmailOutbox} — in this same
+ * transaction, sent later by the dispatcher, so SMTP never delays the request. Runs after the business transaction
+ * committed (in-process) or from the SQS consumer, so it always opens its own transaction. Idempotent: per
+ * (event, recipient) for notifications and per event for the email, since SQS delivers at least once.
  */
 @Slf4j
 @Component
@@ -49,8 +51,8 @@ public class NotificationHandler {
     private final StudentGroupRepository studentGroupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
-    private final NotificationStreamRegistry streams;
-    private final EmailSender emailSender;
+    private final NotificationBroadcaster broadcaster;
+    private final EmailOutboxRepository emailOutboxRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(DomainEvent event) {
@@ -157,6 +159,12 @@ public class NotificationHandler {
                     .entityId(event.entityId())
                     .build()));
         }
+        if (event.type().isEmailed() && !emailOutboxRepository.existsByEventId(event.eventId())) {
+            EmailMessage email = buildEmail(event, group, members, message);
+            if (email != null) {
+                emailOutboxRepository.save(EmailOutbox.of(event.eventId(), email));
+            }
+        }
         if (created.isEmpty()) {
             return;
         }
@@ -165,13 +173,7 @@ public class NotificationHandler {
         for (Notification n : created) {
             UUID recipientId = n.getRecipient().getId();
             NotificationResponse response = NotificationResponse.from(n);
-            afterCommit.add(() -> streams.push(recipientId, response));
-        }
-        if (event.type().isEmailed()) {
-            EmailMessage email = buildEmail(event, group, members, message);
-            if (email != null) {
-                afterCommit.add(() -> emailSender.send(email));
-            }
+            afterCommit.add(() -> broadcaster.broadcast(recipientId, response));
         }
         runAfterCommit(afterCommit);
     }

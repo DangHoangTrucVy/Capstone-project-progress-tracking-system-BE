@@ -6,6 +6,7 @@ import com.capstone.tracking.group.GroupStatus;
 import com.capstone.tracking.group.MemberStatus;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupRepository;
+import com.capstone.tracking.notification.email.EmailOutboxDispatcher;
 import com.capstone.tracking.notification.email.EmailSender;
 import com.capstone.tracking.security.JwtTokenProvider;
 import com.capstone.tracking.topic.Topic;
@@ -49,6 +50,7 @@ public abstract class WorkflowTestSupport {
     @Autowired protected StudentGroupRepository studentGroupRepository;
     @Autowired protected GroupMemberRepository groupMemberRepository;
     @Autowired protected JwtTokenProvider jwtTokenProvider;
+    @Autowired protected EmailOutboxDispatcher emailOutboxDispatcher;
     @MockBean protected EmailSender emailSender;
 
     protected final String suffix = UUID.randomUUID().toString().substring(0, 8);
@@ -68,6 +70,11 @@ public abstract class WorkflowTestSupport {
     protected void join(StudentGroup group, User user, boolean leader) {
         groupMemberRepository.save(GroupMember.builder().group(group).user(user).isLeader(leader)
                 .joinedAt(Instant.now()).status(MemberStatus.ACTIVE).build());
+    }
+
+    /** Emails are queued in the outbox and sent by the dispatcher; tests run it now instead of waiting for the timer. */
+    protected void dispatchEmails() {
+        emailOutboxDispatcher.dispatchPending(Instant.now());
     }
 
     protected String bearer(User user) {

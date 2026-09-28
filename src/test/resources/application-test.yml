@@ -19,3 +19,6 @@ app:
     local-dir: target/test-uploads
   security:
     allowed-email-domain: fpt.edu.vn,gmail.com
+  mail:
+    # Tests dispatch the email outbox explicitly (WorkflowTestSupport.sentEmails) instead of on a timer.
+    dispatch-delay-ms: 3600000

@@ -149,6 +149,7 @@ class TopicProposalFlowIntegrationTest extends WorkflowTestSupport {
     }
 
     private EmailMessage lastEmailContaining(String text) {
+        dispatchEmails();
         ArgumentCaptor<EmailMessage> captor = ArgumentCaptor.forClass(EmailMessage.class);
         verify(emailSender, atLeastOnce()).send(captor.capture());
         List<EmailMessage> matching = new ArrayList<>(captor.getAllValues().stream()

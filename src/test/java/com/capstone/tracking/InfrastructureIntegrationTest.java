@@ -8,6 +8,7 @@ import com.capstone.tracking.group.MemberStatus;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupRepository;
 import com.capstone.tracking.notification.NotificationRepository;
+import com.capstone.tracking.notification.NotificationStreamRegistry;
 import com.capstone.tracking.scheduling.LocationType;
 import com.capstone.tracking.scheduling.ScheduleSlot;
 import com.capstone.tracking.scheduling.ScheduleSlotRepository;
@@ -18,6 +19,7 @@ import com.capstone.tracking.user.UserRepository;
 import com.capstone.tracking.user.UserStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,10 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -87,6 +93,7 @@ class InfrastructureIntegrationTest {
     @Autowired private S3Client s3;
     @Autowired private StringRedisTemplate redis;
     @Autowired private JwtTokenProvider jwtTokenProvider;
+    @SpyBean private NotificationStreamRegistry streams;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private User supervisor;
@@ -160,6 +167,16 @@ class InfrastructureIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"groupId\":\"" + group.getId() + "\"}"))
                 .andExpect(status().isOk());
         assertThat(redis.hasKey(cacheKey)).isFalse();
+    }
+
+    /** SQS consumer writes the notification, Redis pub/sub fans it out, every instance pushes to its SSE streams. */
+    @Test
+    void notificationsReachStreamsThroughRedisPubSub() throws Exception {
+        mockMvc.perform(multipart("/api/v1/groups/" + group.getId() + "/documents")
+                        .param("title", "Realtime").param("url", "https://github.com/x").header("Authorization", bearer(leader)))
+                .andExpect(status().isCreated());
+
+        verify(streams, timeout(20_000)).push(eq(supervisor.getId()), any());
     }
 
     private User user(String name, Role role) {

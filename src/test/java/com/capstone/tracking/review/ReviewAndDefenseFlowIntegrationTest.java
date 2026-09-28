@@ -185,6 +185,7 @@ class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
     }
 
     private EmailMessage lastEmailFor(StudentGroup group, String text) {
+        dispatchEmails();
         ArgumentCaptor<EmailMessage> captor = ArgumentCaptor.forClass(EmailMessage.class);
         verify(emailSender, atLeastOnce()).send(captor.capture());
         List<EmailMessage> matching = captor.getAllValues().stream()

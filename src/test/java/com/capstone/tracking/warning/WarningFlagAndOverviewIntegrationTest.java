@@ -70,6 +70,8 @@ class WarningFlagAndOverviewIntegrationTest extends WorkflowTestSupport {
                 .andExpect(jsonPath("$.activeWarningFlags[0].severity").value("MEDIUM"))
                 .andExpect(jsonPath("$.unreadNotifications").value(1));
 
+        dispatchEmails();
+
         ArgumentCaptor<EmailMessage> captor = ArgumentCaptor.forClass(EmailMessage.class);
         verify(emailSender, atLeastOnce()).send(captor.capture());
         EmailMessage email = captor.getAllValues().stream()

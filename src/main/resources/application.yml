@@ -106,6 +106,8 @@ app:
   mail:
     enabled: ${MAIL_ENABLED:false}
     from: ${MAIL_FROM:capstone-tracking@fpt.edu.vn}
+    # How often the outbox dispatcher sends queued emails (and retries failed ones).
+    dispatch-delay-ms: ${MAIL_DISPATCH_DELAY_MS:5000}
   # Giai đoạn 6 "cuốn chiếu": how many final defenses may run at the same time.
   defense:
     max-parallel: ${DEFENSE_MAX_PARALLEL:5}
