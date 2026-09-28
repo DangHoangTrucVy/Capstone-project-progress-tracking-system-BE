@@ -24,11 +24,12 @@ services:
     restart: unless-stopped
     environment:
       FLOCI_STORAGE_MODE: hybrid          # keep buckets/queues across restarts
-      FLOCI_STORAGE_PERSISTENT_PATH: /data
+      # /app/data: newer floci images drop to a non-root user and only re-own this path at startup.
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
     ports:
       - "4566:4566"
     volumes:
-      - capstone_tracking_floci:/data
+      - capstone_tracking_floci:/app/data
 
   redis:
     image: redis:7-alpine
