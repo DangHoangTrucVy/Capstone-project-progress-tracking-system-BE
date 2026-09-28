@@ -34,7 +34,7 @@ public class ProgressController {
 
     @Operation(summary = "Report a week's progress (one report per group and week)")
     @PostMapping("/api/v1/groups/{groupId}/progress")
-    @PreAuthorize("hasAnyRole('STUDENT','GROUP_LEADER')")
+    @PreAuthorize("hasRole('GROUP_LEADER')")
     public ResponseEntity<ProgressReportResponse> create(@PathVariable UUID groupId,
                                                          @Valid @RequestBody ProgressReportRequest request,
                                                          @AuthenticationPrincipal User currentUser) {
@@ -61,7 +61,7 @@ public class ProgressController {
 
     @Operation(summary = "Update a weekly report; tasks are replaced as a whole")
     @PutMapping("/api/v1/progress/{id}")
-    @PreAuthorize("hasAnyRole('STUDENT','GROUP_LEADER')")
+    @PreAuthorize("hasRole('GROUP_LEADER')")
     public ProgressReportResponse update(@PathVariable UUID id, @Valid @RequestBody ProgressReportRequest request,
                                          @AuthenticationPrincipal User currentUser) {
         return progressService.update(id, request, currentUser);

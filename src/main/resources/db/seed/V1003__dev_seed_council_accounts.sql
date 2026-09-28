@@ -1,6 +1,6 @@
--- Seeds Council (Hội đồng) accounts so topic approval, Review 3 and final defenses can be exercised.
+-- DEV-ONLY: seeds Council (Hội đồng) accounts so topic approval, Review 3 and final defenses can be exercised.
 -- Login: council01..council05@fpt.edu.vn / Council@123 (password or Google sign-in with the same email).
--- Campus is left NULL so the first Google sign-in pins it. CHANGE THESE PASSWORDS in any non-local environment.
+-- Campus is left NULL so the first Google sign-in pins it.
 INSERT INTO users (id, email, full_name, password_hash, role, status, created_at, updated_at)
 VALUES
     ('22222222-2222-2222-2222-000000000001', 'council01@fpt.edu.vn', 'Council Member 01',

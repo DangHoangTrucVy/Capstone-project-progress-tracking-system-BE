@@ -62,11 +62,11 @@ class DocumentUploadIntegrationTest {
     @BeforeEach
     void setUp() {
         instructor = user("doc-gv", Role.INSTRUCTOR);
-        member = user("doc-member", Role.STUDENT);
+        member = user("doc-member", Role.GROUP_LEADER);
         outsider = user("doc-outsider", Role.STUDENT);
         group = studentGroupRepository.save(StudentGroup.builder().groupCode("DOC-G1").semester("Fall2026")
                 .supervisor(instructor).status(GroupStatus.ACTIVE).build());
-        groupMemberRepository.save(GroupMember.builder().group(group).user(member).isLeader(false)
+        groupMemberRepository.save(GroupMember.builder().group(group).user(member).isLeader(true)
                 .joinedAt(java.time.Instant.now()).status(MemberStatus.ACTIVE).build());
         srs = milestoneRepository.save(Milestone.builder().code("SRS").name("SRS").semester("Fall2026").sequenceNo(1).build());
         otherSemester = milestoneRepository.save(Milestone.builder().code("SRS").name("SRS").semester("Spring2026").sequenceNo(1).build());

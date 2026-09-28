@@ -68,6 +68,8 @@ server:
     include-message: always
 
 app:
+  auth:
+    password-login-enabled: ${PASSWORD_LOGIN_ENABLED:false}
   jwt:
     secret: ${JWT_SECRET:change-this-dev-only-secret-key-please-override-in-prod-min-32-bytes}
     access-token-exp-minutes: ${JWT_ACCESS_EXP_MIN:60}
@@ -98,7 +100,7 @@ app:
     max-file-size: ${UPLOAD_MAX_FILE_SIZE:20MB}
     allowed-extensions: pdf,doc,docx,ppt,pptx,xls,xlsx,zip,rar,png,jpg,jpeg,txt,md
   security:
-    allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn,gmail.com}
+    allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn}
   # Google Workspace sign-in (POST /api/v1/auth/google): the OAuth client id(s) the FE's Google button uses.
   google:
     client-ids: ${GOOGLE_CLIENT_IDS:}

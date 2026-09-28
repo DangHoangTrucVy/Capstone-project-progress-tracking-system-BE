@@ -3,6 +3,7 @@ package com.capstone.tracking.notification;
 /** {@code emailed}: besides the in-app notification, the group is emailed (To the leader, CC members + supervisor). */
 public enum DomainEventType {
     DOCUMENT_SUBMITTED(false),
+    DOCUMENT_FEEDBACK(true),
     BOOKING_CONFIRMED(false),
     BOOKING_CANCELLED(false),
     PROGRESS_REPORTED(false),

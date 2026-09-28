@@ -14,6 +14,10 @@ import java.util.UUID;
 /** No "(:x is null or ...)" queries: Postgres cannot type a bare null parameter (see ScheduleSlotService.search). */
 public interface TopicProposalRepository extends JpaRepository<TopicProposal, UUID> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from TopicProposal p where p.id = :id")
+    Optional<TopicProposal> lockById(@Param("id") UUID id);
+
     List<TopicProposal> findByGroupIdOrderByRoundAsc(UUID groupId);
 
     Optional<TopicProposal> findFirstByGroupIdOrderByRoundDesc(UUID groupId);

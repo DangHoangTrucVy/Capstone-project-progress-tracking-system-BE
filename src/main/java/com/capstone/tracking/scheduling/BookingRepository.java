@@ -11,6 +11,10 @@ import java.util.UUID;
 
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from Booking b where b.id = :id")
+    java.util.Optional<Booking> lockById(@Param("id") UUID id);
+
     /**
      * UC-002 precondition: "Nhóm chưa đặt slot nào trong cùng đợt kiểm tra hiện hành." v1 simplifies
      * "đợt kiểm tra" to "system-wide": a group may only hold one CONFIRMED booking at a time. Revisit

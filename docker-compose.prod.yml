@@ -34,7 +34,15 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Missing POSTGRES_PASSWORD in .env.prod}
       JWT_SECRET: ${JWT_SECRET:?Missing JWT_SECRET in .env.prod}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Missing CORS_ALLOWED_ORIGINS in .env.prod}
-      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn,gmail.com}
+      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      PASSWORD_LOGIN_ENABLED: ${PASSWORD_LOGIN_ENABLED:-false}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-capstone-tracking@fpt.edu.vn}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       # Behind Cloudflare's HTTPS: lets Swagger and redirects build https:// URLs.
       SERVER_FORWARD_HEADERS_STRATEGY: framework

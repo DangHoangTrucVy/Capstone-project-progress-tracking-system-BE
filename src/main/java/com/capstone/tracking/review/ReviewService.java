@@ -52,9 +52,13 @@ public class ReviewService {
     private final UserService userService;
     private final AuditService auditService;
     private final ApplicationEventPublisher events;
+    private final com.capstone.tracking.scheduling.ScheduleGuard scheduleGuard;
+    private final com.capstone.tracking.semester.SemesterCalendarService calendars;
+    private final com.capstone.tracking.defense.DefenseSessionRepository defenses;
 
     @Transactional
     public ReviewSessionResponse schedule(ReviewScheduleRequest request, User actingUser) {
+        scheduleGuard.acquire();
         StudentGroup group = studentGroupService.getById(request.groupId());
         boolean closedCouncil = request.round() == ReviewRound.REVIEW_3;
         PanelSelection panel = PanelSelection.resolve(userService, request.reviewerIds(), request.chairId(),
@@ -67,6 +71,7 @@ public class ReviewService {
     /** Bước 5.2: Review 2's schedule is Review 1's, shifted; the panel carries over. */
     @Transactional
     public List<ReviewSessionResponse> cloneRound(ReviewCloneRequest request, User actingUser) {
+        scheduleGuard.acquire();
         if (request.fromRound() == request.toRound()) {
             throw new BadRequestException("fromRound and toRound must differ");
         }
@@ -92,6 +97,7 @@ public class ReviewService {
 
     @Transactional
     public ReviewSessionResponse recordResult(UUID id, ReviewResultRequest request, User actingUser) {
+        scheduleGuard.acquire();
         ReviewSession session = find(id);
         boolean closedCouncil = session.getRound() == ReviewRound.REVIEW_3;
         requirePanelAuthority(session, actingUser, closedCouncil);
@@ -100,6 +106,10 @@ public class ReviewService {
         }
         if (closedCouncil && request.outcome() == null) {
             throw new BadRequestException("Review 3 needs an outcome: READY_FOR_DEFENSE_1, REVISE_BEFORE_DEFENSE_1 or DEFER_TO_DEFENSE_2");
+        }
+        if (closedCouncil && request.outcome() == ClosedCouncilOutcome.REVISE_BEFORE_DEFENSE_1
+                && (request.revisionDeadline() == null || !request.revisionDeadline().isAfter(Instant.now()))) {
+            throw new BadRequestException("A future revisionDeadline is required when revisions are requested");
         }
 
         session.setFeedback(request.feedback());
@@ -123,6 +133,7 @@ public class ReviewService {
     /** REVISE_BEFORE_DEFENSE_1: the chair, the group's supervisor or an Admin confirms the revision was done. */
     @Transactional
     public ReviewSessionResponse confirmRevision(UUID id, User actingUser) {
+        scheduleGuard.acquire();
         ReviewSession session = find(id);
         if (session.getOutcome() != ClosedCouncilOutcome.REVISE_BEFORE_DEFENSE_1) {
             throw new ConflictException("Only a Review 3 result of REVISE_BEFORE_DEFENSE_1 needs a revision confirmation");
@@ -135,6 +146,9 @@ public class ReviewService {
         boolean supervisor = group.getSupervisor() != null && group.getSupervisor().getId().equals(actingUser.getId());
         if (!chair && !supervisor && actingUser.getRole() != Role.ADMIN) {
             throw new AccessDeniedException("Only the council chair, the group's supervisor or an Admin can confirm the revision");
+        }
+        if (session.getRevisionDeadline() != null && !Instant.now().isBefore(session.getRevisionDeadline())) {
+            throw new ConflictException("The revision deadline has passed; this group must go to Defense 2");
         }
         session.setRevisionCompletedAt(Instant.now());
         auditService.record("ReviewSession", session.getId(), AuditAction.APPROVE, actingUser, Map.of("revisionCompleted", true));
@@ -174,6 +188,7 @@ public class ReviewService {
 
     private ReviewSession create(StudentGroup group, ReviewRound round, Instant scheduledAt, int durationMinutes,
                                  String location, PanelSelection panel, User actingUser) {
+        calendars.requireReviewWeek(group.getSemester(), round, scheduledAt);
         if (group.getTopic() == null) {
             throw new BadRequestException("Group " + group.getGroupCode() + " has no approved topic yet");
         }
@@ -181,11 +196,20 @@ public class ReviewService {
             throw new ConflictException("Group " + group.getGroupCode() + " already has a " + round.label() + " scheduled");
         }
         Instant end = scheduledAt.plus(Duration.ofMinutes(durationMinutes));
-        for (ReviewSession other : sessionRepository.findReviewerCandidatesOverlapping(panel.ids(),
-                scheduledAt.minus(MAX_SESSION), end)) {
-            if (other.endsAt().isAfter(scheduledAt)) {
-                throw new ConflictException("A reviewer already sits on " + other.getRound().label() + " of group "
-                        + other.getGroup().getGroupCode() + " at " + VnTime.format(other.getScheduledAt()));
+        for (ReviewSession other : sessionRepository.findByScheduledAtLessThan(end)) {
+            if (other.endsAt().isAfter(scheduledAt)
+                    && (other.getLocation().equalsIgnoreCase(location.trim())
+                        || other.getGroup().getId().equals(group.getId())
+                        || other.getPanel().stream().anyMatch(m -> panel.ids().contains(m.getReviewer().getId())))) {
+                throw new ConflictException("Room, group or reviewer already has a review at this time");
+            }
+        }
+        for (var other : defenses.findByScheduledAtLessThan(end)) {
+            if (other.endsAt().isAfter(scheduledAt)
+                    && (other.getRoom().equalsIgnoreCase(location.trim())
+                        || other.getGroup().getId().equals(group.getId())
+                        || other.getCommittee().stream().anyMatch(m -> panel.ids().contains(m.getMember().getId())))) {
+                throw new ConflictException("Room, group or reviewer already has a defense at this time");
             }
         }
 
@@ -194,7 +218,7 @@ public class ReviewService {
                 .round(round)
                 .scheduledAt(scheduledAt)
                 .durationMinutes(durationMinutes)
-                .location(location)
+                .location(location.trim())
                 .build();
         for (User reviewer : panel.members()) {
             session.getPanel().add(ReviewPanelMember.builder()

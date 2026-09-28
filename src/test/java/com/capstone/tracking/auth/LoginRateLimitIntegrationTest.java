@@ -36,7 +36,7 @@ class LoginRateLimitIntegrationTest {
     void fiveWrongPasswordsLockTheEmailEvenForTheRightPassword() throws Exception {
         String email = "rl-" + UUID.randomUUID().toString().substring(0, 8) + "@fpt.edu.vn";
         userRepository.save(User.builder().email(email).fullName("Rate Limit").passwordHash(passwordEncoder.encode("Right@123"))
-                .role(Role.STUDENT).status(UserStatus.ACTIVE).build());
+                .role(Role.INSTRUCTOR).status(UserStatus.ACTIVE).build());
 
         for (int i = 0; i < LoginAttemptLimiter.MAX_FAILURES; i++) {
             login(email, "wrong").andExpect(status().isUnauthorized());
@@ -50,7 +50,7 @@ class LoginRateLimitIntegrationTest {
     void successfulLoginResetsTheCounter() throws Exception {
         String email = "rl-" + UUID.randomUUID().toString().substring(0, 8) + "@fpt.edu.vn";
         userRepository.save(User.builder().email(email).fullName("Rate Limit").passwordHash(passwordEncoder.encode("Right@123"))
-                .role(Role.STUDENT).status(UserStatus.ACTIVE).build());
+                .role(Role.INSTRUCTOR).status(UserStatus.ACTIVE).build());
 
         for (int i = 0; i < LoginAttemptLimiter.MAX_FAILURES - 1; i++) {
             login(email, "wrong").andExpect(status().isUnauthorized());

@@ -79,14 +79,14 @@ class WeeklyProgressIntegrationTest {
                 .andExpect(jsonPath("$.submittedByName").value("pg-leader"))
                 .andReturn().getResponse().getContentAsString();
 
-        create(member, "{\"weekNumber\":2,\"progressPercentage\":45,\"tasks\":[]}").andExpect(status().isCreated());
+        create(leader, "{\"weekNumber\":2,\"progressPercentage\":45,\"tasks\":[]}").andExpect(status().isCreated());
 
         // Same week twice -> 409, must update instead.
-        create(member, "{\"weekNumber\":1,\"progressPercentage\":30}").andExpect(status().isConflict());
+        create(leader, "{\"weekNumber\":1,\"progressPercentage\":30}").andExpect(status().isConflict());
 
         // Update replaces the task list.
         String id = objectMapper.readTree(week1).get("id").asText();
-        mockMvc.perform(put("/api/v1/progress/" + id).header("Authorization", bearer(member))
+        mockMvc.perform(put("/api/v1/progress/" + id).header("Authorization", bearer(leader))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"weekNumber\":1,\"progressPercentage\":25,\"tasks\":[{\"title\":\"SRS\",\"status\":\"DONE\"}]}"))
                 .andExpect(status().isOk())
@@ -100,7 +100,7 @@ class WeeklyProgressIntegrationTest {
                 .andExpect(jsonPath("$[0].weekNumber").value(1))
                 .andExpect(jsonPath("$[1].weekNumber").value(2));
 
-        mockMvc.perform(get("/api/v1/groups/" + group.getId() + "/progress/summary").header("Authorization", bearer(member)))
+        mockMvc.perform(get("/api/v1/groups/" + group.getId() + "/progress/summary").header("Authorization", bearer(leader)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reportedWeeks").value(2))
                 .andExpect(jsonPath("$.latestWeek").value(2))

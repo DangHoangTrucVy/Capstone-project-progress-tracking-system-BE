@@ -61,7 +61,15 @@ services:
       DB_PASSWORD: capstone_pass
       JWT_SECRET: ${JWT_SECRET:-change-this-dev-only-secret-key-please-override-in-prod-min-32-bytes}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
-      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn,gmail.com}
+      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn}
+      PASSWORD_LOGIN_ENABLED: ${PASSWORD_LOGIN_ENABLED:-false}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-capstone-tracking@fpt.edu.vn}
       STORAGE_LOCAL_DIR: /app/uploads
       # Infrastructure tier: S3 + SQS on Floci, cache + login rate limit on Redis.
       STORAGE_TYPE: s3

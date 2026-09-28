@@ -96,7 +96,7 @@ class TopicProposalFlowIntegrationTest extends WorkflowTestSupport {
         assertThat(rejection.to()).containsExactly(leader.getEmail());
         assertThat(rejection.cc()).containsExactlyInAnyOrder(member.getEmail(), supervisor.getEmail());
         assertThat(rejection.body()).contains(group.getGroupCode()).contains("Phạm vi quá rộng");
-        getAs("/api/v1/notifications?unreadOnly=true", member)
+        getAs("/api/v1/notifications?unreadOnly=true", leader)
                 .andExpect(jsonPath("$.content[0].type").value("TOPIC_REJECTED"))
                 .andExpect(jsonPath("$.content[0].details").value(org.hamcrest.Matchers.containsString("Phạm vi quá rộng")));
 
@@ -129,7 +129,7 @@ class TopicProposalFlowIntegrationTest extends WorkflowTestSupport {
         assertThat(lastEmailContaining("đã DUYỆT").to()).containsExactly(leader.getEmail());
 
         postJson(base, leader, topics(1)).andExpect(status().isConflict());
-        getAs(base, member).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+        getAs(base, leader).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
         getAs(base, user("tp-outsider", Role.STUDENT)).andExpect(status().isForbidden());
     }
 

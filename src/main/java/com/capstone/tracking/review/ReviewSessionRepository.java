@@ -12,6 +12,10 @@ import java.util.UUID;
 
 public interface ReviewSessionRepository extends JpaRepository<ReviewSession, UUID> {
 
+    boolean existsByGroup_Semester(String semester);
+
+    List<ReviewSession> findByScheduledAtLessThan(Instant end);
+
     List<ReviewSession> findByGroupIdOrderByScheduledAtAsc(UUID groupId);
 
     Optional<ReviewSession> findByGroupIdAndRound(UUID groupId, ReviewRound round);

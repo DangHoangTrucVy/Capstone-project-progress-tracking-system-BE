@@ -83,7 +83,7 @@ class NotificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.unread").value(0));
 
         String report = mockMvc.perform(post("/api/v1/groups/" + group.getId() + "/progress")
-                        .header("Authorization", bearer(member)).contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", bearer(leader)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"weekNumber\":1,\"progressPercentage\":20}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
@@ -94,7 +94,7 @@ class NotificationFlowIntegrationTest {
                 .andExpect(status().isOk());
 
         // Both members hear about the feedback; the supervisor now has 2 unread (document + progress).
-        for (User u : new User[]{leader, member}) {
+        for (User u : new User[]{leader}) {
             mockMvc.perform(get("/api/v1/notifications?unreadOnly=true").header("Authorization", bearer(u)))
                     .andExpect(jsonPath("$.content[0].type").value("PROGRESS_FEEDBACK"));
         }
@@ -105,7 +105,7 @@ class NotificationFlowIntegrationTest {
     @Test
     void notificationsCanBeMarkedReadOnlyByTheirRecipient() throws Exception {
         mockMvc.perform(multipart("/api/v1/groups/" + group.getId() + "/documents")
-                        .param("title", "Demo").param("url", "https://demo.x").header("Authorization", bearer(member)))
+                        .param("title", "Demo").param("url", "https://demo.x").header("Authorization", bearer(leader)))
                 .andExpect(status().isCreated());
         String body = mockMvc.perform(get("/api/v1/notifications").header("Authorization", bearer(supervisor)))
                 .andReturn().getResponse().getContentAsString();

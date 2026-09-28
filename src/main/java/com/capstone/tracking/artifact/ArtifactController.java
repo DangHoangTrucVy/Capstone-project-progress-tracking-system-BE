@@ -42,11 +42,12 @@ import java.util.UUID;
 public class ArtifactController {
 
     private final ArtifactSubmissionService artifactSubmissionService;
+    private final com.capstone.tracking.group.StudentGroupService groups;
 
     @Operation(summary = "Submit a link document (JSON)")
     @PostMapping(value = {"/api/v1/groups/{groupId}/artifacts", "/api/v1/groups/{groupId}/documents"},
             consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAnyRole('STUDENT','GROUP_LEADER')")
+    @PreAuthorize("hasRole('GROUP_LEADER')")
     public ResponseEntity<ArtifactResponse> create(@PathVariable UUID groupId,
                                                     @Valid @RequestBody ArtifactCreateRequest request,
                                                     @AuthenticationPrincipal User currentUser) {
@@ -56,7 +57,7 @@ public class ArtifactController {
     @Operation(summary = "Upload a file or submit a link (multipart/form-data: title, file | url, milestoneId?, sessionId?)")
     @PostMapping(value = {"/api/v1/groups/{groupId}/artifacts", "/api/v1/groups/{groupId}/documents"},
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('STUDENT','GROUP_LEADER')")
+    @PreAuthorize("hasRole('GROUP_LEADER')")
     public ResponseEntity<ArtifactResponse> upload(@PathVariable UUID groupId,
                                                     @RequestParam String title,
                                                     @RequestPart(required = false) MultipartFile file,
@@ -70,13 +71,16 @@ public class ArtifactController {
     @GetMapping({"/api/v1/groups/{groupId}/artifacts", "/api/v1/groups/{groupId}/documents"})
     public Page<ArtifactResponse> listByGroup(@PathVariable UUID groupId,
                                               @RequestParam(required = false) UUID milestoneId,
-                                              Pageable pageable) {
+                                              Pageable pageable, @AuthenticationPrincipal User currentUser) {
+        groups.requireCanView(groupId, currentUser);
         return artifactSubmissionService.listByGroup(groupId, milestoneId, pageable).map(ArtifactResponse::from);
     }
 
     @GetMapping({"/api/v1/artifacts/{id}", "/api/v1/documents/{id}"})
-    public ArtifactResponse getById(@PathVariable UUID id) {
-        return ArtifactResponse.from(artifactSubmissionService.getById(id));
+    public ArtifactResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        ArtifactSubmission artifact = artifactSubmissionService.getById(id);
+        groups.requireCanView(artifact.getGroup().getId(), currentUser);
+        return ArtifactResponse.from(artifact);
     }
 
     @Operation(summary = "Download the uploaded file of a FILE document")
@@ -96,6 +100,14 @@ public class ArtifactController {
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public ArtifactResponse accept(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return ArtifactResponse.from(artifactSubmissionService.accept(id, currentUser));
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping({"/api/v1/artifacts/{id}/feedback", "/api/v1/documents/{id}/feedback"})
+    @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
+    public ArtifactResponse feedback(@PathVariable UUID id,
+            @Valid @RequestBody com.capstone.tracking.artifact.dto.ArtifactFeedbackRequest request,
+            @AuthenticationPrincipal User currentUser) {
+        return ArtifactResponse.from(artifactSubmissionService.feedback(id, request, currentUser));
     }
 
     private ResponseEntity<ArtifactResponse> created(ArtifactSubmission artifact) {

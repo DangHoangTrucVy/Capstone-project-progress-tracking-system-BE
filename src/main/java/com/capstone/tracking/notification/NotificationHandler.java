@@ -67,6 +67,10 @@ public class NotificationHandler {
 
         Set<UUID> recipients = new LinkedHashSet<>();
         String message = switch (event.type()) {
+            case DOCUMENT_FEEDBACK -> {
+                addMembers(members, recipients);
+                yield "Giảng viên đã nhận xét bài nộp của nhóm " + code + ": " + event.label();
+            }
             case DOCUMENT_SUBMITTED -> {
                 addSupervisor(group, recipients);
                 yield "Nhóm " + code + " đã nộp tài liệu \"" + event.label() + "\"";

@@ -27,7 +27,10 @@ public record ArtifactResponse(
         int version,
         Instant submittedAt,
         UUID submittedById,
-        ArtifactStatus status
+        ArtifactStatus status,
+        String feedback,
+        UUID reviewedById,
+        Instant reviewedAt
 ) {
     public static ArtifactResponse from(ArtifactSubmission a) {
         return new ArtifactResponse(
@@ -45,6 +48,6 @@ public record ArtifactResponse(
                 a.getVersion(),
                 a.getSubmittedAt(),
                 a.getSubmittedBy() != null ? a.getSubmittedBy().getId() : null,
-                a.getStatus());
+                a.getStatus(), a.getFeedback(), a.getReviewedBy() == null ? null : a.getReviewedBy().getId(), a.getReviewedAt());
     }
 }

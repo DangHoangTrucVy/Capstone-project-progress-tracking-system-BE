@@ -77,7 +77,7 @@ public class ArtifactSubmissionService {
 
         // Membership is checked inside submit(), but check it before writing to disk too.
         studentGroupService.getById(groupId);
-        requireMembership(groupId, actingUser);
+        studentGroupService.requireActiveLeader(groupId, actingUser);
         StoredFile stored = fileStorage.store(file, "groups/" + groupId);
         deleteStoredFileIfRolledBack(stored.key());
         return submit(groupId, title, sessionId, milestoneId, actingUser,
@@ -92,12 +92,38 @@ public class ArtifactSubmissionService {
     @Transactional
     public ArtifactSubmission accept(UUID id, User actingUser) {
         ArtifactSubmission artifact = getById(id);
+        studentGroupService.requireSupervisorOrAdmin(artifact.getGroup(), actingUser);
         if (artifact.getStatus() != ArtifactStatus.SUBMITTED) {
             throw new BadRequestException("Only a Submitted artifact can be accepted");
         }
         artifact.setStatus(ArtifactStatus.ACCEPTED);
+        artifact.setReviewedBy(actingUser);
+        artifact.setReviewedAt(Instant.now());
         auditService.record("ArtifactSubmission", artifact.getId(), AuditAction.APPROVE, actingUser, Map.of());
+        publishFeedback(artifact, actingUser);
         return artifact;
+    }
+
+    @Transactional
+    public ArtifactSubmission feedback(UUID id, com.capstone.tracking.artifact.dto.ArtifactFeedbackRequest request, User actingUser) {
+        ArtifactSubmission artifact = getById(id);
+        studentGroupService.requireSupervisorOrAdmin(artifact.getGroup(), actingUser);
+        if (artifact.getStatus() == ArtifactStatus.SUPERCEDED) {
+            throw new BadRequestException("Review the latest version of this document");
+        }
+        artifact.setFeedback(request.feedback().trim());
+        artifact.setReviewedBy(actingUser);
+        artifact.setReviewedAt(Instant.now());
+        artifact.setStatus(request.accepted() ? ArtifactStatus.ACCEPTED : ArtifactStatus.SUBMITTED);
+        auditService.record("ArtifactSubmission", id, AuditAction.UPDATE, actingUser, Map.of("accepted", request.accepted()));
+        publishFeedback(artifact, actingUser);
+        return artifact;
+    }
+
+    private void publishFeedback(ArtifactSubmission artifact, User actingUser) {
+        events.publishEvent(DomainEvent.of(DomainEventType.DOCUMENT_FEEDBACK, artifact.getGroup().getId(), artifact.getId(),
+                actingUser.getId(), artifact.getTitle() + (artifact.getStatus() == ArtifactStatus.ACCEPTED ? ": đã duyệt" : ": cần chỉnh sửa"))
+                .withDetails(artifact.getFeedback(), null));
     }
 
     public ArtifactSubmission getById(UUID id) {
@@ -128,13 +154,16 @@ public class ArtifactSubmissionService {
 
     private ArtifactSubmission submit(UUID groupId, String title, UUID sessionId, UUID milestoneId, User actingUser,
                                       Consumer<ArtifactSubmission.ArtifactSubmissionBuilder> source) {
-        StudentGroup group = studentGroupService.getById(groupId);
-        requireMembership(groupId, actingUser);
+        StudentGroup group = studentGroupService.lockById(groupId);
+        studentGroupService.requireActiveLeader(groupId, actingUser);
 
         MeetingSession session = null;
         if (sessionId != null) {
             session = meetingSessionRepository.findById(sessionId)
                     .orElseThrow(() -> ResourceNotFoundException.of("MeetingSession", sessionId));
+            if (!session.getBooking().getGroup().getId().equals(groupId)) {
+                throw new BadRequestException("The meeting belongs to another group");
+            }
         }
         Milestone milestone = null;
         if (milestoneId != null) {

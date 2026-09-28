@@ -10,9 +10,17 @@ import java.util.UUID;
 
 public interface StudentGroupRepository extends JpaRepository<StudentGroup, UUID> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select g from StudentGroup g where g.id = :id")
+    java.util.Optional<StudentGroup> lockById(@Param("id") UUID id);
+
     boolean existsByGroupCodeIgnoreCase(String groupCode);
 
     Page<StudentGroup> findBySupervisorId(UUID supervisorId, Pageable pageable);
+
+    @Query("select g from StudentGroup g where exists (select m from GroupMember m where m.group = g "
+            + "and m.user.id = :userId and m.status = com.capstone.tracking.group.MemberStatus.ACTIVE)")
+    Page<StudentGroup> findForMember(@Param("userId") UUID userId, Pageable pageable);
 
     Page<StudentGroup> findByTopicId(UUID topicId, Pageable pageable);
 

@@ -55,7 +55,7 @@ public class BookingService {
             @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true),
             @CacheEvict(cacheNames = CacheConfig.SLOT, key = "#slotId")})
     public Booking book(UUID slotId, BookRequest request, User actingUser) {
-        StudentGroup group = studentGroupService.getById(request.groupId());
+        StudentGroup group = studentGroupService.lockById(request.groupId());
         // Only the group's own leader books for it (Giai đoạn 1 note: booking is a Leader-only function).
         studentGroupService.requireActiveLeader(group.getId(), actingUser);
 
@@ -115,8 +115,15 @@ public class BookingService {
             @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true),
             @CacheEvict(cacheNames = CacheConfig.SLOT, allEntries = true)})
     public void cancel(UUID bookingId, CancelBookingRequest request, User actingUser) {
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingRepository.lockById(bookingId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
+
+        if (actingUser.getRole() == com.capstone.tracking.user.Role.GROUP_LEADER) {
+            studentGroupService.requireActiveLeader(booking.getGroup().getId(), actingUser);
+        } else if (actingUser.getRole() != com.capstone.tracking.user.Role.ADMIN
+                && !booking.getSlot().getInstructor().getId().equals(actingUser.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the group's leader or slot instructor can cancel");
+        }
 
         if (booking.getBookingStatus() != BookingStatus.CONFIRMED) {
             throw new BadRequestException("Only a Confirmed booking can be cancelled");

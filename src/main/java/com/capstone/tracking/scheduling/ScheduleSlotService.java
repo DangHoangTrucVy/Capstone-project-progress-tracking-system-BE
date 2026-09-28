@@ -31,10 +31,12 @@ import java.util.UUID;
 public class ScheduleSlotService {
 
     private final ScheduleSlotRepository scheduleSlotRepository;
+    private final com.capstone.tracking.user.UserRepository users;
 
     @Transactional
     @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true)
     public ScheduleSlot create(SlotCreateRequest request, User instructor) {
+        users.lockById(instructor.getId()).orElseThrow(() -> ResourceNotFoundException.of("User", instructor.getId()));
         if (instructor.getRole() != Role.INSTRUCTOR && instructor.getRole() != Role.ADMIN) {
             throw new BadRequestException("Only Instructor/Admin accounts can publish assessment slots");
         }

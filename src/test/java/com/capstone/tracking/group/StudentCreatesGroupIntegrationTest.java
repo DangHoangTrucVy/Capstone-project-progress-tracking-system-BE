@@ -1,62 +1,31 @@
 package com.capstone.tracking.group;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.capstone.tracking.WorkflowTestSupport;
+import com.capstone.tracking.user.*;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
-
 import java.util.Map;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import org.springframework.http.MediaType;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-/** A STUDENT who creates a group becomes its GROUP_LEADER and cannot create a second one. */
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
-class StudentCreatesGroupIntegrationTest {
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
+class StudentCreatesGroupIntegrationTest extends WorkflowTestSupport {
     @Test
-    void studentCreatingGroupBecomesLeaderAndCannotCreateAnother() throws Exception {
-        String token = register("creator1@fpt.edu.vn");
-
-        mockMvc.perform(post("/api/v1/groups")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("groupCode", "GS-1", "semester", "Spring2026"))))
+    void adminCreatesGroupAndAssignsLeaderWhileStudentCannotSelfCreate() throws Exception {
+        User admin = user("provision-admin", Role.ADMIN);
+        User student = user("provision-student", Role.STUDENT);
+        Map<String,Object> payload = Map.of("groupCode", "PROV-" + suffix, "semester", "Fall2026");
+        postJson("/api/v1/groups", student, payload).andExpect(status().isForbidden());
+        postJson("/api/v1/groups", user("instructor", Role.INSTRUCTOR), payload).andExpect(status().isForbidden());
+        String id = body(postJson("/api/v1/groups", admin, payload).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.memberCount").value(0))).get("id").asText();
+        postJson("/api/v1/groups/" + id + "/members", admin, Map.of("userId", student.getId(), "isLeader", true))
                 .andExpect(status().isCreated());
-
-        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("GROUP_LEADER"));
-
-        mockMvc.perform(post("/api/v1/groups")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("groupCode", "GS-2", "semester", "Spring2026"))))
+        getAs("/api/v1/auth/me", student).andExpect(status().isOk()).andExpect(jsonPath("$.role").value("GROUP_LEADER"));
+        postJson("/api/v1/groups", student, Map.of("groupCode", "SECOND-" + suffix, "semester", "Fall2026"))
                 .andExpect(status().isForbidden());
-    }
-
-    private String register(String email) throws Exception {
-        var payload = Map.of("email", email, "fullName", "Creator", "password", "Password123");
-        return objectMapper.readTree(
-                mockMvc.perform(post("/api/v1/auth/register")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(payload)))
-                        .andExpect(status().isOk())
-                        .andReturn().getResponse().getContentAsString()
-        ).get("accessToken").asText();
+        postJson("/api/v1/groups/" + id + "/members", admin,
+                Map.of("userId", user("second-leader", Role.STUDENT).getId(), "isLeader", true))
+                .andExpect(status().isConflict());
     }
 }

@@ -35,7 +35,7 @@ public class StudentGroupController {
     private final StudentGroupService studentGroupService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','STUDENT')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<StudentGroupResponse> create(@Valid @RequestBody StudentGroupCreateRequest request,
                                                        @AuthenticationPrincipal User currentUser) {
         StudentGroup created = studentGroupService.create(request, currentUser);
@@ -48,15 +48,18 @@ public class StudentGroupController {
     public Page<StudentGroupResponse> list(@RequestParam(required = false) UUID supervisorId,
                                             @RequestParam(required = false) UUID topicId,
                                             @RequestParam(defaultValue = "false") boolean available,
-                                            Pageable pageable) {
-        Page<StudentGroup> page = studentGroupService.list(supervisorId, topicId, available, pageable);
+                                            Pageable pageable, @AuthenticationPrincipal User currentUser) {
+        Page<StudentGroup> page = currentUser.getRole() == com.capstone.tracking.user.Role.GROUP_LEADER
+                ? studentGroupService.listForMember(currentUser.getId(), pageable)
+                : studentGroupService.list(supervisorId, topicId, available, pageable);
         Map<UUID, Long> counts = studentGroupService.countActiveMembers(
                 page.getContent().stream().map(StudentGroup::getId).toList());
         return page.map(g -> StudentGroupResponse.from(g, counts.getOrDefault(g.getId(), 0L)));
     }
 
     @GetMapping("/{id}")
-    public StudentGroupResponse getById(@PathVariable UUID id) {
+    public StudentGroupResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        studentGroupService.requireCanView(id, currentUser);
         StudentGroup group = studentGroupService.getById(id);
         List<GroupMemberResponse> members = studentGroupService.listActiveMembers(id).stream()
                 .map(GroupMemberResponse::from)
@@ -65,7 +68,7 @@ public class StudentGroupController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','GROUP_LEADER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public StudentGroupResponse update(@PathVariable UUID id,
                                        @Valid @RequestBody StudentGroupUpdateRequest request,
                                        @AuthenticationPrincipal User currentUser) {
@@ -75,14 +78,14 @@ public class StudentGroupController {
 
     @Operation(summary = "Student self-joins a group", description = "Allows an authenticated student to join an open group with capacity.")
     @PostMapping("/{id}/join")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("denyAll()")
     public ResponseEntity<GroupMemberResponse> join(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         GroupMember member = studentGroupService.join(id, currentUser);
         return ResponseEntity.status(HttpStatus.CREATED).body(GroupMemberResponse.from(member));
     }
 
     @PostMapping("/{id}/members")
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','GROUP_LEADER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupMemberResponse> addMember(@PathVariable UUID id,
                                                          @Valid @RequestBody AddMemberRequest request,
                                                          @AuthenticationPrincipal User currentUser) {
@@ -91,7 +94,7 @@ public class StudentGroupController {
     }
 
     @DeleteMapping("/{id}/members/{memberId}")
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','GROUP_LEADER')")
+    @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeMember(@PathVariable UUID id,
                              @PathVariable UUID memberId,

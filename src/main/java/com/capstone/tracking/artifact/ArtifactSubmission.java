@@ -87,4 +87,13 @@ public class ArtifactSubmission extends BaseEntity {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private ArtifactStatus status = ArtifactStatus.SUBMITTED;
+
+    @Column(columnDefinition = "TEXT")
+    private String feedback;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by")
+    private User reviewedBy;
+
+    private Instant reviewedAt;
 }

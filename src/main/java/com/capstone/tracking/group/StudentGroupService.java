@@ -45,15 +45,12 @@ public class StudentGroupService {
     private final UserRepository userRepository;
 
     /**
-     * A STUDENT creating a group becomes its leader: they are added as the active leader member and
-     * their global role is promoted to GROUP_LEADER. Admin/Instructor creations leave membership empty.
+     * Admin creates the group, then provisions its roster and assigns one leader through addMember.
      */
     @Transactional
     public StudentGroup create(StudentGroupCreateRequest request, User creator) {
-        boolean studentCreator = creator.getRole() == Role.STUDENT;
-        User leader = studentCreator ? userService.getById(creator.getId()) : null;
-        if (leader != null && groupMemberRepository.existsByUserIdAndStatus(leader.getId(), MemberStatus.ACTIVE)) {
-            throw new ConflictException("You already belong to a group and cannot create another one");
+        if (creator.getRole() != Role.ADMIN) {
+            throw new AccessDeniedException("Only an administrator can create a group");
         }
         if (studentGroupRepository.existsByGroupCodeIgnoreCase(request.groupCode())) {
             throw new ConflictException("Group code " + request.groupCode() + " is already in use");
@@ -72,21 +69,17 @@ public class StudentGroupService {
                 .build();
         StudentGroup saved = studentGroupRepository.save(group);
 
-        if (leader != null) {
-            leader.setRole(Role.GROUP_LEADER);
-            groupMemberRepository.save(GroupMember.builder()
-                    .group(saved)
-                    .user(leader)
-                    .isLeader(true)
-                    .joinedAt(Instant.now())
-                    .status(MemberStatus.ACTIVE)
-                    .build());
-        }
         return saved;
     }
 
     public StudentGroup getById(UUID id) {
         return studentGroupRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("StudentGroup", id));
+    }
+
+    /** Serialize changes to a group's bookings, submissions and roster inside the caller's transaction. */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public StudentGroup lockById(UUID id) {
+        return studentGroupRepository.lockById(id).orElseThrow(() -> ResourceNotFoundException.of("StudentGroup", id));
     }
 
     public long countActiveMembers(UUID groupId) {
@@ -120,6 +113,10 @@ public class StudentGroupService {
 
     public List<GroupMember> listActiveMembers(UUID groupId) {
         return groupMemberRepository.findByGroupIdAndStatus(groupId, MemberStatus.ACTIVE);
+    }
+
+    public Page<StudentGroup> listForMember(UUID userId, Pageable pageable) {
+        return studentGroupRepository.findForMember(userId, pageable);
     }
 
     @Transactional
@@ -158,8 +155,12 @@ public class StudentGroupService {
         if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
             requireGroupLeader(groupId, actingUser);
         }
-        StudentGroup group = getById(groupId);
-        User user = resolveUser(request);
+        StudentGroup group = lockById(groupId);
+        User resolved = resolveUser(request);
+        User user = userRepository.lockById(resolved.getId()).orElseThrow();
+        if (groupMemberRepository.existsByUserIdAndStatus(user.getId(), MemberStatus.ACTIVE)) {
+            throw new ConflictException("This student already belongs to an active group");
+        }
 
         if (user.getRole() != Role.STUDENT && user.getRole() != Role.GROUP_LEADER) {
             throw new BadRequestException("Only Student/Group Leader accounts can be added as group members");

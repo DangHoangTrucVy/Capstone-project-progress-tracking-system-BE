@@ -41,21 +41,29 @@ class GoogleLoginIntegrationTest {
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
 
     @Test
-    void unknownSchoolEmailSignsUpAsStudentPinnedToCampus() throws Exception {
+    void unknownSchoolEmailCannotSelfRegister() throws Exception {
         String email = "gg-new-" + suffix + "@fpt.edu.vn";
         googleSays(email);
+        login(Campus.HA_NOI).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCOUNT_NOT_PROVISIONED"));
+        assertThat(userRepository.findByEmailIgnoreCase(email)).isEmpty();
+    }
 
-        login(Campus.HA_NOI)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.user.role").value("STUDENT"))
-                .andExpect(jsonPath("$.user.campus").value("HA_NOI"));
-        assertThat(userRepository.findByEmailIgnoreCase(email)).get()
-                .extracting(User::getCampus).isEqualTo(Campus.HA_NOI);
+    @Test
+    void studentCannotSignInEvenWithValidGoogleIdentity() throws Exception {
+        String email = "gg-student-" + suffix + "@fpt.edu.vn";
+        userRepository.save(User.builder().email(email).fullName("Member").role(Role.STUDENT)
+                .status(UserStatus.ACTIVE).build());
+        googleSays(email);
+        login(Campus.HA_NOI).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("LEADER_LOGIN_REQUIRED"));
+    }
 
-        // The same account cannot sign in under another campus.
-        login(Campus.HO_CHI_MINH).andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.errorCode").value("CAMPUS_MISMATCH"));
+    @Test
+    void personalGoogleAccountIsRejected() throws Exception {
+        when(googleTokenVerifier.verify(anyString())).thenReturn(new GoogleIdentity("person@fpt.edu.vn", "Person", null, null));
+        login(Campus.HA_NOI).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("WORKSPACE_REQUIRED"));
     }
 
     @Test
@@ -69,6 +77,8 @@ class GoogleLoginIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.user.role").value("COUNCIL"))
                 .andExpect(jsonPath("$.user.campus").value("DA_NANG"));
+        login(Campus.HA_NOI).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("CAMPUS_MISMATCH"));
     }
 
     @Test

@@ -46,27 +46,19 @@ public class AuthService {
     @Value("${app.security.allowed-email-domain}")
     private String allowedEmailDomains;
 
+    @Value("${app.auth.password-login-enabled:false}")
+    private boolean passwordLoginEnabled;
+
     @Transactional
     public LoginResponse register(RegisterRequest request) {
-        String email = request.email().toLowerCase();
-        requireAllowedDomain(email, "self-register");
-        if (userRepository.existsByEmailIgnoreCase(email)) {
-            throw new ConflictException("A user with email " + email + " already exists");
-        }
-
-        User user = User.builder()
-                .email(email)
-                .fullName(request.fullName())
-                .passwordHash(passwordEncoder.encode(request.password()))
-                .role(Role.STUDENT)
-                .status(UserStatus.ACTIVE)
-                .build();
-        userRepository.save(user);
-
-        return issueTokens(user);
+        throw new ApiException(HttpStatus.FORBIDDEN, "REGISTRATION_DISABLED",
+                "Accounts and group leaders must be provisioned by an administrator");
     }
 
     public LoginResponse login(LoginRequest request) {
+        if (!passwordLoginEnabled) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "GOOGLE_LOGIN_REQUIRED", "Sign in with your school Google account");
+        }
         String email = request.email().toLowerCase();
         loginAttemptLimiter.checkAllowed(email);
         try {
@@ -93,15 +85,15 @@ public class AuthService {
         GoogleIdentity identity = googleTokenVerifier.verify(request.idToken());
         String email = identity.email();
         requireAllowedDomain(email, "sign in");
+        if (identity.hostedDomain() == null || identity.hostedDomain().isBlank()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "WORKSPACE_REQUIRED", "Use a school Google Workspace account");
+        }
+        requireAllowedDomain("workspace@" + identity.hostedDomain().toLowerCase(), "sign in");
 
-        User user = userRepository.findByEmailIgnoreCase(email).orElseGet(() -> userRepository.save(User.builder()
-                .email(email)
-                .fullName(identity.fullName() != null ? identity.fullName() : email)
-                .avatarUrl(identity.pictureUrl())
-                .role(Role.STUDENT)
-                .status(UserStatus.ACTIVE)
-                .campus(request.campus())
-                .build()));
+        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow(() ->
+                new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_NOT_PROVISIONED",
+                        "Ask an administrator to provision your account and role"));
+        requireLoginRole(user);
 
         if (!user.isAccountNonLocked()) {
             throw new LockedException("This account is suspended");
@@ -131,7 +123,15 @@ public class AuthService {
     }
 
     private LoginResponse issueTokens(User user) {
+        requireLoginRole(user);
         String token = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
         return LoginResponse.of(token, accessTokenExpMinutes * 60, UserResponse.from(user));
+    }
+
+    private void requireLoginRole(User user) {
+        if (user.getRole() == Role.STUDENT) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "LEADER_LOGIN_REQUIRED",
+                    "Only the group leader may sign in on behalf of student members");
+        }
     }
 }

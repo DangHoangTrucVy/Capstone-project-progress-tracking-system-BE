@@ -59,12 +59,15 @@ public class DefenseService {
     private final UserService userService;
     private final AuditService auditService;
     private final ApplicationEventPublisher events;
+    private final com.capstone.tracking.scheduling.ScheduleGuard scheduleGuard;
+    private final com.capstone.tracking.review.ReviewSessionRepository reviewSessions;
 
     @Value("${app.defense.max-parallel:5}")
     private int maxParallel;
 
     @Transactional
     public DefenseSessionResponse schedule(DefenseScheduleRequest request, User actingUser) {
+        scheduleGuard.acquire();
         StudentGroup group = studentGroupService.getById(request.groupId());
         PanelSelection committee = PanelSelection.resolve(userService, request.committeeIds(), request.chairId(), null, true);
         return DefenseSessionResponse.from(create(group, request.attempt(), request.scheduledAt(),
@@ -74,6 +77,7 @@ public class DefenseService {
     /** Bước 6.1: schedule a list of groups back to back in one room with one committee. All or nothing. */
     @Transactional
     public List<DefenseSessionResponse> scheduleRolling(RollingScheduleRequest request, User actingUser) {
+        scheduleGuard.acquire();
         if (new HashSet<>(request.groupIds()).size() != request.groupIds().size()) {
             throw new BadRequestException("A group is listed twice");
         }
@@ -92,6 +96,7 @@ public class DefenseService {
 
     @Transactional
     public DefenseSessionResponse recordResult(UUID id, DefenseResultRequest request, User actingUser) {
+        scheduleGuard.acquire();
         DefenseSession session = find(id);
         boolean chair = session.chair().map(m -> m.getMember().getId().equals(actingUser.getId())).orElse(false);
         if (!chair && actingUser.getRole() != Role.ADMIN) {
@@ -158,12 +163,12 @@ public class DefenseService {
         }
         Instant end = scheduledAt.plus(Duration.ofMinutes(durationMinutes));
         List<DefenseSession> overlapping = sessionRepository
-                .findByScheduledAtGreaterThanEqualAndScheduledAtLessThan(scheduledAt.minus(MAX_SESSION), end).stream()
+                .findByScheduledAtLessThan(end).stream()
                 .filter(s -> s.endsAt().isAfter(scheduledAt))
                 .toList();
         Set<UUID> committeeIds = new HashSet<>(committee.ids());
         for (DefenseSession other : overlapping) {
-            if (other.getRoom().equalsIgnoreCase(room)) {
+            if (other.getRoom().equalsIgnoreCase(room.trim())) {
                 throw new ConflictException("Room " + room + " is taken by group " + other.getGroup().getGroupCode()
                         + " at " + VnTime.format(other.getScheduledAt()));
             }
@@ -172,8 +177,24 @@ public class DefenseService {
                         + " at " + VnTime.format(other.getScheduledAt()));
             }
         }
-        if (overlapping.size() >= maxParallel) {
-            throw new ConflictException("At most " + maxParallel + " defenses may run at the same time; pick another time");
+        // Count the peak at each interval boundary, not the total number intersecting a long new session.
+        List<Instant> starts = new ArrayList<>();
+        starts.add(scheduledAt);
+        overlapping.stream().map(DefenseSession::getScheduledAt).filter(t -> !t.isBefore(scheduledAt)).forEach(starts::add);
+        for (Instant at : starts) {
+            long simultaneous = overlapping.stream()
+                    .filter(s -> !s.getScheduledAt().isAfter(at) && s.endsAt().isAfter(at)).count();
+            if (simultaneous >= maxParallel) {
+                throw new ConflictException("At most " + maxParallel + " defenses may run at the same time; pick another time");
+            }
+        }
+        for (var other : reviewSessions.findByScheduledAtLessThan(end)) {
+            if (other.endsAt().isAfter(scheduledAt)
+                    && (other.getLocation().equalsIgnoreCase(room.trim())
+                        || other.getGroup().getId().equals(group.getId())
+                        || other.getPanel().stream().anyMatch(m -> committeeIds.contains(m.getReviewer().getId())))) {
+                throw new ConflictException("Room, group or committee member already has a review at this time");
+            }
         }
 
         DefenseSession session = DefenseSession.builder()
@@ -181,7 +202,7 @@ public class DefenseService {
                 .attempt(attempt)
                 .scheduledAt(scheduledAt)
                 .durationMinutes(durationMinutes)
-                .room(room)
+                .room(room.trim())
                 .status(DefenseStatus.SCHEDULED)
                 .build();
         for (User member : committee.members()) {

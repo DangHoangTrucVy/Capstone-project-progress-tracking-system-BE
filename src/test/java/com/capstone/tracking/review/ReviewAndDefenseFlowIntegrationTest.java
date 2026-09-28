@@ -27,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Giai đoạn 5 (Reviews 1-3, closed council) and 6 (rolling defenses, attempts 1 and 2). */
 class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
 
+    @org.springframework.beans.factory.annotation.Autowired private com.capstone.tracking.semester.SemesterCalendarRepository calendars;
+
     private User admin;
     private User supervisor;
     private User r1;
@@ -56,6 +58,8 @@ class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
         // A far-away, per-run day so rooms and panels never collide with other tests on the shared DB.
         base = Instant.now().plus(200 + Math.abs(suffix.hashCode() % 2000), ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
         room = "P-" + suffix;
+        calendars.save(new com.capstone.tracking.semester.SemesterCalendar(groupA.getSemester(),
+                base.atZone(com.capstone.tracking.common.VnTime.ZONE).toLocalDate().minusDays(14)));
     }
 
     @Test
@@ -117,7 +121,7 @@ class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
         closedCouncil(groupA, "READY_FOR_DEFENSE_1", 0);
         closedCouncil(groupB, "DEFER_TO_DEFENSE_2", 1);
         closedCouncil(groupC, "READY_FOR_DEFENSE_1", 2);
-        Instant day = base.plus(Duration.ofDays(20));
+        Instant day = base.plus(Duration.ofDays(97));
 
         // Rolling schedule is all-or-nothing: B was deferred to Defense 2.
         postJson("/api/v1/defenses/rolling", admin, rolling(List.of(groupA, groupB), day)).andExpect(status().isBadRequest());
@@ -157,7 +161,7 @@ class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
 
     private void closedCouncil(StudentGroup group, String outcome, int slot) throws Exception {
         String id = body(postJson("/api/v1/reviews", admin,
-                review(group, "REVIEW_3", base.plus(Duration.ofHours(slot)), List.of(r1, r2, r3), r2))
+                review(group, "REVIEW_3", base.plus(Duration.ofDays(77)).plus(Duration.ofHours(slot)), List.of(r1, r2, r3), r2))
                 .andExpect(status().isCreated())).get("id").asText();
         postJson("/api/v1/reviews/" + id + "/result", r2, Map.of("feedback", "HĐ kín", "outcome", outcome))
                 .andExpect(status().isOk());

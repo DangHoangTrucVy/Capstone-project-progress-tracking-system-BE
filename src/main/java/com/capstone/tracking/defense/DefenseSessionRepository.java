@@ -11,6 +11,8 @@ import java.util.UUID;
 
 public interface DefenseSessionRepository extends JpaRepository<DefenseSession, UUID> {
 
+    List<DefenseSession> findByScheduledAtLessThan(Instant end);
+
     List<DefenseSession> findByGroupIdOrderByAttemptAsc(UUID groupId);
 
     Optional<DefenseSession> findByGroupIdAndAttempt(UUID groupId, int attempt);

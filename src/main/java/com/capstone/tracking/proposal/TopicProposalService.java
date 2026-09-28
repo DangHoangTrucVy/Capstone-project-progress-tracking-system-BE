@@ -61,7 +61,7 @@ public class TopicProposalService {
 
     @Transactional
     public TopicProposalResponse submit(UUID groupId, ProposalSubmitRequest request, User actingUser) {
-        StudentGroup group = studentGroupService.getById(groupId);
+        StudentGroup group = studentGroupService.lockById(groupId);
         studentGroupService.requireActiveLeader(groupId, actingUser);
         if (group.getSupervisor() == null) {
             throw new BadRequestException("The group needs a supervisor before it can submit topics for pre-review");
@@ -116,7 +116,7 @@ public class TopicProposalService {
 
     @Transactional
     public TopicProposalResponse forward(UUID id, ProposalForwardRequest request, User actingUser) {
-        TopicProposal proposal = find(id);
+        TopicProposal proposal = lock(id);
         studentGroupService.requireSupervisorOrAdmin(proposal.getGroup(), actingUser);
         if (proposal.getStatus() != ProposalStatus.PENDING_INSTRUCTOR) {
             throw new ConflictException("Only a proposal waiting for pre-review can be forwarded (status: "
@@ -147,12 +147,15 @@ public class TopicProposalService {
 
     @Transactional
     public TopicProposalResponse decide(UUID id, ProposalDecisionRequest request, User actingUser) {
-        TopicProposal proposal = find(id);
+        TopicProposal proposal = lock(id);
         if (proposal.getStatus() != ProposalStatus.PENDING_COUNCIL) {
             throw new ConflictException("Only a proposal forwarded to the Council can be decided (status: "
                     + proposal.getStatus() + ")");
         }
         boolean approved = request.decision() == ProposalDecisionRequest.Decision.APPROVED;
+        if (approved && proposal.getCouncilDeadline() != null && !Instant.now().isBefore(proposal.getCouncilDeadline())) {
+            throw new ConflictException("The council deadline has passed; close this round with rejection feedback before resubmission");
+        }
         if (!approved && !StringUtils.hasText(request.feedback())) {
             throw new BadRequestException("Feedback is required when rejecting a topic");
         }
@@ -230,6 +233,9 @@ public class TopicProposalService {
         if (!closesAt.isAfter(opensAt)) {
             throw new BadRequestException("closesAt must be after opensAt");
         }
+        if (closesAt.isAfter(opensAt.plus(ProposalPolicy.DEFAULT_WINDOW))) {
+            throw new BadRequestException("A resubmission window may last at most 10 days");
+        }
         ProposalRound round = roundRepository.findBySemesterAndRoundNumber(request.semester(), request.roundNumber())
                 .orElseGet(() -> ProposalRound.builder()
                         .semester(request.semester()).roundNumber(request.roundNumber()).build());
@@ -266,6 +272,10 @@ public class TopicProposalService {
 
     private TopicProposal find(UUID id) {
         return proposalRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("TopicProposal", id));
+    }
+
+    private TopicProposal lock(UUID id) {
+        return proposalRepository.lockById(id).orElseThrow(() -> ResourceNotFoundException.of("TopicProposal", id));
     }
 
     private String uniqueTopicCode(String groupCode, int round) {

@@ -15,12 +15,23 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class DomainEventRelay {
 
-    private final EventSink eventSink;
+    private final DomainEventOutboxRepository repository;
+    private final com.fasterxml.jackson.databind.ObjectMapper mapper;
+    private final DomainEventDispatcher dispatcher;
+
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    public void persist(DomainEvent event) {
+        try {
+            repository.save(new DomainEventOutbox(event.eventId(), mapper.writeValueAsString(event)));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("Cannot persist domain event", e);
+        }
+    }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onCommitted(DomainEvent event) {
         try {
-            eventSink.send(event);
+            dispatcher.deliver(event.eventId());
         } catch (RuntimeException e) {
             log.error("Could not deliver {} {}", event.type(), event.eventId(), e);
         }

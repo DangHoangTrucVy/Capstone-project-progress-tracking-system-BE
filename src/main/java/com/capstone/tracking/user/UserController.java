@@ -41,13 +41,13 @@ public class UserController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','GROUP_LEADER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public Page<UserResponse> list(@RequestParam(required = false) Role role, Pageable pageable) {
         return userService.list(role, pageable).map(UserResponse::from);
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR','GROUP_LEADER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public UserResponse getById(@PathVariable UUID id) {
         return UserResponse.from(userService.getById(id));
     }

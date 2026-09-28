@@ -51,7 +51,7 @@ public class ProgressService {
     @Transactional
     public ProgressReportResponse create(UUID groupId, ProgressReportRequest request, User actingUser) {
         StudentGroup group = studentGroupService.getById(groupId);
-        requireMembership(groupId, actingUser);
+        studentGroupService.requireActiveLeader(groupId, actingUser);
         if (reportRepository.existsByGroupIdAndWeekNumber(groupId, request.weekNumber())) {
             throw new ConflictException("Week " + request.weekNumber() + " is already reported for this group; "
                     + "update it with PUT /api/v1/progress/{id}");
@@ -72,7 +72,7 @@ public class ProgressService {
     public ProgressReportResponse update(UUID id, ProgressReportRequest request, User actingUser) {
         WeeklyProgressReport report = find(id);
         UUID groupId = report.getGroup().getId();
-        requireMembership(groupId, actingUser);
+        studentGroupService.requireActiveLeader(groupId, actingUser);
         if (report.getWeekNumber() != request.weekNumber()
                 && reportRepository.existsByGroupIdAndWeekNumber(groupId, request.weekNumber())) {
             throw new ConflictException("Week " + request.weekNumber() + " is already reported for this group");
