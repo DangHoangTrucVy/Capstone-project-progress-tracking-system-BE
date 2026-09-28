@@ -1,5 +1,6 @@
 package com.capstone.tracking.common.exception;
 
+import com.capstone.tracking.auth.google.GoogleSignInException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.NestedExceptionUtils;
@@ -78,6 +79,13 @@ public class GlobalExceptionHandler {
         ErrorResponse body = ErrorResponse.of(HttpStatus.PAYLOAD_TOO_LARGE.value(), "FILE_TOO_LARGE",
                 "Uploaded file is too large", request.getRequestURI());
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(body);
+    }
+
+    @ExceptionHandler(GoogleSignInException.class)
+    public ResponseEntity<ErrorResponse> handleGoogleSignIn(GoogleSignInException ex, HttpServletRequest request) {
+        ErrorResponse body = ErrorResponse.of(HttpStatus.UNAUTHORIZED.value(), "GOOGLE_SIGN_IN_FAILED",
+                ex.getMessage(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
     }
 
     @ExceptionHandler(BadCredentialsException.class)

@@ -6,6 +6,7 @@ import com.capstone.tracking.auth.google.GoogleIdentity;
 import com.capstone.tracking.auth.google.GoogleTokenVerifier;
 import com.capstone.tracking.auth.dto.LoginResponse;
 import com.capstone.tracking.auth.dto.RegisterRequest;
+import com.capstone.tracking.common.exception.ApiException;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.security.JwtTokenProvider;
@@ -16,7 +17,7 @@ import com.capstone.tracking.user.UserStatus;
 import com.capstone.tracking.user.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.access.AccessDeniedException;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -111,7 +112,8 @@ public class AuthService {
         if (user.getCampus() == null) {
             user.setCampus(request.campus());
         } else if (user.getCampus() != request.campus()) {
-            throw new AccessDeniedException("This account belongs to campus " + user.getCampus());
+            throw new ApiException(HttpStatus.FORBIDDEN, "CAMPUS_MISMATCH",
+                    "This account belongs to campus " + user.getCampus());
         }
         if (user.getAvatarUrl() == null) {
             user.setAvatarUrl(identity.pictureUrl());

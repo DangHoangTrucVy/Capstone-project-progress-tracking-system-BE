@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"E:/SWD/capstone-tracking-backend\" 2>/dev/null || exit 0\ngit rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0\n[ -z \"$(git status --porcelain)\" ] && exit 0\nBRANCH=$(git rev-parse --abbrev-ref HEAD)\ngit add -A\nif git commit -m \"chore: auto-commit BE fixes\" >/tmp/claude-auto-push.log 2>&1 && git push origin \"$BRANCH\" >>/tmp/claude-auto-push.log 2>&1; then\n  echo \"{\\\"systemMessage\\\": \\\"Auto-committed & pushed to $BRANCH\\\"}\"\nelse\n  echo \"{\\\"systemMessage\\\": \\\"Auto-commit ran but push to $BRANCH failed - see /tmp/claude-auto-push.log\\\"}\"\nfi",
+            "timeout": 30,
+            "statusMessage": "Auto-syncing BE changes to git..."
+          }
+        ]
+      }
+    ]
+  }
+}

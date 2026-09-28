@@ -1,6 +1,7 @@
 package com.capstone.tracking.auth;
 
 import com.capstone.tracking.auth.google.GoogleIdentity;
+import com.capstone.tracking.auth.google.GoogleSignInException;
 import com.capstone.tracking.auth.google.GoogleTokenVerifier;
 import com.capstone.tracking.user.Campus;
 import com.capstone.tracking.user.Role;
@@ -13,7 +14,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -54,7 +54,8 @@ class GoogleLoginIntegrationTest {
                 .extracting(User::getCampus).isEqualTo(Campus.HA_NOI);
 
         // The same account cannot sign in under another campus.
-        login(Campus.HO_CHI_MINH).andExpect(status().isForbidden());
+        login(Campus.HO_CHI_MINH).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("CAMPUS_MISMATCH"));
     }
 
     @Test
@@ -75,8 +76,10 @@ class GoogleLoginIntegrationTest {
         googleSays("someone-" + suffix + "@outlook.com");
         login(Campus.HA_NOI).andExpect(status().isBadRequest());
 
-        when(googleTokenVerifier.verify(anyString())).thenThrow(new BadCredentialsException("Invalid Google ID token"));
-        login(Campus.HA_NOI).andExpect(status().isUnauthorized());
+        when(googleTokenVerifier.verify(anyString())).thenThrow(new GoogleSignInException("Invalid Google ID token"));
+        login(Campus.HA_NOI).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("GOOGLE_SIGN_IN_FAILED"))
+                .andExpect(jsonPath("$.message").value("Invalid Google ID token"));
     }
 
     @Test
