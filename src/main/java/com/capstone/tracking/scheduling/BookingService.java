@@ -22,8 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,6 +40,9 @@ import java.util.UUID;
 public class BookingService {
 
     private static final Duration LATE_CANCELLATION_WINDOW = Duration.ofHours(2);
+    /** Bước 3.2: a slot must be booked at least 24 hours ahead. */
+    static final Duration MIN_BOOKING_NOTICE = Duration.ofHours(24);
+    private static final ZoneId VN = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final BookingRepository bookingRepository;
     private final ScheduleSlotRepository scheduleSlotRepository;
@@ -51,11 +56,14 @@ public class BookingService {
             @CacheEvict(cacheNames = CacheConfig.SLOT, key = "#slotId")})
     public Booking book(UUID slotId, BookRequest request, User actingUser) {
         StudentGroup group = studentGroupService.getById(request.groupId());
+        // Only the group's own leader books for it (Giai đoạn 1 note: booking is a Leader-only function).
+        studentGroupService.requireActiveLeader(group.getId(), actingUser);
 
-        // 5a in UC-002: one active booking per group at a time (see BookingRepository's javadoc for the
-        // "đợt kiểm tra" simplification this makes).
+        // Bước 3.2 "phải hoàn thành buổi meeting cũ trước khi đặt lịch mới": a booking stays CONFIRMED until its
+        // meeting session is ended (-> ATTENDED) or it is cancelled, so one CONFIRMED booking blocks the next.
         if (bookingRepository.existsByGroupIdAndBookingStatus(group.getId(), BookingStatus.CONFIRMED)) {
-            throw new BadRequestException("Group " + group.getGroupCode() + " already has an active booking");
+            throw new BadRequestException("Group " + group.getGroupCode()
+                    + " already has an active booking; finish or cancel that meeting before booking another");
         }
 
         // Row lock acquired here and held for the rest of this transaction: any other request racing for
@@ -66,6 +74,18 @@ public class BookingService {
 
         if (!slot.hasCapacity()) {
             throw new ConflictException("Slot " + slotId + " is already full");
+        }
+        if (slot.getStatus() == SlotStatus.CANCELLED || slot.getStatus() == SlotStatus.COMPLETED) {
+            throw new ConflictException("Slot " + slotId + " is " + slot.getStatus().name().toLowerCase());
+        }
+        if (slot.getStartTime().isBefore(Instant.now().plus(MIN_BOOKING_NOTICE))) {
+            throw new BadRequestException("Slots must be booked at least 24 hours before they start");
+        }
+        LocalDate day = slot.getStartTime().atZone(VN).toLocalDate();
+        if (bookingRepository.existsForGroupBetween(group.getId(), EnumSet.of(BookingStatus.CONFIRMED, BookingStatus.ATTENDED),
+                day.atStartOfDay(VN).toInstant(), day.plusDays(1).atStartOfDay(VN).toInstant())) {
+            throw new ConflictException("Group " + group.getGroupCode() + " already has a meeting on " + day
+                    + "; at most one slot per day");
         }
 
         slot.setBookedCount(slot.getBookedCount() + 1);

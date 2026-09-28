@@ -130,7 +130,7 @@ class MeetingSessionFlowIntegrationTest {
                 "startTime", start.toString(),
                 "endTime", start.plus(30, ChronoUnit.MINUTES).toString(),
                 "durationMinutes", 30,
-                "capacity", 2,
+                "capacity", 1,
                 "locationType", "ONLINE",
                 "meetingUrl", "https://meet.example.com/x"
         );

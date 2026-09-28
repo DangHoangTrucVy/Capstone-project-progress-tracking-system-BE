@@ -22,6 +22,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String HEADER = "Authorization";
     private static final String PREFIX = "Bearer ";
+    private static final String STREAM_PATH = "/api/v1/notifications/stream";
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDetailsService userDetailsService;
@@ -53,6 +54,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader(HEADER);
         if (header != null && header.startsWith(PREFIX)) {
             return header.substring(PREFIX.length());
+        }
+        // EventSource (SSE) cannot send headers, so the notification stream alone takes the token as a query param.
+        if (request.getRequestURI().endsWith(STREAM_PATH)) {
+            return request.getParameter("access_token");
         }
         return null;
     }

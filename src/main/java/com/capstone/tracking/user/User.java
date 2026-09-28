@@ -53,6 +53,11 @@ public class User extends BaseEntity implements UserDetails {
 
     private String avatarUrl;
 
+    /** Campus picked at sign-in (Giai đoạn 1). Null until the first Google sign-in, then pinned. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private Campus campus;
+
     // --- UserDetails contract -------------------------------------------------
 
     @Override

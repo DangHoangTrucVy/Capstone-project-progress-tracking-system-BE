@@ -82,6 +82,8 @@ public class MeetingSessionService {
         }
         session.setSessionStatus(SessionStatus.CONCLUDED);
         session.setEndedAt(Instant.now());
+        // The meeting happened: frees the group to book its next slot (BookingService.book, bước 3.2).
+        session.getBooking().setBookingStatus(BookingStatus.ATTENDED);
         auditService.record("MeetingSession", session.getId(), AuditAction.UPDATE, actingUser,
                 Map.of("sessionStatus", SessionStatus.CONCLUDED));
         return session;

@@ -29,8 +29,9 @@ public class UserService {
         User user = User.builder()
                 .email(request.email().toLowerCase())
                 .fullName(request.fullName())
-                .passwordHash(passwordEncoder.encode(request.password()))
+                .passwordHash(request.password() == null ? null : passwordEncoder.encode(request.password()))
                 .role(request.role())
+                .campus(request.campus())
                 .status(UserStatus.ACTIVE)
                 .build();
         return userRepository.save(user);
@@ -56,6 +57,12 @@ public class UserService {
         user.setFullName(request.fullName());
         user.setAvatarUrl(request.avatarUrl());
         user.setStatus(request.status());
+        if (request.role() != null) {
+            user.setRole(request.role());
+        }
+        if (request.campus() != null) {
+            user.setCampus(request.campus());
+        }
         return user; // managed entity: change tracked automatically within the transaction
     }
 }

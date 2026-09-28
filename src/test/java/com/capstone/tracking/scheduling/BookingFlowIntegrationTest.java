@@ -4,6 +4,9 @@ import com.capstone.tracking.security.JwtTokenProvider;
 import com.capstone.tracking.topic.Topic;
 import com.capstone.tracking.topic.TopicRepository;
 import com.capstone.tracking.topic.TopicStatus;
+import com.capstone.tracking.group.GroupMember;
+import com.capstone.tracking.group.GroupMemberRepository;
+import com.capstone.tracking.group.MemberStatus;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupRepository;
 import com.capstone.tracking.group.GroupStatus;
@@ -26,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -49,6 +53,8 @@ class BookingFlowIntegrationTest {
     @Autowired private UserRepository userRepository;
     @Autowired private TopicRepository topicRepository;
     @Autowired private StudentGroupRepository studentGroupRepository;
+    @Autowired private GroupMemberRepository groupMemberRepository;
+    @Autowired private ScheduleSlotRepository scheduleSlotRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private JwtTokenProvider jwtTokenProvider;
 
@@ -88,8 +94,8 @@ class BookingFlowIntegrationTest {
 
     @Test
     void groupCannotHoldTwoActiveBookings() throws Exception {
-        String slot1 = createSlot(Instant.now().plus(2, ChronoUnit.DAYS), 2);
-        String slot2 = createSlot(Instant.now().plus(4, ChronoUnit.DAYS), 2);
+        String slot1 = createSlot(Instant.now().plus(2, ChronoUnit.DAYS), 1);
+        String slot2 = createSlot(Instant.now().plus(4, ChronoUnit.DAYS), 1);
         StudentGroup group = group("GRP-C");
         String leaderToken = token(leaderFor(group));
 
@@ -108,7 +114,8 @@ class BookingFlowIntegrationTest {
 
     @Test
     void cancellingWithinTwoHoursOfStartIsRejected() throws Exception {
-        String slotId = createSlot(Instant.now().plus(30, ChronoUnit.MINUTES), 1);
+        // Booked the required 24h ahead, then the slot is moved to start in 30 minutes.
+        String slotId = createSlot(Instant.now().plus(3, ChronoUnit.DAYS), 1);
         StudentGroup group = group("GRP-D");
         String leaderToken = token(leaderFor(group));
 
@@ -119,6 +126,7 @@ class BookingFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         String bookingId = objectMapper.readTree(body).get("id").asText();
+        moveSlot(slotId, Instant.now().plus(30, ChronoUnit.MINUTES));
 
         mockMvc.perform(delete("/api/v1/bookings/" + bookingId)
                         .header("Authorization", "Bearer " + leaderToken)
@@ -155,9 +163,19 @@ class BookingFlowIntegrationTest {
     }
 
     private User leaderFor(StudentGroup group) {
-        return save(User.builder().email(group.getGroupCode().toLowerCase() + "@fpt.edu.vn")
+        User leader = save(User.builder().email(group.getGroupCode().toLowerCase() + "@fpt.edu.vn")
                 .fullName("Leader " + group.getGroupCode()).passwordHash(passwordEncoder.encode("x"))
                 .role(Role.GROUP_LEADER).status(UserStatus.ACTIVE).build());
+        groupMemberRepository.save(GroupMember.builder()
+                .group(group).user(leader).isLeader(true).joinedAt(Instant.now()).status(MemberStatus.ACTIVE).build());
+        return leader;
+    }
+
+    private void moveSlot(String slotId, Instant start) {
+        ScheduleSlot slot = scheduleSlotRepository.findById(UUID.fromString(slotId)).orElseThrow();
+        slot.setStartTime(start);
+        slot.setEndTime(start.plus(30, ChronoUnit.MINUTES));
+        scheduleSlotRepository.saveAndFlush(slot);
     }
 
     private User save(User user) {

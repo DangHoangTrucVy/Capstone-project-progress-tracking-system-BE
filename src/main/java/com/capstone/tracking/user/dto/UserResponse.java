@@ -1,5 +1,6 @@
 package com.capstone.tracking.user.dto;
 
+import com.capstone.tracking.user.Campus;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserStatus;
@@ -14,9 +15,10 @@ public record UserResponse(
         Role role,
         UserStatus status,
         String avatarUrl,
+        Campus campus,
         Instant createdAt
 ) {
     public static UserResponse from(User u) {
-        return new UserResponse(u.getId(), u.getEmail(), u.getFullName(), u.getRole(), u.getStatus(), u.getAvatarUrl(), u.getCreatedAt());
+        return new UserResponse(u.getId(), u.getEmail(), u.getFullName(), u.getRole(), u.getStatus(), u.getAvatarUrl(), u.getCampus(), u.getCreatedAt());
     }
 }

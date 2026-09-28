@@ -67,7 +67,19 @@ phải refactor lại.
 | 4 | Meetings & Minutes | `POST /api/v1/bookings/{bookingId}/meetings`, `GET/PUT.../start`/`.../end /api/v1/meetings/{id}`, `POST/GET /api/v1/meetings/{id}/requirements`, `PUT /api/v1/requirements/{id}`, `POST /api/v1/meetings/{id}/minutes/generate`, `PUT .../minutes/sign`, `GET .../minutes` | Full — matches API-007/008/009; minutes generation is a deterministic template, not a real AI call; sign-off is the same endpoint for both Leader (submit) and Instructor (approve/reject) |
 | 5 | Evaluation & Reporting | `POST/GET /api/v1/groups/{groupId}/evaluations`, `GET /api/v1/evaluations/{id}`, `GET /api/v1/reports/summary` | Full — matches API-010/API-011; evaluations are created already Published (one-click "Save and Publish" per UC-004); reports summary scoped to Admin (no "Dept Head" role exists) |
 
-RBAC roles: `ADMIN`, `INSTRUCTOR`, `GROUP_LEADER`, `STUDENT`, enforced with
+#### Capstone workflow (Giai đoạn 1–6)
+
+| Giai đoạn | Endpoints | Rules |
+|---|---|---|
+| 1 Đăng nhập | `GET /api/v1/auth/campuses`, `POST /api/v1/auth/google` `{idToken, campus}` | Google Workspace ID token (set `GOOGLE_CLIENT_IDS`); role comes from the account Admin provisioned for the email (unknown school email → STUDENT); campus pinned on first sign-in |
+| 2 Đề tài | `POST/GET /api/v1/groups/{id}/topic-proposals`, `GET /api/v1/topic-proposals`, `POST /api/v1/topic-proposals/{id}/forward`, `POST /api/v1/topic-proposals/{id}/decision`, `POST/GET /api/v1/proposal-rounds`, `PUT /api/v1/proposal-rounds/{id}/close` | Leader submits 10 topics → supervisor forwards 1 → COUNCIL approves (becomes the group's Topic) or rejects with feedback. Council deadline 14 days (round 1) / 10 days (rounds 2–4). Max 4 rounds; rounds 2–4 need an Admin-opened window |
+| 3 Đặt lịch | existing slot/booking endpoints | 1 slot = 1 group; only the group's leader books; ≥ 24h ahead; ≤ 1 slot/day; the previous meeting must be ended (booking → ATTENDED) before booking again |
+| 4 Tiến độ | `POST/GET /api/v1/groups/{id}/warning-flags`, `PUT /api/v1/warning-flags/{id}/resolve`, `GET /api/v1/groups/{id}/overview` | Supervisor flags a late group or an inactive member; Overview returns badges, the milestone progress bar, meetings, reviews, defenses |
+| 5 Review | `POST /api/v1/reviews`, `POST /api/v1/reviews/clone`, `GET /api/v1/reviews[?round=]`, `GET /api/v1/reviews/mine`, `GET /api/v1/groups/{id}/reviews`, `POST /api/v1/reviews/{id}/result`, `POST /api/v1/reviews/{id}/revision-complete` | Review 2 cloned from Review 1 (`offsetDays`). Review 3 = 3 lecturers incl. 1 chair; the chair sorts the group: `READY_FOR_DEFENSE_1` / `REVISE_BEFORE_DEFENSE_1` / `DEFER_TO_DEFENSE_2` |
+| 6 Bảo vệ | `POST /api/v1/defenses`, `POST /api/v1/defenses/rolling`, `GET /api/v1/defenses[?attempt=]`, `GET /api/v1/defenses/mine`, `GET /api/v1/groups/{id}/defenses`, `POST /api/v1/defenses/{id}/result` | Eligibility from Review 3; rolling schedule (one room + committee, groups back to back); no room/lecturer double-booking; ≤ `DEFENSE_MAX_PARALLEL` at once; fail attempt 2 → group `FAILED` |
+| Thông báo | `GET /api/v1/notifications/stream?access_token=` (SSE) + existing notification endpoints | Approvals, rejections, flags, review/defense results are also emailed: To leader, CC members + supervisor (`MAIL_ENABLED=true` + SMTP settings; otherwise logged) |
+
+RBAC roles: `ADMIN`, `INSTRUCTOR`, `COUNCIL`, `GROUP_LEADER`, `STUDENT`, enforced with
 `@PreAuthorize` per blueprint.md §11. All 5 sprints now have full service/controller
 layers, each following `BookingService`'s shape (validate → mutate →
 `auditService.record(...)` inside the same `@Transactional`).

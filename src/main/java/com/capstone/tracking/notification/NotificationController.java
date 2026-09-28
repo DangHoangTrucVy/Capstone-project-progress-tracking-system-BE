@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.http.MediaType;
 
 import java.util.Map;
 import java.util.UUID;
@@ -26,6 +28,16 @@ import java.util.UUID;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final NotificationStreamRegistry streams;
+
+    /**
+     * Real-time feed for the Overview screen: an SSE stream of "notification" events. Browsers' EventSource cannot
+     * set headers, so this endpoint also accepts the JWT as ?access_token=.
+     */
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@AuthenticationPrincipal User currentUser) {
+        return streams.open(currentUser.getId());
+    }
 
     @GetMapping
     public Page<NotificationResponse> list(@RequestParam(defaultValue = "false") boolean unreadOnly, Pageable pageable,

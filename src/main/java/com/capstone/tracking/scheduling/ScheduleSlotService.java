@@ -50,7 +50,7 @@ public class ScheduleSlotService {
                 .startTime(request.startTime())
                 .endTime(request.endTime())
                 .durationMinutes(request.durationMinutes())
-                .capacityGroups(request.capacity())
+                .capacityGroups(1) // bước 3.1: one independent slot per group
                 .bookedCount(0)
                 .locationType(request.locationType())
                 .meetingUrl(request.meetingUrl())

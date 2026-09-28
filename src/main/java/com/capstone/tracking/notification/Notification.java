@@ -47,5 +47,11 @@ public class Notification extends BaseEntity {
 
     private UUID entityId;
 
+    /** Feedback / reason shown under the message (council feedback, warning flag reason...). */
+    @Column(columnDefinition = "TEXT")
+    private String details;
+
+    private Instant deadline;
+
     private Instant readAt;
 }

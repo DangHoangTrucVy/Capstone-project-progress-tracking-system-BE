@@ -109,7 +109,7 @@ class ScheduleSlotSearchIntegrationTest {
                 "startTime", start.toString(),
                 "endTime", end.toString(),
                 "durationMinutes", 45,
-                "capacity", 3,
+                "capacity", 1,
                 "locationType", "ONLINE",
                 "meetingUrl", "https://meet.google.com/abc-xyz"
         );
@@ -124,7 +124,7 @@ class ScheduleSlotSearchIntegrationTest {
                 .andExpect(jsonPath("$.instructorId").value(instructor.getId().toString()))
                 .andExpect(jsonPath("$.instructorName").value("GV Slot Search"))
                 .andExpect(jsonPath("$.durationMinutes").value(45))
-                .andExpect(jsonPath("$.capacity").value(3))
+                .andExpect(jsonPath("$.capacity").value(1))
                 .andExpect(jsonPath("$.bookedCount").value(0))
                 .andExpect(jsonPath("$.status").value("AVAILABLE"))
                 .andReturn().getResponse().getContentAsString();
@@ -137,7 +137,7 @@ class ScheduleSlotSearchIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(slotId))
                 .andExpect(jsonPath("$.instructorName").value("GV Slot Search"))
-                .andExpect(jsonPath("$.capacity").value(3))
+                .andExpect(jsonPath("$.capacity").value(1))
                 .andExpect(jsonPath("$.meetingUrl").value("https://meet.google.com/abc-xyz"));
 
         // Test 4: GET /api/v1/slots -> contains created slot
@@ -199,7 +199,7 @@ class ScheduleSlotSearchIntegrationTest {
                 "startTime", start.toString(),
                 "endTime", end.toString(),
                 "durationMinutes", 30,
-                "capacity", 2,
+                "capacity", 1,
                 "locationType", "ONLINE",
                 "meetingUrl", "https://meet.google.com/test-slot"
         );

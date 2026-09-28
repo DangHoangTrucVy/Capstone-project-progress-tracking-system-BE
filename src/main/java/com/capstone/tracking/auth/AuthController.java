@@ -1,8 +1,10 @@
 package com.capstone.tracking.auth;
 
+import com.capstone.tracking.auth.dto.GoogleLoginRequest;
 import com.capstone.tracking.auth.dto.LoginRequest;
 import com.capstone.tracking.auth.dto.LoginResponse;
 import com.capstone.tracking.auth.dto.RegisterRequest;
+import com.capstone.tracking.user.Campus;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.dto.UserResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +29,18 @@ public class AuthController {
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    /** Giai đoạn 1: Google Workspace sign-in for the chosen campus; the returned user.role picks the dashboard. */
+    @PostMapping("/google")
+    public LoginResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        return authService.googleLogin(request);
+    }
+
+    /** Options for the campus picker on the sign-in page. */
+    @GetMapping("/campuses")
+    public Campus[] campuses() {
+        return Campus.values();
     }
 
     /** Reads the identity Spring Security already resolved from the Bearer token via JwtAuthenticationFilter. */

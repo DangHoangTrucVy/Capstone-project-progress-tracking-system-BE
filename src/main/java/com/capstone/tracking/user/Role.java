@@ -7,6 +7,8 @@ package com.capstone.tracking.user;
 public enum Role {
     ADMIN,
     INSTRUCTOR,
+    /** Hội đồng: approves topics, sits on the closed council (Review 3) and grades final defenses. */
+    COUNCIL,
     GROUP_LEADER,
     STUDENT
 }

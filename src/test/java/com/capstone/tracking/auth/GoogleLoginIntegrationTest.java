@@ -1,0 +1,97 @@
+package com.capstone.tracking.auth;
+
+import com.capstone.tracking.auth.google.GoogleIdentity;
+import com.capstone.tracking.auth.google.GoogleTokenVerifier;
+import com.capstone.tracking.user.Campus;
+import com.capstone.tracking.user.Role;
+import com.capstone.tracking.user.User;
+import com.capstone.tracking.user.UserRepository;
+import com.capstone.tracking.user.UserStatus;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Giai đoạn 1: campus + Google Workspace sign-in; the role comes from the account provisioned for the email. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+class GoogleLoginIntegrationTest {
+
+    @Autowired private MockMvc mockMvc;
+    @Autowired private UserRepository userRepository;
+    @MockBean private GoogleTokenVerifier googleTokenVerifier;
+
+    private final String suffix = UUID.randomUUID().toString().substring(0, 8);
+
+    @Test
+    void unknownSchoolEmailSignsUpAsStudentPinnedToCampus() throws Exception {
+        String email = "gg-new-" + suffix + "@fpt.edu.vn";
+        googleSays(email);
+
+        login(Campus.HA_NOI)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.user.role").value("STUDENT"))
+                .andExpect(jsonPath("$.user.campus").value("HA_NOI"));
+        assertThat(userRepository.findByEmailIgnoreCase(email)).get()
+                .extracting(User::getCampus).isEqualTo(Campus.HA_NOI);
+
+        // The same account cannot sign in under another campus.
+        login(Campus.HO_CHI_MINH).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void provisionedAccountKeepsItsRole() throws Exception {
+        String email = "gg-council-" + suffix + "@fpt.edu.vn";
+        userRepository.save(User.builder().email(email).fullName("Council").role(Role.COUNCIL)
+                .status(UserStatus.ACTIVE).build());
+        googleSays(email);
+
+        login(Campus.DA_NANG)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role").value("COUNCIL"))
+                .andExpect(jsonPath("$.user.campus").value("DA_NANG"));
+    }
+
+    @Test
+    void outsideDomainAndBadTokenAreRejected() throws Exception {
+        googleSays("someone-" + suffix + "@outlook.com");
+        login(Campus.HA_NOI).andExpect(status().isBadRequest());
+
+        when(googleTokenVerifier.verify(anyString())).thenThrow(new BadCredentialsException("Invalid Google ID token"));
+        login(Campus.HA_NOI).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void campusesArePublic() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/campuses"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(Campus.values().length));
+    }
+
+    private void googleSays(String email) {
+        when(googleTokenVerifier.verify(anyString())).thenReturn(new GoogleIdentity(email, "Người dùng", null, "fpt.edu.vn"));
+    }
+
+    private ResultActions login(Campus campus) throws Exception {
+        return mockMvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"token\",\"campus\":\"" + campus + "\"}"));
+    }
+}

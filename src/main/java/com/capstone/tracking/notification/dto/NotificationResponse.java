@@ -12,12 +12,15 @@ public record NotificationResponse(
         String message,
         UUID groupId,
         UUID entityId,
+        String details,
+        Instant deadline,
         boolean read,
         Instant readAt,
         Instant createdAt
 ) {
     public static NotificationResponse from(Notification n) {
         return new NotificationResponse(n.getId(), n.getType(), n.getMessage(), n.getGroupId(), n.getEntityId(),
+                n.getDetails(), n.getDeadline(),
                 n.getReadAt() != null, n.getReadAt(), n.getCreatedAt());
     }
 }

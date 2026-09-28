@@ -241,7 +241,8 @@ public class StudentGroupService {
     @Transactional
     public GroupMember join(UUID groupId, User current) {
         StudentGroup group = getById(groupId);
-        if (group.getStatus() == GroupStatus.COMPLETED || group.getStatus() == GroupStatus.ARCHIVED) {
+        if (group.getStatus() == GroupStatus.COMPLETED || group.getStatus() == GroupStatus.FAILED
+                || group.getStatus() == GroupStatus.ARCHIVED) {
             throw new ConflictException("Cannot join a group that is " + group.getStatus().name().toLowerCase());
         }
         if (groupMemberRepository.existsByUserIdAndStatus(current.getId(), MemberStatus.ACTIVE)) {
@@ -267,6 +268,29 @@ public class StudentGroupService {
         member.setStatus(MemberStatus.REMOVED);
         if (member.isLeader() && member.getUser().getRole() == Role.GROUP_LEADER) {
             member.getUser().setRole(Role.STUDENT);
+        }
+    }
+
+    /** Only the group's active leader may act for the group (submit topics, book slots...). */
+    public void requireActiveLeader(UUID groupId, User actingUser) {
+        requireGroupLeader(groupId, actingUser);
+    }
+
+    /** Students and leaders may only see their own group; staff (Instructor, Council, Admin) see every group. */
+    public void requireCanView(UUID groupId, User actingUser) {
+        if ((actingUser.getRole() == Role.STUDENT || actingUser.getRole() == Role.GROUP_LEADER)
+                && !groupMemberRepository.existsByGroupIdAndUserIdAndStatus(groupId, actingUser.getId(), MemberStatus.ACTIVE)) {
+            throw new AccessDeniedException("You are not an active member of this group");
+        }
+    }
+
+    /** The group's own supervisor, or an Admin. */
+    public void requireSupervisorOrAdmin(StudentGroup group, User actingUser) {
+        if (actingUser.getRole() == Role.ADMIN) {
+            return;
+        }
+        if (group.getSupervisor() == null || !group.getSupervisor().getId().equals(actingUser.getId())) {
+            throw new AccessDeniedException("Only the group's supervisor can do this");
         }
     }
 

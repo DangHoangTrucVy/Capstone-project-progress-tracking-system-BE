@@ -6,6 +6,8 @@ import com.capstone.tracking.group.GroupStatus;
 import com.capstone.tracking.group.MemberStatus;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupRepository;
+import com.capstone.tracking.scheduling.ScheduleSlot;
+import com.capstone.tracking.scheduling.ScheduleSlotRepository;
 import com.capstone.tracking.security.JwtTokenProvider;
 import com.capstone.tracking.topic.Topic;
 import com.capstone.tracking.topic.TopicRepository;
@@ -32,6 +34,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.WeekFields;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -55,6 +58,7 @@ class ReportSummaryIntegrationTest {
     @Autowired private TopicRepository topicRepository;
     @Autowired private StudentGroupRepository studentGroupRepository;
     @Autowired private GroupMemberRepository groupMemberRepository;
+    @Autowired private ScheduleSlotRepository scheduleSlotRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private JwtTokenProvider jwtTokenProvider;
 
@@ -142,7 +146,7 @@ class ReportSummaryIntegrationTest {
                 "startTime", start.toString(),
                 "endTime", start.plus(30, ChronoUnit.MINUTES).toString(),
                 "durationMinutes", 30,
-                "capacity", 2,
+                "capacity", 1,
                 "locationType", "ONLINE",
                 "meetingUrl", "https://meet.example.com/x"
         );
@@ -153,6 +157,14 @@ class ReportSummaryIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         String slotId = objectMapper.readTree(slotBody).get("id").asText();
+        // Slots must be booked 24h ahead: book while it is 2 days out, then move it to the requested time.
+        ScheduleSlot slot = scheduleSlotRepository.findById(UUID.fromString(slotId)).orElseThrow();
+        Instant requested = slot.getStartTime();
+        if (requested.isBefore(Instant.now().plus(25, ChronoUnit.HOURS))) {
+            slot.setStartTime(Instant.now().plus(2, ChronoUnit.DAYS));
+            slot.setEndTime(slot.getStartTime().plus(30, ChronoUnit.MINUTES));
+            scheduleSlotRepository.saveAndFlush(slot);
+        }
 
         String bookingBody = mockMvc.perform(post("/api/v1/slots/" + slotId + "/book")
                         .header("Authorization", "Bearer " + leaderToken)
@@ -160,6 +172,11 @@ class ReportSummaryIntegrationTest {
                         .content(objectMapper.writeValueAsString(Map.of("groupId", group.getId()))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
+        if (!slot.getStartTime().equals(requested)) {
+            slot.setStartTime(requested);
+            slot.setEndTime(requested.plus(30, ChronoUnit.MINUTES));
+            scheduleSlotRepository.saveAndFlush(slot);
+        }
         return objectMapper.readTree(bookingBody).get("id").asText();
     }
 

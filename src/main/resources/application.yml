@@ -48,6 +48,16 @@ spring:
       repositories:
         enabled: false
 
+  # SMTP for email notifications; only used when app.mail.enabled=true (e.g. Gmail + app password).
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
   jackson:
     default-property-inclusion: non_null
     time-zone: UTC
@@ -89,6 +99,16 @@ app:
     allowed-extensions: pdf,doc,docx,ppt,pptx,xls,xlsx,zip,rar,png,jpg,jpeg,txt,md
   security:
     allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn,gmail.com}
+  # Google Workspace sign-in (POST /api/v1/auth/google): the OAuth client id(s) the FE's Google button uses.
+  google:
+    client-ids: ${GOOGLE_CLIENT_IDS:}
+  # Email notifications to the group (To leader, CC members + supervisor). Off = logged only.
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:capstone-tracking@fpt.edu.vn}
+  # Giai đoạn 6 "cuốn chiếu": how many final defenses may run at the same time.
+  defense:
+    max-parallel: ${DEFENSE_MAX_PARALLEL:5}
 
 springdoc:
   swagger-ui:
