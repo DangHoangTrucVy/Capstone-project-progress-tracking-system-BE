@@ -20,15 +20,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
+
+import static org.mockito.Mockito.when;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -53,12 +57,14 @@ class MeetingSessionFlowIntegrationTest {
     @Autowired private GroupMemberRepository groupMemberRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private JwtTokenProvider jwtTokenProvider;
+    @MockBean private Clock clock;
 
     private User instructor;
     private String instructorToken;
 
     @BeforeEach
     void setUp() {
+        when(clock.instant()).thenAnswer(inv -> Instant.now());
         instructor = save(User.builder().email("gv-meeting@fpt.edu.vn").fullName("GV Instructor")
                 .passwordHash(passwordEncoder.encode("x")).role(Role.INSTRUCTOR).status(UserStatus.ACTIVE).build());
         instructorToken = token(instructor);
@@ -100,7 +106,9 @@ class MeetingSessionFlowIntegrationTest {
     void startEndLifecycleTransitions() throws Exception {
         StudentGroup group = group("MTG-C");
         String leaderToken = token(leaderFor(group));
-        String bookingId = book(group, leaderToken, Instant.now().plus(3, ChronoUnit.DAYS));
+        Instant start = Instant.now().plus(3, ChronoUnit.DAYS);
+        Instant end = start.plus(30, ChronoUnit.MINUTES);
+        String bookingId = book(group, leaderToken, start);
 
         String sessionBody = mockMvc.perform(post("/api/v1/bookings/" + bookingId + "/meetings")
                         .header("Authorization", "Bearer " + leaderToken))
@@ -109,11 +117,13 @@ class MeetingSessionFlowIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String sessionId = objectMapper.readTree(sessionBody).get("id").asText();
 
+        when(clock.instant()).thenReturn(start);
         mockMvc.perform(put("/api/v1/meetings/" + sessionId + "/start")
                         .header("Authorization", "Bearer " + leaderToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sessionStatus").value("IN_PROGRESS"));
 
+        when(clock.instant()).thenReturn(end);
         mockMvc.perform(put("/api/v1/meetings/" + sessionId + "/end")
                         .header("Authorization", "Bearer " + leaderToken)
                         .contentType(MediaType.APPLICATION_JSON)

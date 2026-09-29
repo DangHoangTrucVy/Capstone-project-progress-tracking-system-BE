@@ -22,14 +22,18 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+
+import static org.mockito.Mockito.when;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.WeekFields;
@@ -61,6 +65,7 @@ class ReportSummaryIntegrationTest {
     @Autowired private ScheduleSlotRepository scheduleSlotRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private JwtTokenProvider jwtTokenProvider;
+    @MockBean private Clock clock;
 
     private User instructor;
     private String instructorToken;
@@ -68,6 +73,7 @@ class ReportSummaryIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        when(clock.instant()).thenAnswer(inv -> Instant.now());
         instructor = save(User.builder().email("gv-report@fpt.edu.vn").fullName("GV Instructor")
                 .passwordHash(passwordEncoder.encode("x")).role(Role.INSTRUCTOR).status(UserStatus.ACTIVE).build());
         instructorToken = token(instructor);
@@ -96,12 +102,17 @@ class ReportSummaryIntegrationTest {
         String leaderToken = leaderTokenA;
 
         // Session 1: fully concluded within the current week.
-        String bookingId1 = book(groupA, leaderTokenA, Instant.now().plus(2, ChronoUnit.DAYS));
+        Instant start1 = Instant.now().plus(2, ChronoUnit.DAYS);
+        Instant end1 = start1.plus(30, ChronoUnit.MINUTES);
+        String bookingId1 = book(groupA, leaderTokenA, start1);
         String sessionId1 = createSession(bookingId1, leaderTokenA);
+        when(clock.instant()).thenReturn(start1);
         mockMvc.perform(put("/api/v1/meetings/" + sessionId1 + "/start").header("Authorization", "Bearer " + leaderTokenA))
                 .andExpect(status().isOk());
+        when(clock.instant()).thenReturn(end1);
         mockMvc.perform(put("/api/v1/meetings/" + sessionId1 + "/end").header("Authorization", "Bearer " + leaderTokenA))
                 .andExpect(status().isOk());
+        when(clock.instant()).thenAnswer(inv -> Instant.now());
 
         // Session 2: booked for later this same week but never started -> counts toward the
         // denominator (falls back to the slot's own start time) but not sessionsHeld.

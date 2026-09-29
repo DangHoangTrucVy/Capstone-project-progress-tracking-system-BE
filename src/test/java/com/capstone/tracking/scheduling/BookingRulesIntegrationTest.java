@@ -7,13 +7,17 @@ import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
+
+import static org.mockito.Mockito.when;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -22,6 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Bước 3.1 / 3.2: one group per slot, 24h notice, one slot per day, finish the last meeting before booking again. */
 class BookingRulesIntegrationTest extends WorkflowTestSupport {
 
+    @MockBean private Clock clock;
+
     private User instructor;
     private User leader;
     private User member;
@@ -29,6 +35,7 @@ class BookingRulesIntegrationTest extends WorkflowTestSupport {
 
     @BeforeEach
     void setUp() {
+        when(clock.instant()).thenAnswer(inv -> Instant.now());
         instructor = user("bk-gv", Role.INSTRUCTOR);
         leader = user("bk-leader", Role.GROUP_LEADER);
         member = user("bk-member", Role.STUDENT);
@@ -72,10 +79,13 @@ class BookingRulesIntegrationTest extends WorkflowTestSupport {
         // Hold the meeting: create session, start, end -> booking ATTENDED.
         String sessionId = body(postNoBody("/api/v1/bookings/" + bookingId + "/meetings", leader)
                 .andExpect(status().isCreated())).get("id").asText();
+        when(clock.instant()).thenReturn(at(day, 9));
         mockMvc.perform(put("/api/v1/meetings/" + sessionId + "/start").header("Authorization", bearer(leader)))
                 .andExpect(status().isOk());
+        when(clock.instant()).thenReturn(at(day, 9).plus(30, ChronoUnit.MINUTES));
         mockMvc.perform(put("/api/v1/meetings/" + sessionId + "/end").header("Authorization", bearer(leader)))
                 .andExpect(status().isOk());
+        when(clock.instant()).thenAnswer(inv -> Instant.now());
 
         // Same day again -> at most one slot per day.
         book(afternoon, leader).andExpect(status().isConflict());
