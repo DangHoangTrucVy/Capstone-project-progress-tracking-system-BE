@@ -33,6 +33,14 @@ Quy trình này áp dụng cho backend hiện tại. Frontend gọi các API dư
 - Hủy bằng `DELETE /api/v1/bookings/{id}`, body `{ "reason": "..." }`. Chỉ Leader đúng nhóm, giảng viên sở hữu slot hoặc Admin được hủy; không hủy trong 2 giờ trước buổi họp.
 - Câu hỏi trước buổi họp: `POST /api/v1/topics/{topicId}/questions`; Leader chỉ gửi cho đề tài của nhóm mình.
 
+### Quyền ghi meeting, biên bản và đánh giá (issue #42)
+
+- Tạo/start/end meeting, tạo biên bản và tạo/sửa requirement: chỉ Leader ACTIVE có `isLeader=true` của nhóm hoặc INSTRUCTOR sở hữu slot trong booking.
+- Nhóm có thể đặt tư vấn với giảng viên khác supervisor; quyền ghi và ký buổi tư vấn đi theo giảng viên của slot. Supervisor không sở hữu slot không tự có các quyền này.
+- Leader gửi biên bản; giảng viên của slot duyệt/từ chối. Admin giữ ngoại lệ duyệt/từ chối biên bản hiện có, có audit; không mở rộng sang các API ghi meeting/requirement.
+- Tạo EvaluationRecord ba tiêu chí: chỉ INSTRUCTOR là supervisor hiện tại của nhóm. Đây là đánh giá cấp nhóm, không gắn booking hoặc hội đồng review/defense; Admin/Council/Leader không được tạo thay.
+- Các kiểm tra quyền ghi thực hiện tại service trước khi thay đổi dữ liệu; người không có quyền nhận 403. Phần quyền đọc được xử lý riêng ở issue #43.
+
 ## 4. Tài liệu, tiến độ và cảnh báo
 
 - Chỉ Leader của nhóm được nộp tài liệu và ghi báo cáo tuần. Thành viên thường vẫn có thể được phân công task và nhận CC email.

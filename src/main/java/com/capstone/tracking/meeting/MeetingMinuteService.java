@@ -5,9 +5,6 @@ import com.capstone.tracking.audit.AuditService;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
-import com.capstone.tracking.group.GroupMemberRepository;
-import com.capstone.tracking.group.MemberStatus;
-import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.meeting.dto.ApprovalDecision;
 import com.capstone.tracking.meeting.dto.MinuteGenerateRequest;
 import com.capstone.tracking.meeting.dto.MinuteGenerateResponse;
@@ -39,14 +36,14 @@ public class MeetingMinuteService {
     private final MeetingMinuteRepository meetingMinuteRepository;
     private final MeetingSessionRepository meetingSessionRepository;
     private final RequirementLogRepository requirementLogRepository;
-    private final GroupMemberRepository groupMemberRepository;
+    private final MeetingWriteAccess writeAccess;
     private final AuditService auditService;
 
     @Transactional
     public MinuteGenerateResponse generate(UUID sessionId, MinuteGenerateRequest request, User actingUser) {
         MeetingSession session = meetingSessionRepository.findById(sessionId)
                 .orElseThrow(() -> ResourceNotFoundException.of("MeetingSession", sessionId));
-        requireMembership(session.getBooking().getGroup(), actingUser);
+        writeAccess.requireParticipant(session.getBooking(), actingUser);
 
         String notes = request != null && request.notes() != null && !request.notes().isBlank()
                 ? request.notes()
@@ -95,18 +92,18 @@ public class MeetingMinuteService {
     @Transactional
     public MeetingMinute sign(UUID sessionId, MinuteSignRequest request, User actingUser) {
         MeetingMinute minute = getBySession(sessionId);
-        StudentGroup group = minute.getSession().getBooking().getGroup();
 
         if (actingUser.getRole() == Role.GROUP_LEADER) {
+            writeAccess.requireParticipant(minute.getSession().getBooking(), actingUser);
             if (minute.getStatus() != MinuteStatus.DRAFT && minute.getStatus() != MinuteStatus.REJECTED) {
                 throw new ConflictException("Minutes are not awaiting Group Leader submission");
             }
-            requireMembership(group, actingUser);
             minute.setFinalContent(request.finalContent() != null ? request.finalContent() : minute.getGeneratedContent());
             minute.setStudentSignedAt(Instant.now());
             minute.setStatus(MinuteStatus.UNDER_REVIEW);
             auditService.record("MeetingMinute", minute.getId(), AuditAction.SIGN, actingUser, Map.of());
         } else if (actingUser.getRole() == Role.INSTRUCTOR || actingUser.getRole() == Role.ADMIN) {
+            writeAccess.requireMinuteApprover(minute.getSession().getBooking(), actingUser);
             if (minute.getStatus() != MinuteStatus.UNDER_REVIEW) {
                 throw new ConflictException("Minutes are not awaiting Instructor approval");
             }
@@ -131,10 +128,4 @@ public class MeetingMinuteService {
                 .orElseThrow(() -> ResourceNotFoundException.of("MeetingMinute for session", sessionId));
     }
 
-    private void requireMembership(StudentGroup group, User actingUser) {
-        if ((actingUser.getRole() == Role.STUDENT || actingUser.getRole() == Role.GROUP_LEADER)
-                && !groupMemberRepository.existsByGroupIdAndUserIdAndStatus(group.getId(), actingUser.getId(), MemberStatus.ACTIVE)) {
-            throw new AccessDeniedException("You are not an active member of this group");
-        }
-    }
 }
