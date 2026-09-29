@@ -33,8 +33,8 @@ public class MeetingSessionController {
     }
 
     @GetMapping("/api/v1/meetings/{id}")
-    public MeetingSessionResponse getById(@PathVariable UUID id) {
-        return MeetingSessionResponse.from(meetingSessionService.getById(id));
+    public MeetingSessionResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        return MeetingSessionResponse.from(meetingSessionService.getById(id, currentUser));
     }
 
     @PutMapping("/api/v1/meetings/{id}/start")

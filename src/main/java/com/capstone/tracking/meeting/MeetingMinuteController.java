@@ -40,7 +40,7 @@ public class MeetingMinuteController {
     }
 
     @GetMapping
-    public MinuteResponse getBySession(@PathVariable UUID id) {
-        return MinuteResponse.from(meetingMinuteService.getBySession(id));
+    public MinuteResponse getBySession(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        return MinuteResponse.from(meetingMinuteService.getBySession(id, currentUser));
     }
 }

@@ -39,7 +39,19 @@ Quy trình này áp dụng cho backend hiện tại. Frontend gọi các API dư
 - Nhóm có thể đặt tư vấn với giảng viên khác supervisor; quyền ghi và ký buổi tư vấn đi theo giảng viên của slot. Supervisor không sở hữu slot không tự có các quyền này.
 - Leader gửi biên bản; giảng viên của slot duyệt/từ chối. Admin giữ ngoại lệ duyệt/từ chối biên bản hiện có, có audit; không mở rộng sang các API ghi meeting/requirement.
 - Tạo EvaluationRecord ba tiêu chí: chỉ INSTRUCTOR là supervisor hiện tại của nhóm. Đây là đánh giá cấp nhóm, không gắn booking hoặc hội đồng review/defense; Admin/Council/Leader không được tạo thay.
-- Các kiểm tra quyền ghi thực hiện tại service trước khi thay đổi dữ liệu; người không có quyền nhận 403. Phần quyền đọc được xử lý riêng ở issue #43.
+- Các kiểm tra quyền ghi thực hiện tại service trước khi thay đổi dữ liệu; người không có quyền nhận 403.
+
+### Quyền đọc meeting, biên bản và đánh giá (issue #43)
+
+- Đọc session (`GET /api/v1/meetings/{id}`), biên bản (`GET /api/v1/meetings/{id}/minutes`), requirements (`GET /api/v1/meetings/{id}/requirements`):
+  - Chỉ thành viên ACTIVE của nhóm (Leader hoặc Student), giảng viên sở hữu slot, giảng viên là supervisor hiện tại của nhóm, hoặc Admin.
+  - Giảng viên không liên quan, Leader/thành viên nhóm khác, thành viên có trạng thái REMOVED, và Council không được xem dữ liệu, nhận 403.
+  - Kiểm tra quyền được thực hiện trước khi map DTO hoặc trả danh sách; danh sách rỗng vẫn chặn người không có quyền.
+- Đọc evaluation (`GET /api/v1/evaluations/{id}` và `GET /api/v1/groups/{groupId}/evaluations`):
+  - Admin và giảng viên là supervisor hiện tại của nhóm được xem toàn bộ evaluation (kể cả DRAFT).
+  - Thành viên ACTIVE của nhóm chỉ được xem evaluation có trạng thái PUBLISHED; truy cập record DRAFT nhận 404 để bảo vệ tính ẩn của bản nháp.
+  - Người dùng không thuộc nhóm (Leader nhóm khác, thành viên REMOVED, giảng viên ngoài, Council) nhận 403.
+
 
 ## 4. Tài liệu, tiến độ và cảnh báo
 

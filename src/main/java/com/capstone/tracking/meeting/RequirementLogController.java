@@ -38,8 +38,10 @@ public class RequirementLogController {
     }
 
     @GetMapping("/api/v1/meetings/{id}/requirements")
-    public Page<RequirementResponse> listBySession(@PathVariable UUID id, Pageable pageable) {
-        return requirementLogService.listBySession(id, pageable).map(RequirementResponse::from);
+    public Page<RequirementResponse> listBySession(@PathVariable UUID id,
+                                                   @AuthenticationPrincipal User currentUser,
+                                                   Pageable pageable) {
+        return requirementLogService.listBySession(id, currentUser, pageable).map(RequirementResponse::from);
     }
 
     @PutMapping("/api/v1/requirements/{id}")

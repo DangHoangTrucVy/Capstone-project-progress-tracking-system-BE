@@ -4,20 +4,20 @@ import com.capstone.tracking.audit.AuditAction;
 import com.capstone.tracking.audit.AuditService;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
 import com.capstone.tracking.evaluation.dto.EvaluationCreateRequest;
+import com.capstone.tracking.group.GroupMemberRepository;
+import com.capstone.tracking.group.MemberStatus;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupService;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -27,10 +27,12 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class EvaluationService {
 
     private final EvaluationRecordRepository evaluationRecordRepository;
     private final StudentGroupService studentGroupService;
+    private final GroupMemberRepository groupMemberRepository;
     private final AuditService auditService;
 
     @Transactional
@@ -63,32 +65,86 @@ public class EvaluationService {
 
     /**
      * STUDENT/GROUP_LEADER only ever see Published records (§11: Restricted until published).
-     * The filter is applied post-pagination, so a non-privileged viewer's page total reflects only
-     * the Published rows within that page, not the group's true total — acceptable at this data
-     * scale (at most one evaluation per group per period).
      */
     public Page<EvaluationRecord> listByGroup(UUID groupId, User actingUser, Pageable pageable) {
-        Page<EvaluationRecord> page = evaluationRecordRepository.findByGroupId(groupId, pageable);
-        if (isPrivileged(actingUser)) {
-            return page;
+        StudentGroup group = studentGroupService.getById(groupId);
+        requireCanReadGroupEvaluations(group, actingUser);
+
+        if (isPrivileged(group, actingUser)) {
+            return evaluationRecordRepository.findByGroupId(groupId, pageable);
         }
-        List<EvaluationRecord> published = page.getContent().stream()
-                .filter(e -> e.getStatus() == EvaluationStatus.PUBLISHED)
-                .toList();
-        return new PageImpl<>(published, pageable, published.size());
+        return evaluationRecordRepository.findByGroupIdAndStatus(groupId, EvaluationStatus.PUBLISHED, pageable);
     }
 
     public EvaluationRecord getById(UUID id, User actingUser) {
-        EvaluationRecord evaluation = evaluationRecordRepository.findById(id)
-                .orElseThrow(() -> ResourceNotFoundException.of("EvaluationRecord", id));
-        if (!isPrivileged(actingUser) && evaluation.getStatus() != EvaluationStatus.PUBLISHED) {
+        EvaluationRecord evaluation = getById(id);
+        StudentGroup group = evaluation.getGroup();
+        requireCanReadEvaluation(evaluation, actingUser);
+
+        if (!isPrivileged(group, actingUser) && evaluation.getStatus() != EvaluationStatus.PUBLISHED) {
             // Hides existence entirely for a non-privileged viewer, matching the Restricted classification.
             throw ResourceNotFoundException.of("EvaluationRecord", id);
         }
         return evaluation;
     }
 
-    private boolean isPrivileged(User user) {
-        return user.getRole() == Role.ADMIN || user.getRole() == Role.INSTRUCTOR;
+    public EvaluationRecord getById(UUID id) {
+        return evaluationRecordRepository.findById(id)
+                .orElseThrow(() -> ResourceNotFoundException.of("EvaluationRecord", id));
+    }
+
+    private void requireCanReadGroupEvaluations(StudentGroup group, User actingUser) {
+        if (actingUser == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        if (actingUser.getRole() == Role.ADMIN) {
+            return;
+        }
+        if (actingUser.getRole() == Role.INSTRUCTOR) {
+            if (group.getSupervisor() != null && group.getSupervisor().getId().equals(actingUser.getId())) {
+                return;
+            }
+            throw new AccessDeniedException("Only the group's supervisor can view its evaluations");
+        }
+        if (actingUser.getRole() == Role.GROUP_LEADER || actingUser.getRole() == Role.STUDENT) {
+            if (!groupMemberRepository.existsByGroupIdAndUserIdAndStatus(group.getId(), actingUser.getId(), MemberStatus.ACTIVE)) {
+                throw new AccessDeniedException("You are not an active member of this group");
+            }
+            return;
+        }
+        throw new AccessDeniedException("This role cannot view group evaluations");
+    }
+
+    private void requireCanReadEvaluation(EvaluationRecord evaluation, User actingUser) {
+        if (actingUser == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        if (actingUser.getRole() == Role.ADMIN) {
+            return;
+        }
+        StudentGroup group = evaluation.getGroup();
+        if (actingUser.getRole() == Role.INSTRUCTOR) {
+            boolean isSupervisor = group != null && group.getSupervisor() != null && group.getSupervisor().getId().equals(actingUser.getId());
+            boolean isEvaluator = evaluation.getInstructor() != null && evaluation.getInstructor().getId().equals(actingUser.getId());
+            if (isSupervisor || isEvaluator) {
+                return;
+            }
+            throw new AccessDeniedException("You are not the supervisor or evaluator for this evaluation");
+        }
+        if (actingUser.getRole() == Role.GROUP_LEADER || actingUser.getRole() == Role.STUDENT) {
+            if (group == null || !groupMemberRepository.existsByGroupIdAndUserIdAndStatus(group.getId(), actingUser.getId(), MemberStatus.ACTIVE)) {
+                throw new AccessDeniedException("You are not an active member of this group");
+            }
+            return;
+        }
+        throw new AccessDeniedException("This role cannot view group evaluations");
+    }
+
+    private boolean isPrivileged(StudentGroup group, User user) {
+        if (user == null) {
+            return false;
+        }
+        return user.getRole() == Role.ADMIN
+                || (user.getRole() == Role.INSTRUCTOR && group != null && group.getSupervisor() != null && group.getSupervisor().getId().equals(user.getId()));
     }
 }
