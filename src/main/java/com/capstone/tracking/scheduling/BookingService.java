@@ -6,6 +6,7 @@ import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
 import com.capstone.tracking.config.CacheConfig;
+import com.capstone.tracking.defense.DefenseSessionRepository;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupService;
 import com.capstone.tracking.notification.DomainEvent;
@@ -13,6 +14,7 @@ import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.meeting.MeetingSession;
 import com.capstone.tracking.meeting.MeetingSessionRepository;
 import com.capstone.tracking.meeting.SessionStatus;
+import com.capstone.tracking.review.ReviewSessionRepository;
 import com.capstone.tracking.scheduling.dto.BookRequest;
 import com.capstone.tracking.scheduling.dto.CancelBookingRequest;
 import com.capstone.tracking.user.Role;
@@ -56,12 +58,16 @@ public class BookingService {
     private final AuditService auditService;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final ScheduleGuard scheduleGuard;
+    private final ReviewSessionRepository reviewSessionRepository;
+    private final DefenseSessionRepository defenseSessionRepository;
 
     @Transactional
     @Caching(evict = {
             @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true),
             @CacheEvict(cacheNames = CacheConfig.SLOT, key = "#slotId")})
     public Booking book(UUID slotId, BookRequest request, User actingUser) {
+        scheduleGuard.acquire();
         StudentGroup group = studentGroupService.lockById(request.groupId());
         // Only the group's own leader books for it (Giai đoạn 1 note: booking is a Leader-only function).
         studentGroupService.requireActiveLeader(group.getId(), actingUser);
@@ -93,6 +99,19 @@ public class BookingService {
                 day.atStartOfDay(VN).toInstant(), day.plusDays(1).atStartOfDay(VN).toInstant())) {
             throw new ConflictException("Group " + group.getGroupCode() + " already has a meeting on " + day
                     + "; at most one slot per day");
+        }
+
+        if (reviewSessionRepository.hasOverlappingForGroup(group.getId(), slot.getStartTime(), slot.getEndTime())) {
+            throw new ConflictException("Group " + group.getGroupCode() + " already has a review session scheduled at this time");
+        }
+        if (defenseSessionRepository.hasOverlappingForGroup(group.getId(), slot.getStartTime(), slot.getEndTime())) {
+            throw new ConflictException("Group " + group.getGroupCode() + " already has a defense session scheduled at this time");
+        }
+        if (reviewSessionRepository.hasOverlappingForReviewer(slot.getInstructor().getId(), slot.getStartTime(), slot.getEndTime())) {
+            throw new ConflictException("Instructor already has a review session scheduled at this time");
+        }
+        if (defenseSessionRepository.hasOverlappingForCommitteeMember(slot.getInstructor().getId(), slot.getStartTime(), slot.getEndTime())) {
+            throw new ConflictException("Instructor already has a defense session scheduled at this time");
         }
 
         slot.setBookedCount(slot.getBookedCount() + 1);

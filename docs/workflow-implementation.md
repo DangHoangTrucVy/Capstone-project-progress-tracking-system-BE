@@ -117,6 +117,23 @@ Content-Type: application/json
 - `DEFENSE_MAX_PARALLEL` mặc định 5, kiểm tra số phiên thực sự đồng thời tại các mốc bắt đầu. Hệ thống không tự chia lịch vào giờ hành chính; Admin chọn giờ bắt đầu và danh sách từng đợt.
 - Ràng buộc thời gian ghi kết quả bảo vệ (issue #46): `POST /api/v1/defenses/{id}/result` không được ghi trước giờ bắt đầu đã xếp (`now >= session.scheduledAt`), trả lời 400 nếu ghi sớm. Tránh việc ghi passed=true cho lịch bảo vệ tương lai khiến nhóm chuyển trạng thái thành COMPLETED trước khi bảo vệ diễn ra. Cả hội đồng và Admin đều tuân thủ kiểm tra này.
 
+## 7. Kiểm tra xung đột lịch chéo giữa tư vấn, review và bảo vệ (issue #47)
+
+- Nguyên tắc phát hiện chồng lấn (half-open interval): Hai khoảng thời gian `[start1, end1)` và `[start2, end2)` xung đột khi và chỉ khi `start1 < end2 && end1 > start2`. Các lịch tiếp giáp contiguous (`start1 == end2` hoặc `end1 == start2`) hoàn toàn được phép.
+- Kiểm tra hai chiều giữa các luồng:
+  - **Tạo slot tư vấn (`POST /api/v1/slots`):** Giảng viên không được mở slot nếu đã có lịch Review (trong panel) hoặc Defense (trong committee) trùng giờ, trả lời 409 Conflict.
+  - **Đặt lịch tư vấn (`POST /api/v1/slots/{id}/book`):** Chặn nếu nhóm sinh viên hoặc giảng viên của slot đã có Review hoặc Defense trùng giờ, trả lời 409 Conflict.
+  - **Lập lịch Review (`POST /api/v1/reviews` và clone `POST /api/v1/reviews/clone`):** Chặn nếu nhóm sinh viên hoặc bất kỳ giảng viên nào trong hội đồng chấm (panel) đang có booking tư vấn hợp lệ (`CONFIRMED` hoặc `ATTENDED`) trùng giờ, trả lời 409 Conflict.
+  - **Lập lịch Bảo vệ (`POST /api/v1/defenses` và rolling `POST /api/v1/defenses/rolling`):** Chặn nếu nhóm sinh viên hoặc bất kỳ giảng viên nào trong hội đồng chấm (committee) đang có booking tư vấn hợp lệ (`CONFIRMED` hoặc `ATTENDED`) trùng giờ, trả lời 409 Conflict.
+- Quy định booking CANCELLED và slot chưa đặt:
+  - Booking đã `CANCELLED` không giữ chỗ, không ngăn cản việc xếp lịch Review hoặc Defense.
+  - Slot chưa có booking (`bookedCount == 0`) không ngăn cản Admin xếp lịch Review/Defense cho giảng viên. Khi Review/Defense đã xếp xong, sinh viên cố gắng book slot đó sẽ bị chặn tại `BookingService.book`.
+- Cơ chế khóa đồng bộ và chống race condition:
+  - Mọi thao tác thay đổi lịch (`ReviewService.schedule`, `ReviewService.cloneRound`, `DefenseService.schedule`, `DefenseService.scheduleRolling`, `ScheduleSlotService.create`, `BookingService.book`) đều gọi `ScheduleGuard.acquire()` (khóa `schedule_mutex` row 1 với `SELECT ... FOR UPDATE`) đầu tiên trong transaction.
+  - Đảm bảo các request đồng thời trên nhiều instance không thể tạo hai lịch xung đột chéo nhau.
+  - Thứ tự khóa nhất quán: `ScheduleGuard` -> `StudentGroup / User` -> `ScheduleSlot / Booking` tránh hoàn toàn nguy cơ deadlock.
+  - Thao tác theo lô (`cloneRound`, `scheduleRolling`) nằm trọn trong một transaction; nếu gặp xung đột giữa chừng sẽ rollback toàn bộ lô, không lưu một phần ngoài chủ đích.
+
 ## Thông báo và tích hợp frontend
 
 - Domain event được lưu vào `domain_event_outbox` cùng transaction nghiệp vụ, gửi sau commit, và retry nếu bộ xử lý hoặc broker lỗi. Giữ nguyên event ID để chống tạo notification/email trùng. Retry tăng dần, tối đa một giờ giữa các lần thử.
