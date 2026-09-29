@@ -20,6 +20,7 @@ import com.capstone.tracking.semester.SemesterCalendarService;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserService;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -54,6 +55,7 @@ public class ReviewService {
     private final ScheduleGuard scheduleGuard;
     private final SemesterCalendarService calendars;
     private final DefenseSessionRepository defenses;
+    private final Clock clock;
 
     @Transactional
     public ReviewSessionResponse schedule(ReviewScheduleRequest request, User actingUser) {
@@ -100,16 +102,20 @@ public class ReviewService {
         if (session.getCompletedAt() != null) {
             throw new ConflictException("The result of this review is already recorded");
         }
+        Instant now = clock.instant();
+        if (now.isBefore(session.getScheduledAt())) {
+            throw new BadRequestException("Cannot record review result before the session's scheduled start time (" + session.getScheduledAt() + ")");
+        }
         if (closedCouncil && request.outcome() == null) {
             throw new BadRequestException("Review 3 needs an outcome: READY_FOR_DEFENSE_1, REVISE_BEFORE_DEFENSE_1 or DEFER_TO_DEFENSE_2");
         }
         if (closedCouncil && request.outcome() == ClosedCouncilOutcome.REVISE_BEFORE_DEFENSE_1
-                && (request.revisionDeadline() == null || !request.revisionDeadline().isAfter(Instant.now()))) {
+                && (request.revisionDeadline() == null || !request.revisionDeadline().isAfter(now))) {
             throw new BadRequestException("A future revisionDeadline is required when revisions are requested");
         }
 
         session.setFeedback(request.feedback());
-        session.setCompletedAt(Instant.now());
+        session.setCompletedAt(now);
         session.setRecordedBy(actingUser);
         if (closedCouncil) {
             session.setOutcome(request.outcome());
@@ -143,10 +149,11 @@ public class ReviewService {
         if (!chair && !supervisor && actingUser.getRole() != Role.ADMIN) {
             throw new AccessDeniedException("Only the council chair, the group's supervisor or an Admin can confirm the revision");
         }
-        if (session.getRevisionDeadline() != null && !Instant.now().isBefore(session.getRevisionDeadline())) {
+        Instant now = clock.instant();
+        if (session.getRevisionDeadline() != null && !now.isBefore(session.getRevisionDeadline())) {
             throw new ConflictException("The revision deadline has passed; this group must go to Defense 2");
         }
-        session.setRevisionCompletedAt(Instant.now());
+        session.setRevisionCompletedAt(now);
         auditService.record("ReviewSession", session.getId(), AuditAction.APPROVE, actingUser, Map.of("revisionCompleted", true));
         events.publishEvent(DomainEvent.of(DomainEventType.REVIEW_RESULT, group.getId(), session.getId(),
                 actingUser.getId(), "Review 3: đã hoàn thiện chỉnh sửa, được ra Bảo vệ lần 1"));

@@ -107,6 +107,7 @@ Content-Type: application/json
 - Không được đổi ngày bắt đầu học kỳ sau khi có review, tránh làm sai các lịch đã lập. Học kỳ cũ có review nhưng chưa có calendar có thể cấu hình qua API nếu toàn bộ lịch hiện có nằm đúng tuần theo ngày bắt đầu đó; nếu không, cần đối chiếu và điều chỉnh dữ liệu lịch trước.
 - Review 3 có đúng 3 người và một chủ tịch. Chủ tịch/Admin ghi kết quả phân loại.
 - `REVISE_BEFORE_DEFENSE_1` bắt buộc có deadline tương lai. Sau deadline, không được xác nhận hoàn tất để quay lại Bảo vệ 1; Overview chuyển sang Bảo vệ 2.
+- Ràng buộc thời gian ghi kết quả review (issue #46): `POST /api/v1/reviews/{id}/result` không được ghi trước giờ bắt đầu đã xếp (`now >= session.scheduledAt`), trả lời 400 nếu ghi sớm. Tránh việc hội đồng ghi sớm kết quả Review 3 trong tương lai để lách qua điều kiện xét duyệt bảo vệ.
 
 ## 6. Bảo vệ
 
@@ -114,6 +115,7 @@ Content-Type: application/json
 - Điều kiện tham dự lấy từ kết quả Review 3. Lần 1 không đạt được đăng ký lần 2; lần 2 không đạt chuyển nhóm sang FAILED; đạt chuyển COMPLETED.
 - Chặn trùng phòng, người chấm giữa review và defense; bảo vệ cùng một slot thời gian được kiểm tra trong transaction giữ khóa lịch dùng chung giữa các instance.
 - `DEFENSE_MAX_PARALLEL` mặc định 5, kiểm tra số phiên thực sự đồng thời tại các mốc bắt đầu. Hệ thống không tự chia lịch vào giờ hành chính; Admin chọn giờ bắt đầu và danh sách từng đợt.
+- Ràng buộc thời gian ghi kết quả bảo vệ (issue #46): `POST /api/v1/defenses/{id}/result` không được ghi trước giờ bắt đầu đã xếp (`now >= session.scheduledAt`), trả lời 400 nếu ghi sớm. Tránh việc ghi passed=true cho lịch bảo vệ tương lai khiến nhóm chuyển trạng thái thành COMPLETED trước khi bảo vệ diễn ra. Cả hội đồng và Admin đều tuân thủ kiểm tra này.
 
 ## Thông báo và tích hợp frontend
 
