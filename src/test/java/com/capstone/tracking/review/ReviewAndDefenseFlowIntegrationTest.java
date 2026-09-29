@@ -21,6 +21,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -28,6 +29,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
 
     @org.springframework.beans.factory.annotation.Autowired private com.capstone.tracking.semester.SemesterCalendarRepository calendars;
+    @org.springframework.boot.test.mock.mockito.MockBean protected java.time.Clock clock;
+
+    protected Instant simulatedNow;
 
     private User admin;
     private User supervisor;
@@ -43,6 +47,9 @@ class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
 
     @BeforeEach
     void setUp() {
+        simulatedNow = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        when(clock.instant()).thenAnswer(inv -> simulatedNow);
+
         admin = user("rv-admin", Role.ADMIN);
         supervisor = user("rv-gv", Role.INSTRUCTOR);
         r1 = user("rv-r1", Role.INSTRUCTOR);
@@ -92,6 +99,7 @@ class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
                 .andExpect(jsonPath("$.panel[0].chair").value(true))).get("id").asText();
 
         // Only the chair records Review 3, and it needs an outcome.
+        simulatedNow = r3Time;
         postJson("/api/v1/reviews/" + council + "/result", r1,
                 Map.of("feedback", "x", "outcome", "READY_FOR_DEFENSE_1")).andExpect(status().isForbidden());
         postJson("/api/v1/reviews/" + council + "/result", r2, Map.of("feedback", "x")).andExpect(status().isBadRequest());
@@ -142,6 +150,7 @@ class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
         postJson("/api/v1/defenses", admin, defense(groupB, 2, day.plus(Duration.ofDays(1)))).andExpect(status().isCreated());
 
         // Only the chair grades. A fails attempt 1 -> attempt 2 -> fails again -> group FAILED.
+        simulatedNow = day;
         postJson("/api/v1/defenses/" + defenseA + "/result", r1, Map.of("passed", false, "score", 4.0))
                 .andExpect(status().isForbidden());
         postJson("/api/v1/defenses/" + defenseA + "/result", r3, Map.of("passed", false, "score", 4.0, "feedback", "Chưa đạt"))
@@ -149,17 +158,20 @@ class ReviewAndDefenseFlowIntegrationTest extends WorkflowTestSupport {
         getAs("/api/v1/groups/" + groupA.getId() + "/overview", leaderA).andExpect(jsonPath("$.defenseTrack").value("DEFENSE_2"));
         String retry = body(postJson("/api/v1/defenses", admin, defense(groupA, 2, day.plus(Duration.ofDays(2))))
                 .andExpect(status().isCreated())).get("id").asText();
+        simulatedNow = day.plus(Duration.ofDays(2));
         postJson("/api/v1/defenses/" + retry + "/result", r3, Map.of("passed", false, "score", 3.5))
                 .andExpect(status().isOk());
         assertThat(studentGroupRepository.findById(groupA.getId()).orElseThrow().getStatus()).isEqualTo(GroupStatus.FAILED);
         assertThat(lastEmailFor(groupA, "Fail đồ án").to()).containsExactly(leaderA.getEmail());
 
+        simulatedNow = day.plus(Duration.ofMinutes(60 + 15));
         postJson("/api/v1/defenses/" + defenseC + "/result", r3, Map.of("passed", true, "score", 8.5))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PASSED"));
         assertThat(studentGroupRepository.findById(groupC.getId()).orElseThrow().getStatus()).isEqualTo(GroupStatus.COMPLETED);
     }
 
     private void closedCouncil(StudentGroup group, String outcome, int slot) throws Exception {
+        simulatedNow = base.plus(Duration.ofDays(77)).plus(Duration.ofHours(slot));
         String id = body(postJson("/api/v1/reviews", admin,
                 review(group, "REVIEW_3", base.plus(Duration.ofDays(77)).plus(Duration.ofHours(slot)), List.of(r1, r2, r3), r2))
                 .andExpect(status().isCreated())).get("id").asText();
