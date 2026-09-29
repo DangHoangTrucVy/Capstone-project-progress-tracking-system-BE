@@ -52,6 +52,14 @@ Quy trình này áp dụng cho backend hiện tại. Frontend gọi các API dư
   - Thành viên ACTIVE của nhóm chỉ được xem evaluation có trạng thái PUBLISHED; truy cập record DRAFT nhận 404 để bảo vệ tính ẩn của bản nháp.
   - Người dùng không thuộc nhóm (Leader nhóm khác, thành viên REMOVED, giảng viên ngoài, Council) nhận 403.
 
+### Ràng buộc thời gian buổi họp tư vấn (issue #44)
+
+- Giờ bắt đầu và kết thúc của buổi họp tư vấn (`MeetingSession`) phải tuân theo khung giờ của slot (`ScheduleSlot`):
+  - `PUT /api/v1/meetings/{id}/start`: Không được bắt đầu trước `slot.startTime`. Cố gắng bắt đầu sớm trả lời 400 `Cannot start meeting before its scheduled start time`.
+  - `PUT /api/v1/meetings/{id}/end`: Không được kết thúc trước `slot.endTime`. Cố gắng kết thúc sớm trả lời 400 `Cannot conclude meeting before its scheduled end time`.
+- Mục đích chống gian lận (exploit prevention): Tránh việc sinh viên/nhóm cố tình tạo session rồi ngay lập tức start/end slot tương lai để chuyển booking sang `ATTENDED`, nhằm lách qua giới hạn "mỗi nhóm chỉ có tối đa một active booking" để đặt thêm slot mới trước thời hạn.
+- Kiểm tra quyền (Authorization) được thực thi trước kiểm tra thời gian (Time guard), đảm bảo người ngoài không thể thăm dò hoặc tác động lên session.
+
 
 ## 4. Tài liệu, tiến độ và cảnh báo
 

@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -29,6 +30,7 @@ public class MeetingSessionService {
     private final MeetingWriteAccess writeAccess;
     private final MeetingReadAccess readAccess;
     private final AuditService auditService;
+    private final Clock clock;
 
     @Transactional
     public MeetingSession create(UUID bookingId, User actingUser) {
@@ -59,8 +61,13 @@ public class MeetingSessionService {
         if (session.getSessionStatus() != SessionStatus.SCHEDULED) {
             throw new BadRequestException("Only a Scheduled session can be started");
         }
+        Instant now = clock.instant();
+        Instant slotStart = session.getBooking().getSlot().getStartTime();
+        if (now.isBefore(slotStart)) {
+            throw new BadRequestException("Cannot start meeting before its scheduled start time (" + slotStart + ")");
+        }
         session.setSessionStatus(SessionStatus.IN_PROGRESS);
-        session.setStartedAt(Instant.now());
+        session.setStartedAt(now);
         auditService.record("MeetingSession", session.getId(), AuditAction.UPDATE, actingUser,
                 Map.of("sessionStatus", SessionStatus.IN_PROGRESS));
         return session;
@@ -73,11 +80,16 @@ public class MeetingSessionService {
         if (session.getSessionStatus() != SessionStatus.IN_PROGRESS) {
             throw new BadRequestException("Only an In Progress session can be ended");
         }
+        Instant now = clock.instant();
+        Instant slotEnd = session.getBooking().getSlot().getEndTime();
+        if (now.isBefore(slotEnd)) {
+            throw new BadRequestException("Cannot conclude meeting before its scheduled end time (" + slotEnd + ")");
+        }
         if (request != null && request.rawNotes() != null && !request.rawNotes().isBlank()) {
             session.setRawNotes(request.rawNotes());
         }
         session.setSessionStatus(SessionStatus.CONCLUDED);
-        session.setEndedAt(Instant.now());
+        session.setEndedAt(now);
         // The meeting happened: frees the group to book its next slot (BookingService.book, bước 3.2).
         session.getBooking().setBookingStatus(BookingStatus.ATTENDED);
         auditService.record("MeetingSession", session.getId(), AuditAction.UPDATE, actingUser,
