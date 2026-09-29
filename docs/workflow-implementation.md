@@ -60,6 +60,20 @@ Quy trình này áp dụng cho backend hiện tại. Frontend gọi các API dư
 - Mục đích chống gian lận (exploit prevention): Tránh việc sinh viên/nhóm cố tình tạo session rồi ngay lập tức start/end slot tương lai để chuyển booking sang `ATTENDED`, nhằm lách qua giới hạn "mỗi nhóm chỉ có tối đa một active booking" để đặt thêm slot mới trước thời hạn.
 - Kiểm tra quyền (Authorization) được thực thi trước kiểm tra thời gian (Time guard), đảm bảo người ngoài không thể thăm dò hoặc tác động lên session.
 
+### Nhất quán trạng thái giữa Booking và MeetingSession (issue #45)
+
+- Khi hủy booking (`DELETE /api/v1/bookings/{id}`):
+  - Nếu đã tồn tại `MeetingSession` gắn với booking:
+    - Nếu session đang `IN_PROGRESS` hoặc `CONCLUDED`: Chặn hủy với 400 `Cannot cancel booking for a meeting that is already in_progress / concluded`.
+    - Nếu session đang `SCHEDULED`: Cập nhật trạng thái session sang `CANCELLED`, ghi audit CANCEL cho session cùng transaction với việc hủy booking và hoàn capacity slot.
+  - Sau khi hủy, booking có trạng thái `CANCELLED`.
+- Khi thao tác trên meeting session:
+  - `POST /api/v1/bookings/{bookingId}/meetings`: Chỉ tạo session nếu booking có trạng thái `CONFIRMED`.
+  - `PUT /api/v1/meetings/{id}/start` và `PUT /api/v1/meetings/{id}/end`: Thực hiện row lock trên `Booking`, kiểm tra booking phải đang `CONFIRMED`. Nếu booking đã `CANCELLED`, từ chối với 400.
+  - `end` chỉ chuyển booking sang `ATTENDED` nếu booking vẫn đang `CONFIRMED` và vượt qua toàn bộ guard. Booking đã `CANCELLED` tuyệt đối không bị hồi sinh thành `ATTENDED`.
+  - Session đã `CANCELLED` không thể tạo biên bản (`generate`) hay tạo/sửa requirement log (`POST/PUT .../requirements`), trả lời 400.
+- Thứ tự khóa đồng bộ: `Booking` -> `MeetingSession` -> `ScheduleSlot` đảm bảo không xảy ra deadlock giữa luồng hủy booking và luồng start/end/create meeting.
+
 
 ## 4. Tài liệu, tiến độ và cảnh báo
 
