@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface EvaluationRecordRepository extends JpaRepository<EvaluationRecord, UUID> {
 
     Page<EvaluationRecord> findByGroupId(UUID groupId, Pageable pageable);
+
+    Page<EvaluationRecord> findByGroupIdAndStatus(UUID groupId, EvaluationStatus status, Pageable pageable);
 }

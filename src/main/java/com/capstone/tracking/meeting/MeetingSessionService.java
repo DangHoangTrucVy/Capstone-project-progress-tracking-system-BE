@@ -21,11 +21,13 @@ import java.util.UUID;
 /** Sprint 4 — the MeetingSession half of API-007/008/009's `{id}` (a session, not a booking). */
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class MeetingSessionService {
 
     private final MeetingSessionRepository meetingSessionRepository;
     private final BookingRepository bookingRepository;
     private final MeetingWriteAccess writeAccess;
+    private final MeetingReadAccess readAccess;
     private final AuditService auditService;
 
     @Transactional
@@ -86,6 +88,12 @@ public class MeetingSessionService {
     public MeetingSession getById(UUID id) {
         return meetingSessionRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("MeetingSession", id));
+    }
+
+    public MeetingSession getById(UUID id, User currentUser) {
+        MeetingSession session = getById(id);
+        readAccess.requireCanRead(session, currentUser);
+        return session;
     }
 
 }
