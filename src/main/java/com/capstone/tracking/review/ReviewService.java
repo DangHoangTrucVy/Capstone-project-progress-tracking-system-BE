@@ -15,6 +15,7 @@ import com.capstone.tracking.review.dto.ReviewCloneRequest;
 import com.capstone.tracking.review.dto.ReviewResultRequest;
 import com.capstone.tracking.review.dto.ReviewScheduleRequest;
 import com.capstone.tracking.review.dto.ReviewSessionResponse;
+import com.capstone.tracking.scheduling.BookingRepository;
 import com.capstone.tracking.scheduling.ScheduleGuard;
 import com.capstone.tracking.semester.SemesterCalendarService;
 import com.capstone.tracking.user.Role;
@@ -55,6 +56,7 @@ public class ReviewService {
     private final ScheduleGuard scheduleGuard;
     private final SemesterCalendarService calendars;
     private final DefenseSessionRepository defenses;
+    private final BookingRepository bookingRepository;
     private final Clock clock;
 
     @Transactional
@@ -199,7 +201,8 @@ public class ReviewService {
             throw new ConflictException("Group " + group.getGroupCode() + " already has a " + round.label() + " scheduled");
         }
         Instant end = scheduledAt.plus(Duration.ofMinutes(durationMinutes));
-        for (ReviewSession other : sessionRepository.findByScheduledAtLessThan(end)) {
+        Instant earliestStart = scheduledAt.minus(Duration.ofHours(24));
+        for (ReviewSession other : sessionRepository.findByScheduledAtGreaterThanEqualAndScheduledAtLessThan(earliestStart, end)) {
             if (other.endsAt().isAfter(scheduledAt)
                     && (other.getLocation().equalsIgnoreCase(location.trim())
                         || other.getGroup().getId().equals(group.getId())
@@ -207,13 +210,17 @@ public class ReviewService {
                 throw new ConflictException("Room, group or reviewer already has a review at this time");
             }
         }
-        for (var other : defenses.findByScheduledAtLessThan(end)) {
+        for (var other : defenses.findByScheduledAtGreaterThanEqualAndScheduledAtLessThan(earliestStart, end)) {
             if (other.endsAt().isAfter(scheduledAt)
                     && (other.getRoom().equalsIgnoreCase(location.trim())
                         || other.getGroup().getId().equals(group.getId())
                         || other.getCommittee().stream().anyMatch(m -> panel.ids().contains(m.getMember().getId())))) {
                 throw new ConflictException("Room, group or reviewer already has a defense at this time");
             }
+        }
+        if (bookingRepository.hasActiveOverlappingBookingForGroup(group.getId(), scheduledAt, end)
+                || bookingRepository.hasActiveOverlappingBookingForInstructors(panel.ids(), scheduledAt, end)) {
+            throw new ConflictException("Group or reviewer already has a consultation booking at this time");
         }
 
         ReviewSession session = ReviewSession.builder()
