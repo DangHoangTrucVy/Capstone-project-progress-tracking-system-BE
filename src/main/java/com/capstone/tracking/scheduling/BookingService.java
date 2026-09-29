@@ -10,10 +10,14 @@ import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupService;
 import com.capstone.tracking.notification.DomainEvent;
 import com.capstone.tracking.notification.DomainEventType;
+import com.capstone.tracking.meeting.MeetingSession;
+import com.capstone.tracking.meeting.MeetingSessionRepository;
+import com.capstone.tracking.meeting.SessionStatus;
 import com.capstone.tracking.scheduling.dto.BookRequest;
 import com.capstone.tracking.scheduling.dto.CancelBookingRequest;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,6 +25,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -47,8 +52,10 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final ScheduleSlotRepository scheduleSlotRepository;
     private final StudentGroupService studentGroupService;
+    private final MeetingSessionRepository meetingSessionRepository;
     private final AuditService auditService;
     private final ApplicationEventPublisher events;
+    private final Clock clock;
 
     @Transactional
     @Caching(evict = {
@@ -78,7 +85,7 @@ public class BookingService {
         if (slot.getStatus() == SlotStatus.CANCELLED || slot.getStatus() == SlotStatus.COMPLETED) {
             throw new ConflictException("Slot " + slotId + " is " + slot.getStatus().name().toLowerCase());
         }
-        if (slot.getStartTime().isBefore(Instant.now().plus(MIN_BOOKING_NOTICE))) {
+        if (slot.getStartTime().isBefore(clock.instant().plus(MIN_BOOKING_NOTICE))) {
             throw new BadRequestException("Slots must be booked at least 24 hours before they start");
         }
         LocalDate day = slot.getStartTime().atZone(VN).toLocalDate();
@@ -97,7 +104,7 @@ public class BookingService {
                 .slot(slot)
                 .group(group)
                 .bookingStatus(BookingStatus.CONFIRMED)
-                .bookedAt(Instant.now())
+                .bookedAt(clock.instant())
                 .notes(request.notes())
                 .build();
         booking = bookingRepository.save(booking);
@@ -133,12 +140,32 @@ public class BookingService {
         ScheduleSlot slot = scheduleSlotRepository.findByIdForUpdate(booking.getSlot().getId())
                 .orElseThrow(() -> ResourceNotFoundException.of("ScheduleSlot", booking.getSlot().getId()));
 
-        if (Instant.now().isAfter(slot.getStartTime().minus(LATE_CANCELLATION_WINDOW))) {
+        // If a meeting session exists for this booking, check its status and handle it
+        Optional<MeetingSession> sessionOpt = meetingSessionRepository.findByBookingId(booking.getId());
+        if (sessionOpt.isPresent()) {
+            MeetingSession session = sessionOpt.get();
+            if (session.getSessionStatus() == SessionStatus.IN_PROGRESS
+                    || session.getSessionStatus() == SessionStatus.CONCLUDED) {
+                throw new BadRequestException("Cannot cancel booking for a meeting that is already "
+                        + session.getSessionStatus().name().toLowerCase());
+            }
+        }
+
+        Instant now = clock.instant();
+        if (now.isAfter(slot.getStartTime().minus(LATE_CANCELLATION_WINDOW))) {
             throw new BadRequestException("Cannot cancel within 2 hours of the slot's start time (Late Cancellation)");
         }
 
+        if (sessionOpt.isPresent()) {
+            MeetingSession session = sessionOpt.get();
+            session.setSessionStatus(SessionStatus.CANCELLED);
+            meetingSessionRepository.save(session);
+            auditService.record("MeetingSession", session.getId(), AuditAction.CANCEL, actingUser,
+                    Map.of("reason", request != null && request.reason() != null ? request.reason() : "Booking cancelled"));
+        }
+
         booking.setBookingStatus(BookingStatus.CANCELLED);
-        booking.setCancelledAt(Instant.now());
+        booking.setCancelledAt(now);
 
         slot.setBookedCount(Math.max(0, slot.getBookedCount() - 1));
         if (slot.getStatus() == SlotStatus.FULL && slot.hasCapacity()) {
@@ -146,7 +173,7 @@ public class BookingService {
         }
 
         auditService.record("Booking", booking.getId(), AuditAction.CANCEL, actingUser,
-                Map.of("reason", request.reason()));
+                Map.of("reason", request != null && request.reason() != null ? request.reason() : ""));
         events.publishEvent(DomainEvent.of(DomainEventType.BOOKING_CANCELLED, booking.getGroup().getId(), booking.getId(),
                 actingUser.getId(), slotLabel(slot)).withInstructor(slot.getInstructor().getId()));
     }
