@@ -53,6 +53,24 @@ public class User extends BaseEntity implements UserDetails {
 
     private String avatarUrl;
 
+    /**
+     * Whether the student may do the capstone this term (YC03). Logging in and being eligible are separate checks:
+     * an ineligible student can sign in and see why, but cannot create a group, Apply or Accept an Invite (YC04).
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean eligible = true;
+
+    /** Recruiting profile (YC22): only the group a student applies to sees it, and only while the Apply is open. */
+    @Column(length = 1000)
+    private String bio;
+
+    @Column(length = 500)
+    private String skills;
+
+    @Column(length = 500)
+    private String ineligibleReason;
+
     /** Campus picked at sign-in (Giai đoạn 1). Null until the first Google sign-in, then pinned. */
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
