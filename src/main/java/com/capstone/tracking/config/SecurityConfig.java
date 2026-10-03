@@ -52,6 +52,22 @@ public class SecurityConfig {
             "/actuator/health"
     };
 
+    private static final String[] ALL_ROLES = {"ADMIN", "INSTRUCTOR", "COUNCIL", "GROUP_LEADER", "STUDENT"};
+
+    private static final String[] STUDENT_ENDPOINTS = {
+            "/api/v1/auth/me",
+            "/api/v1/eligibility/me",
+            "/api/v1/me/**",
+            "/api/v1/groups",
+            "/api/v1/groups/*",
+            "/api/v1/groups/*/applications",
+            "/api/v1/groups/*/invites",
+            "/api/v1/groups/*/leave-requests",
+            "/api/v1/applications/**",
+            "/api/v1/invites/**",
+            "/api/v1/leave-requests/**"
+    };
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -61,6 +77,9 @@ public class SecurityConfig {
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        // Students sign in and take part in group formation even without a group (YC02, YC04);
+                        // each of these endpoints enforces its own rules with @PreAuthorize / service checks.
+                        .requestMatchers(STUDENT_ENDPOINTS).hasAnyRole(ALL_ROLES)
                         .anyRequest().hasAnyRole("ADMIN", "INSTRUCTOR", "COUNCIL", "GROUP_LEADER")
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

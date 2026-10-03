@@ -48,4 +48,18 @@ public class StudentGroup extends BaseEntity {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private GroupStatus status = GroupStatus.FORMED;
+
+    /** YC19: once locked, only an Admin changes the roster. When and why it locks is still open (GV03). */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean locked = false;
+
+    /** YC16: approval of the member list by the group's supervisor. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private RosterStatus rosterStatus = RosterStatus.DRAFT;
+
+    @Column(length = 1000)
+    private String rosterNote;
 }

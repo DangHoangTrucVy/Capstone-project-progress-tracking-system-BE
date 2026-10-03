@@ -3,6 +3,7 @@ package com.capstone.tracking.group;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
+import com.capstone.tracking.eligibility.EligibilityService;
 import com.capstone.tracking.group.dto.AddMemberRequest;
 import com.capstone.tracking.group.dto.StudentGroupCreateRequest;
 import com.capstone.tracking.group.dto.StudentGroupUpdateRequest;
@@ -29,46 +30,85 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * FR-010 group/member management underpinning every later sprint (Booking, ArtifactSubmission, etc.
  * all key off StudentGroup / GroupMember per blueprint.md §8).
+ *
+ * <p>Joining goes through {@link #enroll}: a student becomes an official member when they create the group (Leader)
+ * or Accept an Invite ({@link GroupJoinService}), or when an Admin adds them (YC11, YC19). Before the roster is
+ * Locked the Leader may kick members; afterwards only an Admin changes it (YC18, YC19).</p>
  */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class StudentGroupService {
 
+    /** YC06: a group is valid with 3-5 official members, Leader included. */
+    public static final int MIN_MEMBERS = 3;
     public static final int MAX_MEMBERS = 5;
+
+    private static final UUID NO_REQUEST = new UUID(0L, 0L);
 
     private final StudentGroupRepository studentGroupRepository;
     private final GroupMemberRepository groupMemberRepository;
+    private final GroupJoinRequestRepository joinRequestRepository;
+    private final MemberLeaveRequestRepository leaveRequestRepository;
     private final TopicService topicService;
     private final UserService userService;
     private final UserRepository userRepository;
+    private final EligibilityService eligibilityService;
 
     /**
-     * Admin creates the group, then provisions its roster and assigns one leader through addMember.
+     * A student creates a group and becomes its Leader and first official member (YC07); an Admin may also provision
+     * an empty group (with topic/supervisor) and assign its roster through addMember.
      */
     @Transactional
     public StudentGroup create(StudentGroupCreateRequest request, User creator) {
-        if (creator.getRole() != Role.ADMIN) {
-            throw new AccessDeniedException("Only an administrator can create a group");
+        boolean admin = creator.getRole() == Role.ADMIN;
+        if (!admin && creator.getRole() != Role.STUDENT && creator.getRole() != Role.GROUP_LEADER) {
+            throw new AccessDeniedException("Only a student or an administrator can create a group");
         }
-        if (studentGroupRepository.existsByGroupCodeIgnoreCase(request.groupCode())) {
-            throw new ConflictException("Group code " + request.groupCode() + " is already in use");
+        String code = request.groupCode() == null || request.groupCode().isBlank()
+                ? generateGroupCode() : request.groupCode().trim();
+        if (studentGroupRepository.existsByGroupCodeIgnoreCase(code)) {
+            throw new ConflictException("Group code " + code + " is already in use");
         }
-        Topic topic = request.topicId() != null ? topicService.getById(request.topicId()) : null;
-        User supervisor = request.supervisorId() != null
-                ? requireRole(request.supervisorId(), Role.INSTRUCTOR, Role.ADMIN)
-                : null;
 
-        StudentGroup group = StudentGroup.builder()
-                .groupCode(request.groupCode())
+        Topic topic = null;
+        User supervisor = null;
+        User leader = null;
+        if (admin) {
+            topic = request.topicId() != null ? topicService.getById(request.topicId()) : null;
+            supervisor = request.supervisorId() != null
+                    ? requireRole(request.supervisorId(), Role.INSTRUCTOR, Role.ADMIN)
+                    : null;
+        } else {
+            if (request.topicId() != null || request.supervisorId() != null) {
+                throw new BadRequestException("Only an administrator can set the topic or supervisor of a group");
+            }
+            leader = userRepository.lockById(creator.getId()).orElseThrow();
+            eligibilityService.requireEligible(leader);
+            if (groupMemberRepository.existsByUserIdAndStatus(leader.getId(), MemberStatus.ACTIVE)) {
+                throw new ConflictException("You already belong to a group");
+            }
+        }
+
+        StudentGroup saved = studentGroupRepository.save(StudentGroup.builder()
+                .groupCode(code)
                 .topic(topic)
                 .supervisor(supervisor)
                 .semester(request.semester())
                 .status(GroupStatus.FORMED)
-                .build();
-        StudentGroup saved = studentGroupRepository.save(group);
-
+                .build());
+        if (leader != null) {
+            enroll(saved, leader, true, NO_REQUEST);
+        }
         return saved;
+    }
+
+    private String generateGroupCode() {
+        String code;
+        do {
+            code = "GRP-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        } while (studentGroupRepository.existsByGroupCodeIgnoreCase(code));
+        return code;
     }
 
     public StudentGroup getById(UUID id) {
@@ -96,7 +136,7 @@ public class StudentGroupService {
         return counts;
     }
 
-    /** availableOnly (groups with fewer than MAX_MEMBERS active members) takes priority over the other filters. */
+    /** availableOnly (groups still recruiting: fewer than MAX_MEMBERS, not locked) takes priority over the other filters. */
     public Page<StudentGroup> list(UUID supervisorId, UUID topicId, boolean availableOnly, Pageable pageable) {
         if (availableOnly) {
             return studentGroupRepository.findNotFull(MemberStatus.ACTIVE, MAX_MEMBERS, pageable);
@@ -140,9 +180,8 @@ public class StudentGroupService {
     }
 
     /**
-     * Adds a member. Setting isLeader=true promotes that user's global role to GROUP_LEADER
-     * (so RBAC checks elsewhere, e.g. slot booking in Sprint 2, work off the User.role claim);
-     * a group may only have one active leader at a time — demote the current one first.
+     * Admin adds a member (also the only way to change a Locked roster, YC19). Setting isLeader=true promotes that
+     * user's global role to GROUP_LEADER; a group may only have one active leader at a time.
      */
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request) {
@@ -154,60 +193,64 @@ public class StudentGroupService {
         if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
             requireGroupLeader(groupId, actingUser);
         }
-        StudentGroup group = lockById(groupId);
-        User resolved = resolveUser(request);
+        User resolved = resolveStudent(request.userId(), request.email(), request.identifier());
+        // Same lock order as Accept Invite (student, then group) so the two can never deadlock.
         User user = userRepository.lockById(resolved.getId()).orElseThrow();
+        StudentGroup group = lockById(groupId);
+        eligibilityService.requireEligible(user);
+        return enroll(group, user, request.isLeader(), NO_REQUEST);
+    }
+
+    /**
+     * The single place where a student becomes an official member (YC13, YC15). The caller holds the locks on the
+     * group row and the student row, so concurrent Accepts can neither exceed the group's capacity nor give one
+     * student two memberships. Every other open Apply/Invite of the student is cancelled.
+     *
+     * @param acceptedRequestId the Invite being accepted (kept as ACCEPTED), or a null id when there is none
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public GroupMember enroll(StudentGroup group, User user, boolean leader, UUID acceptedRequestId) {
         if (groupMemberRepository.existsByUserIdAndStatus(user.getId(), MemberStatus.ACTIVE)) {
             throw new ConflictException("This student already belongs to an active group");
         }
-
         if (user.getRole() != Role.STUDENT && user.getRole() != Role.GROUP_LEADER) {
             throw new BadRequestException("Only Student/Group Leader accounts can be added as group members");
         }
-        if (groupMemberRepository.countByGroupIdAndStatus(groupId, MemberStatus.ACTIVE) >= MAX_MEMBERS) {
+        if (groupMemberRepository.countByGroupIdAndStatus(group.getId(), MemberStatus.ACTIVE) >= MAX_MEMBERS) {
             throw new ConflictException("Group is full: a group can have at most " + MAX_MEMBERS + " members");
         }
-        if (request.isLeader() && groupMemberRepository.existsByGroupIdAndIsLeaderTrueAndStatus(groupId, MemberStatus.ACTIVE)) {
+        if (leader && groupMemberRepository.existsByGroupIdAndIsLeaderTrueAndStatus(group.getId(), MemberStatus.ACTIVE)) {
             throw new ConflictException("This group already has an active leader; demote them before assigning a new one");
         }
 
-        Optional<GroupMember> existingOpt = groupMemberRepository.findByGroupIdAndUserId(groupId, user.getId());
-        if (existingOpt.isPresent()) {
-            GroupMember existing = existingOpt.get();
-            if (existing.getStatus() == MemberStatus.ACTIVE) {
-                throw new ConflictException("User " + user.getEmail() + " is already an active member of this group");
-            }
-            if (request.isLeader()) {
-                user.setRole(Role.GROUP_LEADER);
-            }
-            existing.setStatus(MemberStatus.ACTIVE);
-            existing.setLeader(request.isLeader());
-            existing.setJoinedAt(Instant.now());
-            return groupMemberRepository.save(existing);
-        }
-
-        if (request.isLeader()) {
+        if (leader) {
             user.setRole(Role.GROUP_LEADER);
         }
+        GroupMember member = groupMemberRepository.findByGroupIdAndUserId(group.getId(), user.getId())
+                .orElseGet(() -> GroupMember.builder().group(group).user(user).build());
+        // A student who left or was kicked earlier may come back (YC21): the row is reused.
+        member.setStatus(MemberStatus.ACTIVE);
+        member.setLeader(leader);
+        member.setJoinedAt(Instant.now());
+        GroupMember saved = groupMemberRepository.save(member);
 
-        GroupMember member = GroupMember.builder()
-                .group(group)
-                .user(user)
-                .isLeader(request.isLeader())
-                .joinedAt(Instant.now())
-                .status(MemberStatus.ACTIVE)
-                .build();
-        return groupMemberRepository.save(member);
+        invalidateRoster(group);
+        joinRequestRepository.cancelOtherPending(user.getId(), acceptedRequestId == null ? NO_REQUEST : acceptedRequestId,
+                Instant.now());
+        return saved;
     }
 
-    private User resolveUser(AddMemberRequest request) {
-        if (request.userId() != null) {
-            return userService.getById(request.userId());
+    /**
+     * Resolves a student by userId, email, student code (email prefix before '@') or a UUID string.
+     */
+    public User resolveStudent(UUID userId, String email, String identifier) {
+        if (userId != null) {
+            return userService.getById(userId);
         }
 
-        String input = request.identifier() != null && !request.identifier().isBlank()
-                ? request.identifier().trim()
-                : (request.email() != null && !request.email().isBlank() ? request.email().trim() : null);
+        String input = identifier != null && !identifier.isBlank()
+                ? identifier.trim()
+                : (email != null && !email.isBlank() ? email.trim() : null);
 
         if (input == null) {
             throw new BadRequestException("A valid user identifier (email, student code, or userId) must be provided");
@@ -237,43 +280,160 @@ public class StudentGroupService {
         throw new ResourceNotFoundException("Student with email or student code '" + input + "' not found");
     }
 
-    /** A student joins a group themselves; they must not already belong to one and the group must have room. */
-    @Transactional
-    public GroupMember join(UUID groupId, User current) {
-        StudentGroup group = getById(groupId);
-        if (group.getStatus() == GroupStatus.COMPLETED || group.getStatus() == GroupStatus.FAILED
-                || group.getStatus() == GroupStatus.ARCHIVED) {
-            throw new ConflictException("Cannot join a group that is " + group.getStatus().name().toLowerCase());
-        }
-        if (groupMemberRepository.existsByUserIdAndStatus(current.getId(), MemberStatus.ACTIVE)) {
-            throw new ConflictException("You already belong to a group");
-        }
-        return addMember(groupId, new AddMemberRequest(current.getId(), false), null);
-    }
-
-    @Transactional
-    public void removeMember(UUID groupId, UUID memberId) {
-        removeMember(groupId, memberId, null);
-    }
-
+    /**
+     * Removes a member. An Admin may always do it (YC19). The Leader may kick a member before the roster is Locked,
+     * without any vote (YC18); the Leader cannot be kicked and nobody but an Admin touches a Locked roster.
+     */
     @Transactional
     public void removeMember(UUID groupId, UUID memberId, User actingUser) {
-        if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
+        if (actingUser == null) {
+            throw new AccessDeniedException("Only the group leader or an administrator can remove a member");
+        }
+        boolean admin = actingUser.getRole() == Role.ADMIN;
+        if (!admin) {
             requireGroupLeader(groupId, actingUser);
         }
+        StudentGroup group = lockById(groupId);
         GroupMember member = groupMemberRepository.findById(memberId)
-                .filter(m -> m.getGroup().getId().equals(groupId))
+                .filter(m -> m.getGroup().getId().equals(groupId) && m.getStatus() == MemberStatus.ACTIVE)
                 .orElseThrow(() -> ResourceNotFoundException.of("GroupMember", memberId));
+        if (!admin) {
+            requireNotLocked(group);
+            if (member.isLeader()) {
+                throw new BadRequestException("The leader cannot be kicked; ask an administrator to replace the leader");
+            }
+        }
+        deactivate(group, member);
+    }
 
+    /** Used when a leave request is approved: the permission checks happened in the caller. */
+    @Transactional
+    public void removeActiveMember(UUID groupId, UUID userId) {
+        StudentGroup group = lockById(groupId);
+        GroupMember member = groupMemberRepository.findByGroupIdAndUserIdAndStatus(groupId, userId, MemberStatus.ACTIVE)
+                .orElseThrow(() -> new ConflictException("This student is no longer an active member of the group"));
+        deactivate(group, member);
+    }
+
+    private void deactivate(StudentGroup group, GroupMember member) {
         member.setStatus(MemberStatus.REMOVED);
-        if (member.isLeader() && member.getUser().getRole() == Role.GROUP_LEADER) {
+        if (member.isLeader()) {
+            member.setLeader(false);
+        }
+        if (member.getUser().getRole() == Role.GROUP_LEADER) {
             member.getUser().setRole(Role.STUDENT);
+        }
+        for (MemberLeaveRequest pending : leaveRequestRepository.findByGroupIdAndUserIdAndStatusIn(
+                group.getId(), member.getUser().getId(), List.of(LeaveRequestStatus.PENDING))) {
+            pending.setStatus(LeaveRequestStatus.WITHDRAWN);
+            pending.setDecidedAt(Instant.now());
+        }
+        invalidateRoster(group);
+    }
+
+    /** YC20: Admin replaces (or assigns) the leader on behalf of the supervisor's report. */
+    @Transactional
+    public GroupMember replaceLeader(UUID groupId, UUID newLeaderUserId) {
+        StudentGroup group = lockById(groupId);
+        GroupMember next = groupMemberRepository.findByGroupIdAndUserIdAndStatus(groupId, newLeaderUserId, MemberStatus.ACTIVE)
+                .orElseThrow(() -> new BadRequestException("The new leader must be an active member of the group"));
+        if (next.isLeader()) {
+            return next;
+        }
+        for (GroupMember current : groupMemberRepository.findByGroupIdAndStatus(groupId, MemberStatus.ACTIVE)) {
+            if (current.isLeader()) {
+                current.setLeader(false);
+                if (current.getUser().getRole() == Role.GROUP_LEADER) {
+                    current.getUser().setRole(Role.STUDENT);
+                }
+            }
+        }
+        next.setLeader(true);
+        next.getUser().setRole(Role.GROUP_LEADER);
+        invalidateRoster(group);
+        return next;
+    }
+
+    /** YC19: Admin locks the roster; from then on only an Admin changes it. */
+    @Transactional
+    public StudentGroup setLocked(UUID groupId, boolean locked) {
+        StudentGroup group = lockById(groupId);
+        group.setLocked(locked);
+        return group;
+    }
+
+    /** YC16: the Leader sends the member list (3-5 official members) to the group's supervisor. */
+    @Transactional
+    public StudentGroup submitRoster(UUID groupId, User actingUser) {
+        StudentGroup group = lockById(groupId);
+        requireGroupLeader(groupId, actingUser);
+        requireNotLocked(group);
+        long members = groupMemberRepository.countByGroupIdAndStatus(groupId, MemberStatus.ACTIVE);
+        if (members < MIN_MEMBERS || members > MAX_MEMBERS) {
+            throw new ConflictException("A group needs " + MIN_MEMBERS + "-" + MAX_MEMBERS
+                    + " official members before its roster can be submitted (currently " + members + ")");
+        }
+        if (group.getSupervisor() == null) {
+            throw new ConflictException("The group has no supervisor yet; the roster cannot be sent for approval");
+        }
+        if (group.getRosterStatus() == RosterStatus.SUBMITTED || group.getRosterStatus() == RosterStatus.APPROVED) {
+            throw new ConflictException("The roster is already " + group.getRosterStatus().name().toLowerCase());
+        }
+        group.setRosterStatus(RosterStatus.SUBMITTED);
+        group.setRosterNote(null);
+        return group;
+    }
+
+    /**
+     * YC16: the group's supervisor (or an Admin) approves or rejects the submitted roster. A rejection returns the
+     * roster to the leader with the note; what else it triggers is still open (GV02).
+     */
+    @Transactional
+    public StudentGroup reviewRoster(UUID groupId, User actingUser, boolean approved, String note) {
+        StudentGroup group = lockById(groupId);
+        requireSupervisorOrAdmin(group, actingUser);
+        if (group.getRosterStatus() != RosterStatus.SUBMITTED) {
+            throw new ConflictException("There is no submitted roster to review");
+        }
+        if (!approved && (note == null || note.isBlank())) {
+            throw new BadRequestException("Say why the roster is rejected");
+        }
+        group.setRosterStatus(approved ? RosterStatus.APPROVED : RosterStatus.REJECTED);
+        group.setRosterNote(note == null || note.isBlank() ? null : note.trim());
+        return group;
+    }
+
+    /** Any roster change makes an earlier submission/approval stale; the leader must submit again. */
+    private void invalidateRoster(StudentGroup group) {
+        if (group.getRosterStatus() == RosterStatus.SUBMITTED || group.getRosterStatus() == RosterStatus.APPROVED) {
+            group.setRosterStatus(RosterStatus.DRAFT);
+            group.setRosterNote(null);
         }
     }
 
     /** Only the group's active leader may act for the group (submit topics, book slots...). */
     public void requireActiveLeader(UUID groupId, User actingUser) {
         requireGroupLeader(groupId, actingUser);
+    }
+
+    public boolean isActiveMember(UUID groupId, UUID userId) {
+        return groupMemberRepository.existsByGroupIdAndUserIdAndStatus(groupId, userId, MemberStatus.ACTIVE);
+    }
+
+    /** Applying, inviting and joining only make sense while the group is running and its roster is not Locked. */
+    public void requireRecruiting(StudentGroup group) {
+        if (group.getStatus() == GroupStatus.COMPLETED || group.getStatus() == GroupStatus.FAILED
+                || group.getStatus() == GroupStatus.ARCHIVED) {
+            throw new ConflictException("Cannot join a group that is " + group.getStatus().name().toLowerCase());
+        }
+        requireNotLocked(group);
+    }
+
+    public void requireNotLocked(StudentGroup group) {
+        if (group.isLocked()) {
+            throw new ConflictException(
+                    "The group roster is locked; changes go through the supervisor and an administrator");
+        }
     }
 
     /** Students and leaders may only see their own group; staff (Instructor, Council, Admin) see every group. */
