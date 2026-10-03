@@ -58,6 +58,7 @@ public class SecurityConfig {
             "/api/v1/auth/me",
             "/api/v1/eligibility/me",
             "/api/v1/me/**",
+            "/api/v1/notifications/**",
             "/api/v1/groups",
             "/api/v1/groups/*",
             "/api/v1/groups/*/applications",

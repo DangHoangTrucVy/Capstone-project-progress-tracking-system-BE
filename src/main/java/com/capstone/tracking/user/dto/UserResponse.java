@@ -18,10 +18,12 @@ public record UserResponse(
         Campus campus,
         Instant createdAt,
         boolean eligible,
-        String ineligibleReason
+        String ineligibleReason,
+        String bio,
+        String skills
 ) {
     public static UserResponse from(User u) {
         return new UserResponse(u.getId(), u.getEmail(), u.getFullName(), u.getRole(), u.getStatus(), u.getAvatarUrl(), u.getCampus(), u.getCreatedAt(),
-                u.isEligible(), u.getIneligibleReason());
+                u.isEligible(), u.getIneligibleReason(), u.getBio(), u.getSkills());
     }
 }

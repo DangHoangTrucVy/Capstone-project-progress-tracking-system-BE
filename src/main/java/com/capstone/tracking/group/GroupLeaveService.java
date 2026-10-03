@@ -3,12 +3,15 @@ package com.capstone.tracking.group;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
+import com.capstone.tracking.notification.DomainEvent;
+import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +28,7 @@ public class GroupLeaveService {
 
     private final MemberLeaveRequestRepository leaveRequests;
     private final StudentGroupService groups;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public MemberLeaveRequest request(UUID groupId, User current, String reason) {
@@ -40,11 +44,14 @@ public class GroupLeaveService {
         if (leaveRequests.findByGroupIdAndUserIdAndStatus(groupId, current.getId(), LeaveRequestStatus.PENDING).isPresent()) {
             throw new ConflictException("You already asked to leave this group");
         }
-        return leaveRequests.save(MemberLeaveRequest.builder()
+        MemberLeaveRequest saved = leaveRequests.save(MemberLeaveRequest.builder()
                 .group(group)
                 .user(current)
                 .reason(reason == null || reason.isBlank() ? null : reason.trim())
                 .build());
+        events.publishEvent(DomainEvent.of(DomainEventType.LEAVE_REQUESTED, groupId, saved.getId(), current.getId(),
+                current.getFullName()).withDetails(saved.getReason(), null));
+        return saved;
     }
 
     @Transactional
@@ -69,6 +76,10 @@ public class GroupLeaveService {
         groups.requireNotLocked(group);
         decide(request, LeaveRequestStatus.APPROVED, leader);
         groups.removeActiveMember(group.getId(), request.getUser().getId());
+        events.publishEvent(DomainEvent.of(DomainEventType.LEAVE_DECIDED, group.getId(), request.getId(),
+                leader.getId(), "đã được chấp nhận").withTarget(request.getUser().getId()));
+        events.publishEvent(DomainEvent.of(DomainEventType.MEMBER_LEFT, group.getId(), request.getId(),
+                leader.getId(), request.getUser().getFullName()));
         return request;
     }
 
@@ -77,6 +88,8 @@ public class GroupLeaveService {
         MemberLeaveRequest request = lock(id);
         groups.requireActiveLeader(request.getGroup().getId(), leader);
         requirePending(request);
+        events.publishEvent(DomainEvent.of(DomainEventType.LEAVE_DECIDED, request.getGroup().getId(), request.getId(),
+                leader.getId(), "bị từ chối").withTarget(request.getUser().getId()));
         return decide(request, LeaveRequestStatus.REJECTED, leader);
     }
 

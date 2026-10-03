@@ -28,9 +28,11 @@ public record JoinRequestResponse(
         Integer supportVotes,
         Integer opposeVotes
 ) {
-    public record Profile(UUID userId, String fullName, String email, Campus campus, String avatarUrl) {
+    public record Profile(UUID userId, String fullName, String email, Campus campus, String avatarUrl, String bio,
+                   String skills) {
         static Profile of(User u) {
-            return new Profile(u.getId(), u.getFullName(), u.getEmail(), u.getCampus(), u.getAvatarUrl());
+            return new Profile(u.getId(), u.getFullName(), u.getEmail(), u.getCampus(), u.getAvatarUrl(), u.getBio(),
+                    u.getSkills());
         }
     }
 

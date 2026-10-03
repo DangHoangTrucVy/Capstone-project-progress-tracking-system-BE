@@ -5,6 +5,8 @@ import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
 import com.capstone.tracking.eligibility.EligibilityService;
 import com.capstone.tracking.group.dto.JoinRequestResponse;
+import com.capstone.tracking.notification.DomainEvent;
+import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
@@ -15,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -54,6 +57,7 @@ public class GroupJoinService {
     private final StudentGroupService groups;
     private final EligibilityService eligibility;
     private final UserRepository users;
+    private final ApplicationEventPublisher events;
 
     // ------------------------------------------------------------------ settings (YC14)
 
@@ -101,7 +105,7 @@ public class GroupJoinService {
             throw new ConflictException("You can have at most " + MAX_OPEN_APPLICATIONS
                     + " pending applications; withdraw one or wait for an answer");
         }
-        return requests.save(GroupJoinRequest.builder()
+        GroupJoinRequest saved = requests.save(GroupJoinRequest.builder()
                 .group(group)
                 .student(student)
                 .type(JoinRequestType.APPLY)
@@ -109,6 +113,9 @@ public class GroupJoinService {
                 .createdBy(student)
                 .expiresAt(now.plus(Duration.ofHours(ttlHours(group.getSemester()))))
                 .build());
+        events.publishEvent(DomainEvent.of(DomainEventType.JOIN_APPLICATION_RECEIVED, group.getId(), saved.getId(),
+                student.getId(), student.getFullName()));
+        return saved;
     }
 
     @Transactional
@@ -151,6 +158,8 @@ public class GroupJoinService {
         groups.lockById(app.getGroup().getId());
         groups.requireActiveLeader(app.getGroup().getId(), leader);
         requirePending(app);
+        events.publishEvent(DomainEvent.of(DomainEventType.JOIN_APPLICATION_REJECTED, app.getGroup().getId(),
+                app.getId(), leader.getId(), app.getGroup().getGroupCode()).withTarget(app.getStudent().getId()));
         return close(app, JoinRequestStatus.REJECTED);
     }
 
@@ -191,7 +200,10 @@ public class GroupJoinService {
         // Capacity and "one official group" are checked again inside enroll, under both locks (YC15).
         invite.setStatus(JoinRequestStatus.ACCEPTED);
         invite.setRespondedAt(Instant.now());
-        return groups.enroll(group, student, false, invite.getId());
+        GroupMember member = groups.enroll(group, student, false, invite.getId());
+        events.publishEvent(DomainEvent.of(DomainEventType.MEMBER_JOINED, group.getId(), invite.getId(),
+                student.getId(), student.getFullName()));
+        return member;
     }
 
     @Transactional
@@ -201,6 +213,8 @@ public class GroupJoinService {
             throw new AccessDeniedException("This invitation is not addressed to you");
         }
         requirePending(invite);
+        events.publishEvent(DomainEvent.of(DomainEventType.JOIN_INVITE_DECLINED, invite.getGroup().getId(),
+                invite.getId(), current.getId(), invite.getStudent().getFullName()));
         return close(invite, JoinRequestStatus.REJECTED);
     }
 
@@ -277,7 +291,7 @@ public class GroupJoinService {
 
     private GroupJoinRequest newInvite(StudentGroup group, User student, User sender, String message,
                                        UUID sourceApplicationId, Instant now) {
-        return requests.save(GroupJoinRequest.builder()
+        GroupJoinRequest saved = requests.save(GroupJoinRequest.builder()
                 .group(group)
                 .student(student)
                 .type(JoinRequestType.INVITE)
@@ -286,6 +300,9 @@ public class GroupJoinService {
                 .sourceApplicationId(sourceApplicationId)
                 .expiresAt(now.plus(Duration.ofHours(ttlHours(group.getSemester()))))
                 .build());
+        events.publishEvent(DomainEvent.of(DomainEventType.JOIN_INVITE_RECEIVED, group.getId(), saved.getId(),
+                sender.getId(), group.getGroupCode()).withTarget(student.getId()));
+        return saved;
     }
 
     /** An open request of the same kind blocks a new one, but a dead (expired, not yet swept) one does not. */

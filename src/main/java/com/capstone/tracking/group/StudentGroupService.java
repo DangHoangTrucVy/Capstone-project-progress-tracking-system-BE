@@ -7,6 +7,8 @@ import com.capstone.tracking.eligibility.EligibilityService;
 import com.capstone.tracking.group.dto.AddMemberRequest;
 import com.capstone.tracking.group.dto.StudentGroupCreateRequest;
 import com.capstone.tracking.group.dto.StudentGroupUpdateRequest;
+import com.capstone.tracking.notification.DomainEvent;
+import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.topic.Topic;
 import com.capstone.tracking.topic.TopicService;
 import com.capstone.tracking.user.Role;
@@ -23,6 +25,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -54,6 +57,7 @@ public class StudentGroupService {
     private final UserService userService;
     private final UserRepository userRepository;
     private final EligibilityService eligibilityService;
+    private final ApplicationEventPublisher events;
 
     /**
      * A student creates a group and becomes its Leader and first official member (YC07); an Admin may also provision
@@ -304,6 +308,8 @@ public class StudentGroupService {
             }
         }
         deactivate(group, member);
+        events.publishEvent(DomainEvent.of(DomainEventType.MEMBER_REMOVED, groupId, member.getId(), actingUser.getId(),
+                member.getUser().getFullName()).withTarget(member.getUser().getId()));
     }
 
     /** Used when a leave request is approved: the permission checks happened in the caller. */
@@ -381,6 +387,8 @@ public class StudentGroupService {
         }
         group.setRosterStatus(RosterStatus.SUBMITTED);
         group.setRosterNote(null);
+        events.publishEvent(DomainEvent.of(DomainEventType.ROSTER_SUBMITTED, groupId, groupId, actingUser.getId(),
+                group.getGroupCode()));
         return group;
     }
 
@@ -400,6 +408,8 @@ public class StudentGroupService {
         }
         group.setRosterStatus(approved ? RosterStatus.APPROVED : RosterStatus.REJECTED);
         group.setRosterNote(note == null || note.isBlank() ? null : note.trim());
+        events.publishEvent(DomainEvent.of(DomainEventType.ROSTER_REVIEWED, groupId, groupId, actingUser.getId(),
+                approved ? "đã được duyệt" : "bị từ chối").withDetails(group.getRosterNote(), null));
         return group;
     }
 

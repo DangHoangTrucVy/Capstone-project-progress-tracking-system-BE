@@ -143,6 +143,55 @@ public class NotificationHandler {
                 addSupervisor(group, recipients);
                 yield "Kết quả " + event.label() + " của nhóm " + code;
             }
+            case JOIN_APPLICATION_RECEIVED -> {
+                addLeaders(members, recipients);
+                yield event.label() + " xin gia nhập nhóm " + code;
+            }
+            case JOIN_APPLICATION_REJECTED -> {
+                recipients.add(event.targetUserId());
+                yield "Nhóm " + code + " đã từ chối đơn xin gia nhập của bạn";
+            }
+            case JOIN_INVITE_RECEIVED -> {
+                recipients.add(event.targetUserId());
+                yield "Nhóm " + code + " mời bạn tham gia";
+            }
+            case JOIN_INVITE_DECLINED -> {
+                addLeaders(members, recipients);
+                yield event.label() + " đã từ chối lời mời vào nhóm " + code;
+            }
+            case MEMBER_JOINED -> {
+                addMembers(members, recipients);
+                yield event.label() + " đã gia nhập nhóm " + code;
+            }
+            case MEMBER_LEFT -> {
+                addMembers(members, recipients);
+                yield event.label() + " đã rời nhóm " + code;
+            }
+            case MEMBER_REMOVED -> {
+                addMembers(members, recipients);
+                recipients.add(event.targetUserId());
+                yield event.label() + " đã bị mời ra khỏi nhóm " + code;
+            }
+            case LEAVE_REQUESTED -> {
+                addLeaders(members, recipients);
+                yield event.label() + " xin rời nhóm " + code;
+            }
+            case LEAVE_DECIDED -> {
+                recipients.add(event.targetUserId());
+                yield "Yêu cầu rời nhóm " + code + " của bạn " + event.label();
+            }
+            case ROSTER_SUBMITTED -> {
+                addSupervisor(group, recipients);
+                yield "Nhóm " + code + " gửi danh sách thành viên chờ duyệt";
+            }
+            case ROSTER_REVIEWED -> {
+                addMembers(members, recipients);
+                yield "Danh sách thành viên nhóm " + code + " " + event.label();
+            }
+            case ROSTER_CHANGE_REPORTED -> {
+                addAdmins(recipients);
+                yield "Giảng viên hướng dẫn báo thay đổi nhân sự nhóm " + code + ": " + event.label();
+            }
         };
         recipients.remove(null);
         recipients.remove(event.actorId()); // nobody needs to be told about their own action
@@ -238,6 +287,17 @@ public class NotificationHandler {
 
     private void addMembers(List<GroupMember> members, Set<UUID> recipients) {
         members.stream().map(GroupMember::getUser).map(User::getId).forEach(recipients::add);
+    }
+
+    private void addLeaders(List<GroupMember> members, Set<UUID> recipients) {
+        members.stream().filter(GroupMember::isLeader).map(GroupMember::getUser).map(User::getId).forEach(recipients::add);
+    }
+
+    private void addAdmins(Set<UUID> recipients) {
+        userRepository.findByRole(Role.ADMIN, Pageable.unpaged()).stream()
+                .filter(u -> u.getStatus() == UserStatus.ACTIVE)
+                .map(User::getId)
+                .forEach(recipients::add);
     }
 
     private void addSupervisor(StudentGroup group, Set<UUID> recipients) {

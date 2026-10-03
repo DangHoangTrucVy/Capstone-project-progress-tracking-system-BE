@@ -424,12 +424,126 @@ class GroupFormationFlowIntegrationTest extends WorkflowTestSupport {
     void studentsOnlyReachTheirOwnFormationEndpoints() throws Exception {
         User student = user("scope-student", Role.STUDENT);
         getAs("/api/v1/users", student).andExpect(status().isForbidden());
-        getAs("/api/v1/notifications", student).andExpect(status().isForbidden());
+        getAs("/api/v1/notifications", student).andExpect(status().isOk());
         postJson("/api/v1/semesters/x/join-settings", student, Map.of()).andExpect(status().is4xxClientError());
         UUID group = createGroup(user("scope-leader", Role.STUDENT));
         getAs("/api/v1/groups?available=true", student).andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[?(@.id=='" + group + "')]").isNotEmpty());
         getAs("/api/v1/groups/" + group, student).andExpect(status().isForbidden());
         getAs("/api/v1/groups/" + group + "/invites", student).andExpect(status().isForbidden());
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode notifications(User as) throws Exception {
+        return body(getAs("/api/v1/notifications", as).andExpect(status().isOk()));
+    }
+
+    private boolean hasNotification(User as, String type) throws Exception {
+        for (var n : notifications(as).get("content")) {
+            if (type.equals(n.get("type").asText())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    void joinEventsNotifyTheRightPeople() throws Exception {
+        User leader = user("n-leader", Role.STUDENT);
+        UUID group = createGroup(leader);
+        User applicant = user("n-applicant", Role.STUDENT);
+        UUID app = apply(applicant, group);
+        assertThat(hasNotification(leader, "JOIN_APPLICATION_RECEIVED")).isTrue();
+        assertThat(hasNotification(applicant, "JOIN_APPLICATION_RECEIVED")).isFalse();
+
+        postJson("/api/v1/applications/" + app + "/approve", leader, Map.of()).andExpect(status().isOk());
+        assertThat(hasNotification(applicant, "JOIN_INVITE_RECEIVED")).isTrue();
+        UUID invite = joinRequests.findByStudentIdAndTypeOrderByCreatedAtDesc(applicant.getId(), JoinRequestType.INVITE)
+                .get(0).getId();
+        accept(applicant, invite);
+        assertThat(hasNotification(leader, "MEMBER_JOINED")).isTrue();
+
+        User declined = user("n-declined", Role.STUDENT);
+        UUID declinedInvite = invite(leader, group, declined);
+        postJson("/api/v1/invites/" + declinedInvite + "/decline", declined, Map.of()).andExpect(status().isOk());
+        assertThat(hasNotification(leader, "JOIN_INVITE_DECLINED")).isTrue();
+
+        User rejectedApplicant = user("n-rejected", Role.STUDENT);
+        UUID rejectedApp = apply(rejectedApplicant, group);
+        postJson("/api/v1/applications/" + rejectedApp + "/reject", leader, Map.of()).andExpect(status().isOk());
+        assertThat(hasNotification(rejectedApplicant, "JOIN_APPLICATION_REJECTED")).isTrue();
+    }
+
+    @Test
+    void leaveKickAndRosterEventsAreNotified() throws Exception {
+        User supervisor = user("e-sup", Role.INSTRUCTOR);
+        User admin = user("e-admin", Role.ADMIN);
+        User leader = user("e-leader", Role.STUDENT);
+        UUID group = createGroup(leader);
+        User leaver = user("e-leaver", Role.STUDENT);
+        User kicked = user("e-kicked", Role.STUDENT);
+        accept(leaver, invite(leader, group, leaver));
+        accept(kicked, invite(leader, group, kicked));
+
+        String leave = body(postJson("/api/v1/groups/" + group + "/leave-requests", leaver, Map.of("reason", "busy"))
+                .andExpect(status().isCreated())).get("id").asText();
+        assertThat(hasNotification(leader, "LEAVE_REQUESTED")).isTrue();
+        postJson("/api/v1/leave-requests/" + leave + "/approve", leader, Map.of()).andExpect(status().isOk());
+        assertThat(hasNotification(leaver, "LEAVE_DECIDED")).isTrue();
+
+        UUID kickedMember = groupMemberRepository.findByGroupIdAndUserId(group, kicked.getId()).orElseThrow().getId();
+        mockMvc.perform(delete("/api/v1/groups/" + group + "/members/" + kickedMember)
+                .header("Authorization", bearer(leader))).andExpect(status().isNoContent());
+        assertThat(hasNotification(kicked, "MEMBER_REMOVED")).isTrue();
+
+        fill(leader, group, 2);
+        mockMvc.perform(put("/api/v1/groups/" + group).header("Authorization", bearer(admin)).contentType("application/json")
+                .content("{\"supervisorId\":\"" + supervisor.getId() + "\",\"status\":\"FORMED\"}")).andExpect(status().isOk());
+        postJson("/api/v1/groups/" + group + "/roster/submit", leader, Map.of()).andExpect(status().isOk());
+        assertThat(hasNotification(supervisor, "ROSTER_SUBMITTED")).isTrue();
+        postJson("/api/v1/groups/" + group + "/roster/review", supervisor, Map.of("approved", true)).andExpect(status().isOk());
+        assertThat(hasNotification(leader, "ROSTER_REVIEWED")).isTrue();
+    }
+
+    @Test
+    void supervisorReportsRosterChangeAndAdminResolvesIt() throws Exception {
+        User supervisor = user("r-sup", Role.INSTRUCTOR);
+        User admin = user("r-admin", Role.ADMIN);
+        User leader = user("r-leader", Role.STUDENT);
+        UUID group = createGroup(leader);
+        mockMvc.perform(put("/api/v1/groups/" + group).header("Authorization", bearer(admin)).contentType("application/json")
+                .content("{\"supervisorId\":\"" + supervisor.getId() + "\",\"status\":\"FORMED\"}")).andExpect(status().isOk());
+        String url = "/api/v1/groups/" + group + "/roster-change-reports";
+        Map<String, Object> payload = Map.of("type", "LEADER_REPLACEMENT", "description", "Leader is unreachable");
+
+        postJson(url, user("r-other", Role.INSTRUCTOR), payload).andExpect(status().isForbidden());
+        postJson(url, leader, payload).andExpect(status().isForbidden());
+        postJson(url, supervisor, Map.of("type", "MEMBER_CHANGE", "description", " ")).andExpect(status().isBadRequest());
+        String id = body(postJson(url, supervisor, payload).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("OPEN"))).get("id").asText();
+        assertThat(hasNotification(admin, "ROSTER_CHANGE_REPORTED")).isTrue();
+
+        getAs("/api/v1/roster-change-reports?status=OPEN", supervisor).andExpect(status().isForbidden());
+        getAs("/api/v1/roster-change-reports?status=OPEN", admin).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id=='" + id + "')]").isNotEmpty());
+        getAs(url, supervisor).andExpect(jsonPath("$[0].id").value(id));
+        postJson("/api/v1/roster-change-reports/" + id + "/resolve", supervisor, Map.of()).andExpect(status().isForbidden());
+        postJson("/api/v1/roster-change-reports/" + id + "/resolve", admin, Map.of("note", "Replaced"))
+                .andExpect(jsonPath("$.status").value("RESOLVED")).andExpect(jsonPath("$.resolutionNote").value("Replaced"));
+        postJson("/api/v1/roster-change-reports/" + id + "/resolve", admin, Map.of()).andExpect(status().isConflict());
+    }
+
+    @Test
+    void recruitingProfileIsSeenByTheGroupOnlyWhileTheApplyIsOpen() throws Exception {
+        User leader = user("p-leader", Role.STUDENT);
+        UUID group = createGroup(leader);
+        User applicant = user("p-applicant", Role.STUDENT);
+        mockMvc.perform(put("/api/v1/me/profile").header("Authorization", bearer(applicant)).contentType("application/json")
+                .content("{\"bio\":\"Backend dev\",\"skills\":\"Java, Spring\"}")).andExpect(status().isOk());
+        UUID app = apply(applicant, group);
+        getAs("/api/v1/groups/" + group + "/applications", leader)
+                .andExpect(jsonPath("$[0].student.bio").value("Backend dev"))
+                .andExpect(jsonPath("$[0].student.skills").value("Java, Spring"));
+        postJson("/api/v1/applications/" + app + "/reject", leader, Map.of()).andExpect(status().isOk());
+        getAs("/api/v1/groups/" + group + "/applications", leader).andExpect(jsonPath("$[0].student").doesNotExist());
     }
 }

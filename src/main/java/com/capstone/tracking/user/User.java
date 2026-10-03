@@ -61,6 +61,13 @@ public class User extends BaseEntity implements UserDetails {
     @Builder.Default
     private boolean eligible = true;
 
+    /** Recruiting profile (YC22): only the group a student applies to sees it, and only while the Apply is open. */
+    @Column(length = 1000)
+    private String bio;
+
+    @Column(length = 500)
+    private String skills;
+
     @Column(length = 500)
     private String ineligibleReason;
 
