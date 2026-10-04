@@ -18,7 +18,21 @@ public enum DomainEventType {
     REVIEW_SCHEDULED(false),
     REVIEW_RESULT(true),
     DEFENSE_SCHEDULED(true),
-    DEFENSE_RESULT(true);
+    DEFENSE_RESULT(true),
+    JOIN_APPLICATION_RECEIVED(false),
+    JOIN_APPLICATION_REJECTED(false),
+    JOIN_INVITE_RECEIVED(false),
+    JOIN_INVITE_DECLINED(false),
+    MEMBER_JOINED(false),
+    MEMBER_LEFT(false),
+    MEMBER_REMOVED(false),
+    LEAVE_REQUESTED(false),
+    LEAVE_DECIDED(false),
+    ROSTER_SUBMITTED(false),
+    ROSTER_REVIEWED(false),
+    ROSTER_CHANGE_REPORTED(false),
+    /** Personal (no group): the student's capstone eligibility flag was set or lifted (YC03). */
+    ELIGIBILITY_CHANGED(false);
 
     private final boolean emailed;
 
