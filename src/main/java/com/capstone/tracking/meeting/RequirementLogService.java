@@ -3,18 +3,14 @@ package com.capstone.tracking.meeting;
 import com.capstone.tracking.audit.AuditAction;
 import com.capstone.tracking.audit.AuditService;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
-import com.capstone.tracking.group.GroupMemberRepository;
-import com.capstone.tracking.group.MemberStatus;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.meeting.dto.RequirementCreateRequest;
 import com.capstone.tracking.meeting.dto.RequirementUpdateRequest;
-import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +24,7 @@ public class RequirementLogService {
 
     private final RequirementLogRepository requirementLogRepository;
     private final MeetingSessionRepository meetingSessionRepository;
-    private final GroupMemberRepository groupMemberRepository;
+    private final MeetingWriteAccess writeAccess;
     private final UserService userService;
     private final AuditService auditService;
 
@@ -37,7 +33,7 @@ public class RequirementLogService {
         MeetingSession session = meetingSessionRepository.findById(sessionId)
                 .orElseThrow(() -> ResourceNotFoundException.of("MeetingSession", sessionId));
         StudentGroup group = session.getBooking().getGroup();
-        requireMembership(group, actingUser);
+        writeAccess.requireParticipant(session.getBooking(), actingUser);
 
         RequirementLog log = RequirementLog.builder()
                 .session(session)
@@ -57,7 +53,7 @@ public class RequirementLogService {
     @Transactional
     public RequirementLog update(UUID id, RequirementUpdateRequest request, User actingUser) {
         RequirementLog log = getById(id);
-        requireMembership(log.getGroup(), actingUser);
+        writeAccess.requireParticipant(log.getSession().getBooking(), actingUser);
 
         if (request.status() != null) {
             log.setStatus(request.status());
@@ -78,10 +74,4 @@ public class RequirementLogService {
         return requirementLogRepository.findBySessionId(sessionId, pageable);
     }
 
-    private void requireMembership(StudentGroup group, User actingUser) {
-        if ((actingUser.getRole() == Role.STUDENT || actingUser.getRole() == Role.GROUP_LEADER)
-                && !groupMemberRepository.existsByGroupIdAndUserIdAndStatus(group.getId(), actingUser.getId(), MemberStatus.ACTIVE)) {
-            throw new AccessDeniedException("You are not an active member of this group");
-        }
-    }
 }
