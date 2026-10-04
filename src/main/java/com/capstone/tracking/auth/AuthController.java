@@ -11,8 +11,12 @@ import com.capstone.tracking.user.dto.UserResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Arrays;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -21,6 +25,12 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+
+    @Value("${app.google.client-ids:}")
+    private String googleClientIds;
+
+    /** clientId is what the FE passes to Google Identity Services; the button is hidden when it is null. */
+    public record GoogleConfigResponse(boolean enabled, String clientId) {}
 
     @Operation(summary = "Register an account with email and password")
     @PostMapping("/register")
@@ -39,6 +49,14 @@ public class AuthController {
     @PostMapping("/google")
     public LoginResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
         return authService.googleLogin(request);
+    }
+
+    @Operation(summary = "Google sign-in settings for the FE button (OAuth client id)")
+    @GetMapping("/google/config")
+    public GoogleConfigResponse googleConfig() {
+        String clientId = Arrays.stream(googleClientIds.split(","))
+                .map(String::trim).filter(StringUtils::hasText).findFirst().orElse(null);
+        return new GoogleConfigResponse(clientId != null, clientId);
     }
 
     /** Options for the campus picker on the sign-in page. */

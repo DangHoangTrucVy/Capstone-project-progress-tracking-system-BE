@@ -29,7 +29,8 @@ public class OpenApiConfig {
 
     /** Matches SecurityConfig.PUBLIC_ENDPOINTS: these operations need no token. */
     private static final Set<String> PUBLIC_PATHS = Set.of(
-            "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/campuses");
+            "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/google/config",
+            "/api/v1/auth/campuses");
 
     /** Legacy aliases of the /artifacts endpoints; they still work but would list every operation twice. */
     private static final List<String> HIDDEN_PATH_PREFIXES = List.of(

@@ -41,6 +41,14 @@ class GoogleLoginIntegrationTest {
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
 
     @Test
+    void googleConfigIsPublicAndOffWithoutClientIds() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/google/config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.clientId").doesNotExist());
+    }
+
+    @Test
     void unknownSchoolEmailCannotSelfRegister() throws Exception {
         String email = "gg-new-" + suffix + "@fpt.edu.vn";
         googleSays(email);
