@@ -17,7 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * YC17: before the roster is Locked a member asks to leave and the Leader approves. After Locked the change goes
+ * YC17: before the roster is Locked, and within the semester's permitted period ({@link FormationWindow}), a member
+ * asks to leave and the Leader approves. After Locked the change goes
  * through the supervisor and an Admin instead (see {@link StudentGroupService#removeMember}). The Leader cannot leave
  * this way; an Admin replaces the Leader first (YC20).
  */
@@ -28,6 +29,7 @@ public class GroupLeaveService {
 
     private final MemberLeaveRequestRepository leaveRequests;
     private final StudentGroupService groups;
+    private final FormationWindow window;
     private final ApplicationEventPublisher events;
 
     @Transactional
@@ -41,6 +43,7 @@ public class GroupLeaveService {
             throw new BadRequestException("The leader cannot leave directly; ask an administrator to replace the leader");
         }
         groups.requireNotLocked(group);
+        window.requireOpen(group.getSemester());
         if (leaveRequests.findByGroupIdAndUserIdAndStatus(groupId, current.getId(), LeaveRequestStatus.PENDING).isPresent()) {
             throw new ConflictException("You already asked to leave this group");
         }
@@ -74,6 +77,7 @@ public class GroupLeaveService {
         groups.requireActiveLeader(group.getId(), leader);
         requirePending(request);
         groups.requireNotLocked(group);
+        window.requireOpen(group.getSemester());
         decide(request, LeaveRequestStatus.APPROVED, leader);
         groups.removeActiveMember(group.getId(), request.getUser().getId());
         events.publishEvent(DomainEvent.of(DomainEventType.LEAVE_DECIDED, group.getId(), request.getId(),

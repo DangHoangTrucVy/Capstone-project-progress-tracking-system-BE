@@ -56,14 +56,22 @@ public class NotificationHandler {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(DomainEvent event) {
-        Optional<StudentGroup> maybeGroup = studentGroupRepository.findById(event.groupId());
-        if (maybeGroup.isEmpty()) {
-            log.warn("Dropping {} {}: group {} no longer exists", event.type(), event.eventId(), event.groupId());
+        StudentGroup group = null;
+        String code = null;
+        List<GroupMember> members = List.of();
+        if (event.groupId() != null) {
+            Optional<StudentGroup> maybeGroup = studentGroupRepository.findById(event.groupId());
+            if (maybeGroup.isEmpty()) {
+                log.warn("Dropping {} {}: group {} no longer exists", event.type(), event.eventId(), event.groupId());
+                return;
+            }
+            group = maybeGroup.get();
+            code = group.getGroupCode();
+            members = groupMemberRepository.findByGroupIdAndStatus(group.getId(), MemberStatus.ACTIVE);
+        } else if (event.type() != DomainEventType.ELIGIBILITY_CHANGED) {
+            log.warn("Dropping {} {}: it needs a group", event.type(), event.eventId());
             return;
         }
-        StudentGroup group = maybeGroup.get();
-        String code = group.getGroupCode();
-        List<GroupMember> members = groupMemberRepository.findByGroupIdAndStatus(group.getId(), MemberStatus.ACTIVE);
 
         Set<UUID> recipients = new LinkedHashSet<>();
         String message = switch (event.type()) {
@@ -192,6 +200,11 @@ public class NotificationHandler {
                 addAdmins(recipients);
                 yield "Giảng viên hướng dẫn báo thay đổi nhân sự nhóm " + code + ": " + event.label();
             }
+            case ELIGIBILITY_CHANGED -> {
+                // YC03: the student is told about the flag and its reason (or that it was lifted).
+                recipients.add(event.targetUserId());
+                yield event.label();
+            }
         };
         recipients.remove(null);
         recipients.remove(event.actorId()); // nobody needs to be told about their own action
@@ -208,7 +221,7 @@ public class NotificationHandler {
                     .message(truncate(message, 500))
                     .details(event.details())
                     .deadline(event.deadline())
-                    .groupId(group.getId())
+                    .groupId(group == null ? null : group.getId())
                     .entityId(event.entityId())
                     .build()));
         }

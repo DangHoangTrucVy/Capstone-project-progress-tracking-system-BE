@@ -30,7 +30,9 @@ public enum DomainEventType {
     LEAVE_DECIDED(false),
     ROSTER_SUBMITTED(false),
     ROSTER_REVIEWED(false),
-    ROSTER_CHANGE_REPORTED(false);
+    ROSTER_CHANGE_REPORTED(false),
+    /** Personal (no group): the student's capstone eligibility flag was set or lifted (YC03). */
+    ELIGIBILITY_CHANGED(false);
 
     private final boolean emailed;
 

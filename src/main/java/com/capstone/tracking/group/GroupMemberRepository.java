@@ -25,6 +25,17 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, UUID> 
 
     boolean existsByUserIdAndStatus(UUID userId, MemberStatus status);
 
+    /**
+     * YC07 / YC13: "one official group" holds within one capstone round (semester). A student whose group of an earlier
+     * semester is still on record may form or join a group in a new semester.
+     */
+    @Query("select count(m) > 0 from GroupMember m where m.user.id = :userId "
+            + "and m.status = com.capstone.tracking.group.MemberStatus.ACTIVE and m.group.semester = :semester")
+    boolean existsActiveInSemester(@Param("userId") UUID userId, @Param("semester") String semester);
+
+    /** Whether the user still leads some group (any semester); decides whether their GROUP_LEADER role stays. */
+    boolean existsByUserIdAndIsLeaderTrueAndStatus(UUID userId, MemberStatus status);
+
     /** Whether the user is an active member of a group working on the given topic. */
     boolean existsByUserIdAndStatusAndGroup_Topic_Id(UUID userId, MemberStatus status, UUID topicId);
 

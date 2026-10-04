@@ -3,16 +3,24 @@ package com.capstone.tracking.eligibility;
 import com.capstone.tracking.common.exception.ApiException;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.group.GroupJoinRequestRepository;
+import com.capstone.tracking.notification.DomainEvent;
+import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
 import com.capstone.tracking.user.UserService;
 import com.capstone.tracking.user.UserStatus;
+import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -32,6 +40,7 @@ public class EligibilityService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final GroupJoinRequestRepository joinRequestRepository;
+    private final ApplicationEventPublisher events;
 
     public record Entry(String email, String fullName, boolean eligible, String reason) {}
 
@@ -106,6 +115,127 @@ public class EligibilityService {
         if (changed && !eligible) {
             joinRequestRepository.cancelAllPending(user.getId(), Instant.now());
         }
+        if (changed) {
+            // YC03: the student is told about the flag and the reason, or that it was lifted.
+            String label = eligible
+                    ? "Bạn đã được xác nhận đủ điều kiện làm Capstone"
+                    : "Bạn được xác định chưa đủ điều kiện làm Capstone"
+                            + (user.getIneligibleReason() == null ? "" : ": " + user.getIneligibleReason());
+            events.publishEvent(DomainEvent.of(DomainEventType.ELIGIBILITY_CHANGED, null, user.getId(), null, label)
+                    .withDetails(user.getIneligibleReason(), null).withTarget(user.getId()));
+        }
         return changed;
+    }
+
+    /**
+     * YC03: the training department's list as a UTF-8 CSV file (comma or semicolon separated). Header names,
+     * Vietnamese or English, any case: {@code email}, {@code ho_ten|full_name|name},
+     * {@code du_dieu_kien|eligible} (true/false, 1/0, có/không, x; blank = eligible), {@code ly_do|reason}.
+     */
+    @Transactional
+    public ImportResult importCsv(byte[] data) {
+        List<List<String>> rows = readCsv(new String(data, StandardCharsets.UTF_8).replace("\uFEFF", ""));
+        if (rows.isEmpty()) {
+            throw new BadRequestException("The file is empty");
+        }
+        Map<String, Integer> col = new HashMap<>();
+        List<String> header = rows.get(0);
+        for (int i = 0; i < header.size(); i++) {
+            String key = fold(header.get(i)).replace('_', ' ').trim();
+            switch (key) {
+                case "email", "e-mail", "mail" -> col.putIfAbsent("email", i);
+                case "ho ten", "ho va ten", "full name", "fullname", "name" -> col.putIfAbsent("name", i);
+                case "du dieu kien", "dieu kien", "eligible" -> col.putIfAbsent("eligible", i);
+                case "ly do", "reason" -> col.putIfAbsent("reason", i);
+                default -> { }
+            }
+        }
+        if (!col.containsKey("email")) {
+            throw new BadRequestException("The file needs an 'email' column");
+        }
+        List<Entry> entries = new ArrayList<>();
+        List<String> invalid = new ArrayList<>();
+        for (int r = 1; r < rows.size(); r++) {
+            List<String> row = rows.get(r);
+            if (row.stream().allMatch(String::isBlank)) {
+                continue;
+            }
+            String flag = cell(row, col.get("eligible"));
+            Boolean eligible = parseEligible(flag);
+            if (eligible == null) {
+                invalid.add("row " + (r + 1) + ": eligible value '" + flag + "'");
+                continue;
+            }
+            entries.add(new Entry(cell(row, col.get("email")), cell(row, col.get("name")), eligible,
+                    cell(row, col.get("reason"))));
+        }
+        ImportResult result = importList(entries);
+        invalid.addAll(0, result.invalid());
+        return new ImportResult(result.created(), result.updated(), result.flagged(), result.cleared(), invalid);
+    }
+
+    private static Boolean parseEligible(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return true;
+        }
+        return switch (fold(raw).trim()) {
+            case "true", "1", "yes", "y", "co", "x", "du", "dat" -> true;
+            case "false", "0", "no", "n", "khong", "chua du", "khong du" -> false;
+            default -> null;
+        };
+    }
+
+    private static String cell(List<String> row, Integer index) {
+        if (index == null || index >= row.size()) {
+            return null;
+        }
+        String v = row.get(index).trim();
+        return v.isEmpty() ? null : v;
+    }
+
+    private static String fold(String s) {
+        return Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}+", "")
+                .replace('đ', 'd').replace('Đ', 'D').toLowerCase(Locale.ROOT);
+    }
+
+    /** RFC 4180: quoted fields may hold separators, doubled quotes and line breaks. */
+    static List<List<String>> readCsv(String text) {
+        List<List<String>> rows = new ArrayList<>();
+        List<String> row = new ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean quoted = false;
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (quoted) {
+                if (ch == '"' && i + 1 < text.length() && text.charAt(i + 1) == '"') {
+                    field.append('"');
+                    i++;
+                } else if (ch == '"') {
+                    quoted = false;
+                } else {
+                    field.append(ch);
+                }
+            } else if (ch == '"') {
+                quoted = true;
+            } else if (ch == ',' || ch == ';') {
+                row.add(field.toString());
+                field.setLength(0);
+            } else if (ch == '\n' || ch == '\r') {
+                if (ch == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n') {
+                    i++;
+                }
+                row.add(field.toString());
+                field.setLength(0);
+                rows.add(row);
+                row = new ArrayList<>();
+            } else {
+                field.append(ch);
+            }
+        }
+        if (field.length() > 0 || !row.isEmpty()) {
+            row.add(field.toString());
+            rows.add(row);
+        }
+        return rows;
     }
 }

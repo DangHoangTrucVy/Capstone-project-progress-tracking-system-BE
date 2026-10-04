@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -39,10 +40,19 @@ public class GroupJoinController {
 
     private final GroupJoinService joinService;
     private final GroupLeaveService leaveService;
+    private final FormationWindow formationWindow;
 
     public record TtlRequest(@NotNull Integer ttlHours) {}
 
-    public record TtlResponse(String semester, int ttlHours) {}
+    /** @param formationDeadline end of the permitted period for students' own roster changes; null = none */
+    public record TtlResponse(String semester, int ttlHours, Instant formationDeadline) {}
+
+    /** @param deadline null removes the cut-off */
+    public record DeadlineRequest(Instant deadline) {}
+
+    /** What a student needs to know about the semester's formation rules. */
+    public record FormationWindowResponse(String semester, int requestTtlHours, Instant formationDeadline, boolean open,
+                                          int maxOpenApplications, int minMembers, int maxMembers) {}
 
     // ------------------------------------------------------------------ Apply (student side)
 
@@ -181,12 +191,33 @@ public class GroupJoinController {
     @GetMapping("/semesters/{semester}/join-settings")
     @PreAuthorize("hasRole('ADMIN')")
     public TtlResponse getTtl(@PathVariable String semester) {
-        return new TtlResponse(semester, joinService.ttlHours(semester));
+        return settings(semester);
     }
 
     @PutMapping("/semesters/{semester}/join-settings")
     @PreAuthorize("hasRole('ADMIN')")
     public TtlResponse setTtl(@PathVariable String semester, @Valid @RequestBody TtlRequest request) {
-        return new TtlResponse(semester, joinService.setTtlHours(semester, request.ttlHours()));
+        joinService.setTtlHours(semester, request.ttlHours());
+        return settings(semester);
+    }
+
+    /** YC17 / YC21: end of the permitted period in which students form, join and leave groups themselves. */
+    @PutMapping("/semesters/{semester}/formation-deadline")
+    @PreAuthorize("hasRole('ADMIN')")
+    public TtlResponse setFormationDeadline(@PathVariable String semester, @RequestBody DeadlineRequest request) {
+        formationWindow.setDeadline(semester, request.deadline());
+        return settings(semester);
+    }
+
+    @GetMapping("/me/formation-window")
+    public FormationWindowResponse formationWindow(@RequestParam String semester) {
+        Instant deadline = formationWindow.deadline(semester);
+        return new FormationWindowResponse(semester, formationWindow.ttlHours(semester), deadline,
+                deadline == null || Instant.now().isBefore(deadline), GroupJoinService.MAX_OPEN_APPLICATIONS,
+                StudentGroupService.MIN_MEMBERS, StudentGroupService.MAX_MEMBERS);
+    }
+
+    private TtlResponse settings(String semester) {
+        return new TtlResponse(semester, formationWindow.ttlHours(semester), formationWindow.deadline(semester));
     }
 }
