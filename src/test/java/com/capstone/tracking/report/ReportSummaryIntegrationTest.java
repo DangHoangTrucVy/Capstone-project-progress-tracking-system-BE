@@ -91,7 +91,12 @@ class ReportSummaryIntegrationTest {
     @Test
     void summaryAggregatesSessionsAndRequirements() throws Exception {
         String semester = "Fall2026Report";
-        int currentWeek = LocalDateTime.now(ZoneOffset.UTC).get(WeekFields.ISO.weekOfWeekBasedYear());
+        Instant now = Instant.now();
+        int currentWeek = isoWeek(now);
+        // Every timestamp below must fall in the current ISO week, whatever day the test runs on:
+        // a few hours back, or forward when the week has only just started.
+        Instant start1 = isoWeek(now.minus(3, ChronoUnit.HOURS)) == currentWeek
+                ? now.minus(3, ChronoUnit.HOURS) : now.plus(1, ChronoUnit.HOURS);
 
         // Two groups in the same semester — a group may hold only one active booking at a time,
         // so the two sessions being compared need separate groups.
@@ -102,7 +107,6 @@ class ReportSummaryIntegrationTest {
         String leaderToken = leaderTokenA;
 
         // Session 1: fully concluded within the current week.
-        Instant start1 = Instant.now().plus(2, ChronoUnit.DAYS);
         Instant end1 = start1.plus(30, ChronoUnit.MINUTES);
         String bookingId1 = book(groupA, leaderTokenA, start1);
         String sessionId1 = createSession(bookingId1, leaderTokenA);
@@ -114,9 +118,9 @@ class ReportSummaryIntegrationTest {
                 .andExpect(status().isOk());
         when(clock.instant()).thenAnswer(inv -> Instant.now());
 
-        // Session 2: booked for later this same week but never started -> counts toward the
+        // Session 2: booked in the same week but never started -> counts toward the
         // denominator (falls back to the slot's own start time) but not sessionsHeld.
-        String bookingId2 = book(groupB, leaderTokenB, Instant.now().plus(1, ChronoUnit.HOURS));
+        String bookingId2 = book(groupB, leaderTokenB, end1.plus(30, ChronoUnit.MINUTES));
         createSession(bookingId2, leaderTokenB);
 
         // One requirement left Open, one moved to Resolved.
@@ -152,10 +156,13 @@ class ReportSummaryIntegrationTest {
 
     // --- fixtures -------------------------------------------------------------------------------
 
-    private String book(StudentGroup group, String leaderToken, Instant start) throws Exception {
+    private String book(StudentGroup group, String leaderToken, Instant requested) throws Exception {
+        // Slots must be created in the future and booked 24h ahead: create and book it 2 days later,
+        // then move it to the requested time.
+        Instant created = requested.plus(2, ChronoUnit.DAYS);
         Map<String, Object> slotPayload = Map.of(
-                "startTime", start.toString(),
-                "endTime", start.plus(30, ChronoUnit.MINUTES).toString(),
+                "startTime", created.toString(),
+                "endTime", created.plus(30, ChronoUnit.MINUTES).toString(),
                 "durationMinutes", 30,
                 "capacity", 1,
                 "locationType", "ONLINE",
@@ -168,14 +175,7 @@ class ReportSummaryIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         String slotId = objectMapper.readTree(slotBody).get("id").asText();
-        // Slots must be booked 24h ahead: book while it is 2 days out, then move it to the requested time.
         ScheduleSlot slot = scheduleSlotRepository.findById(UUID.fromString(slotId)).orElseThrow();
-        Instant requested = slot.getStartTime();
-        if (requested.isBefore(Instant.now().plus(25, ChronoUnit.HOURS))) {
-            slot.setStartTime(Instant.now().plus(2, ChronoUnit.DAYS));
-            slot.setEndTime(slot.getStartTime().plus(30, ChronoUnit.MINUTES));
-            scheduleSlotRepository.saveAndFlush(slot);
-        }
 
         String bookingBody = mockMvc.perform(post("/api/v1/slots/" + slotId + "/book")
                         .header("Authorization", "Bearer " + leaderToken)
@@ -183,11 +183,9 @@ class ReportSummaryIntegrationTest {
                         .content(objectMapper.writeValueAsString(Map.of("groupId", group.getId()))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        if (!slot.getStartTime().equals(requested)) {
-            slot.setStartTime(requested);
-            slot.setEndTime(requested.plus(30, ChronoUnit.MINUTES));
-            scheduleSlotRepository.saveAndFlush(slot);
-        }
+        slot.setStartTime(requested);
+        slot.setEndTime(requested.plus(30, ChronoUnit.MINUTES));
+        scheduleSlotRepository.saveAndFlush(slot);
         return objectMapper.readTree(bookingBody).get("id").asText();
     }
 
@@ -213,6 +211,10 @@ class ReportSummaryIntegrationTest {
         groupMemberRepository.save(GroupMember.builder()
                 .group(group).user(leader).isLeader(true).joinedAt(Instant.now()).status(MemberStatus.ACTIVE).build());
         return leader;
+    }
+
+    private static int isoWeek(Instant instant) {
+        return LocalDateTime.ofInstant(instant, ZoneOffset.UTC).get(WeekFields.ISO.weekOfWeekBasedYear());
     }
 
     private User save(User user) {
