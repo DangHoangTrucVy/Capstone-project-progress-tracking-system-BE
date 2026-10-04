@@ -57,6 +57,7 @@ public class StudentGroupService {
     private final UserService userService;
     private final UserRepository userRepository;
     private final EligibilityService eligibilityService;
+    private final FormationWindow formationWindow;
     private final ApplicationEventPublisher events;
 
     /**
@@ -89,8 +90,10 @@ public class StudentGroupService {
             }
             leader = userRepository.lockById(creator.getId()).orElseThrow();
             eligibilityService.requireEligible(leader);
-            if (groupMemberRepository.existsByUserIdAndStatus(leader.getId(), MemberStatus.ACTIVE)) {
-                throw new ConflictException("You already belong to a group");
+            formationWindow.requireOpen(request.semester());
+            // YC07: one official group (hence at most one led group) per capstone round.
+            if (groupMemberRepository.existsActiveInSemester(leader.getId(), request.semester())) {
+                throw new ConflictException("You already belong to a group in semester " + request.semester());
             }
         }
 
@@ -214,8 +217,8 @@ public class StudentGroupService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public GroupMember enroll(StudentGroup group, User user, boolean leader, UUID acceptedRequestId) {
-        if (groupMemberRepository.existsByUserIdAndStatus(user.getId(), MemberStatus.ACTIVE)) {
-            throw new ConflictException("This student already belongs to an active group");
+        if (groupMemberRepository.existsActiveInSemester(user.getId(), group.getSemester())) {
+            throw new ConflictException("This student already belongs to an active group in semester " + group.getSemester());
         }
         if (user.getRole() != Role.STUDENT && user.getRole() != Role.GROUP_LEADER) {
             throw new BadRequestException("Only Student/Group Leader accounts can be added as group members");
@@ -240,7 +243,7 @@ public class StudentGroupService {
 
         invalidateRoster(group);
         joinRequestRepository.cancelOtherPending(user.getId(), acceptedRequestId == null ? NO_REQUEST : acceptedRequestId,
-                Instant.now());
+                group.getSemester(), Instant.now());
         return saved;
     }
 
@@ -326,9 +329,7 @@ public class StudentGroupService {
         if (member.isLeader()) {
             member.setLeader(false);
         }
-        if (member.getUser().getRole() == Role.GROUP_LEADER) {
-            member.getUser().setRole(Role.STUDENT);
-        }
+        demoteIfNoLongerLeading(member.getUser());
         for (MemberLeaveRequest pending : leaveRequestRepository.findByGroupIdAndUserIdAndStatusIn(
                 group.getId(), member.getUser().getId(), List.of(LeaveRequestStatus.PENDING))) {
             pending.setStatus(LeaveRequestStatus.WITHDRAWN);
@@ -349,9 +350,7 @@ public class StudentGroupService {
         for (GroupMember current : groupMemberRepository.findByGroupIdAndStatus(groupId, MemberStatus.ACTIVE)) {
             if (current.isLeader()) {
                 current.setLeader(false);
-                if (current.getUser().getRole() == Role.GROUP_LEADER) {
-                    current.getUser().setRole(Role.STUDENT);
-                }
+                demoteIfNoLongerLeading(current.getUser());
             }
         }
         next.setLeader(true);
@@ -411,6 +410,17 @@ public class StudentGroupService {
         events.publishEvent(DomainEvent.of(DomainEventType.ROSTER_REVIEWED, groupId, groupId, actingUser.getId(),
                 approved ? "đã được duyệt" : "bị từ chối").withDetails(group.getRosterNote(), null));
         return group;
+    }
+
+    /**
+     * The GROUP_LEADER role is global while leadership is per group: a student who still leads a group of another
+     * semester keeps the role.
+     */
+    private void demoteIfNoLongerLeading(User user) {
+        if (user.getRole() == Role.GROUP_LEADER
+                && !groupMemberRepository.existsByUserIdAndIsLeaderTrueAndStatus(user.getId(), MemberStatus.ACTIVE)) {
+            user.setRole(Role.STUDENT);
+        }
     }
 
     /** Any roster change makes an earlier submission/approval stale; the leader must submit again. */

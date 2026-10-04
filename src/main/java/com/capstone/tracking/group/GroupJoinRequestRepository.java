@@ -32,12 +32,17 @@ public interface GroupJoinRequestRepository extends JpaRepository<GroupJoinReque
     Optional<GroupJoinRequest> findPending(@Param("groupId") UUID groupId, @Param("studentId") UUID studentId,
                                            @Param("type") JoinRequestType type);
 
-    /** YC13: the student joined a group, so every other open Apply/Invite of theirs is void. */
+    /** YC13: the student joined a group, so every other open Apply/Invite of theirs in that semester is void. */
     @Modifying
     @Query("update GroupJoinRequest r set r.status = com.capstone.tracking.group.JoinRequestStatus.CANCELLED, "
             + "r.respondedAt = :now where r.student.id = :studentId and r.id <> :exceptId "
-            + "and r.status = com.capstone.tracking.group.JoinRequestStatus.PENDING")
-    int cancelOtherPending(@Param("studentId") UUID studentId, @Param("exceptId") UUID exceptId, @Param("now") Instant now);
+            + "and r.status = com.capstone.tracking.group.JoinRequestStatus.PENDING "
+            + "and r.group.id in (select g.id from StudentGroup g where g.semester = :semester)")
+    int cancelOtherPending(@Param("studentId") UUID studentId, @Param("exceptId") UUID exceptId,
+                           @Param("semester") String semester, @Param("now") Instant now);
+
+    /** The Invite a Leader sent by approving this Apply (YC10). */
+    List<GroupJoinRequest> findBySourceApplicationIdAndType(UUID sourceApplicationId, JoinRequestType type);
 
     @Modifying
     @Query("update GroupJoinRequest r set r.status = com.capstone.tracking.group.JoinRequestStatus.CANCELLED, "

@@ -7,14 +7,17 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /** YC03/YC04: capstone eligibility. Admin plays the training department. */
 @RestController
@@ -36,6 +39,13 @@ public class EligibilityController {
     @PreAuthorize("hasRole('ADMIN')")
     public EligibilityService.ImportResult importList(@Valid @RequestBody ImportRequest request) {
         return eligibilityService.importList(request.students());
+    }
+
+    /** YC03: the same import from the training department's CSV file (email, ho_ten, du_dieu_kien, ly_do). */
+    @PostMapping(value = "/import/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
+    public EligibilityService.ImportResult importFile(@RequestPart("file") MultipartFile file) throws IOException {
+        return eligibilityService.importCsv(file.getBytes());
     }
 
     @PutMapping("/{userId}")

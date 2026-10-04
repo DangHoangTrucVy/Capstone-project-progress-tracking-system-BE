@@ -52,7 +52,7 @@ public class GroupJoinService {
 
     private final GroupJoinRequestRepository requests;
     private final GroupApplicationVoteRepository votes;
-    private final SemesterJoinSettingsRepository settings;
+    private final FormationWindow window;
     private final GroupMemberRepository members;
     private final StudentGroupService groups;
     private final EligibilityService eligibility;
@@ -62,17 +62,12 @@ public class GroupJoinService {
     // ------------------------------------------------------------------ settings (YC14)
 
     public int ttlHours(String semester) {
-        return settings.findById(semester).map(SemesterJoinSettings::getTtlHours)
-                .orElse(SemesterJoinSettings.DEFAULT_TTL_HOURS);
+        return window.ttlHours(semester);
     }
 
     @Transactional
     public int setTtlHours(String semester, int hours) {
-        if (hours < 1) {
-            throw new BadRequestException("The request lifetime must be at least 1 hour");
-        }
-        settings.save(new SemesterJoinSettings(semester, hours));
-        return hours;
+        return window.setTtlHours(semester, hours);
     }
 
     /** Writes down requests whose deadline has passed; effective status is also computed on read. */
@@ -93,9 +88,10 @@ public class GroupJoinService {
         User student = users.lockById(current.getId()).orElseThrow();
         requireStudent(student);
         eligibility.requireEligible(student);
-        requireNoGroup(student, "You already belong to a group");
 
         StudentGroup group = groups.getById(groupId);
+        window.requireOpen(group.getSemester());
+        requireNoGroup(student, group.getSemester(), "You already belong to a group");
         groups.requireRecruiting(group);
         requireRoom(group);
 
@@ -135,11 +131,12 @@ public class GroupJoinService {
         StudentGroup group = groups.lockById(app.getGroup().getId());
         groups.requireActiveLeader(group.getId(), leader);
         requirePending(app);
+        window.requireOpen(group.getSemester());
         groups.requireRecruiting(group);
         requireRoom(group);
         User student = app.getStudent();
         eligibility.requireEligible(student);
-        requireNoGroup(student, "The applicant already belongs to a group");
+        requireNoGroup(student, group.getSemester(), "The applicant already belongs to a group");
 
         Instant now = Instant.now();
         GroupJoinRequest invite = requests.findPending(group.getId(), student.getId(), JoinRequestType.INVITE)
@@ -171,13 +168,14 @@ public class GroupJoinService {
                                        String message) {
         StudentGroup group = groups.lockById(groupId);
         groups.requireActiveLeader(groupId, leader);
+        window.requireOpen(group.getSemester());
         groups.requireRecruiting(group);
         requireRoom(group);
 
         User student = groups.resolveStudent(userId, email, identifier);
         requireStudent(student);
         eligibility.requireEligible(student);
-        requireNoGroup(student, "This student already belongs to a group");
+        requireNoGroup(student, group.getSemester(), "This student already belongs to a group");
 
         Instant now = Instant.now();
         clearExpiredDuplicate(groupId, student.getId(), JoinRequestType.INVITE, now,
@@ -196,6 +194,7 @@ public class GroupJoinService {
         requirePending(invite);
         eligibility.requireEligible(student);
         StudentGroup group = groups.lockById(invite.getGroup().getId());
+        window.requireOpen(group.getSemester());
         groups.requireRecruiting(group);
         // Capacity and "one official group" are checked again inside enroll, under both locks (YC15).
         invite.setStatus(JoinRequestStatus.ACCEPTED);
@@ -275,8 +274,11 @@ public class GroupJoinService {
         // YC22: Leader and members see the applicant's profile only while the Apply is alive; after it is rejected,
         // withdrawn or expired that right ends. An Invite's target was chosen by the leader, so it stays visible.
         boolean showStudent = applicant || admin
-                || (groupMember && (r.getType() == JoinRequestType.INVITE
-                        || VISIBLE_TO_GROUP.contains(r.effectiveStatus(now))));
+                || (groupMember && (r.getType() == JoinRequestType.INVITE || applicationAlive(r, now)));
+        // The private part of the profile (bio, skills) is for recruiting: on an Invite it is shown while the
+        // Invite is open or accepted; once declined, revoked or expired only the identity the leader typed remains.
+        boolean showPrivate = applicant || admin
+                || (r.getType() == JoinRequestType.INVITE ? VISIBLE_TO_GROUP.contains(r.effectiveStatus(now)) : showStudent);
         Integer support = null;
         Integer oppose = null;
         if ((groupMember || admin) && r.getType() == JoinRequestType.APPLY) {
@@ -284,7 +286,25 @@ public class GroupJoinService {
             support = (int) tally.stream().filter(v -> v.getVote() == VoteType.SUPPORT).count();
             oppose = tally.size() - support;
         }
-        return JoinRequestResponse.from(r, now, showStudent, support, oppose);
+        return JoinRequestResponse.from(r, now, showStudent, showPrivate, support, oppose);
+    }
+
+    /**
+     * YC22: the group may see an applicant while the Apply is pending. An approved Apply stays visible only as long as
+     * the Invite it produced is still open or was accepted; if that Invite is declined, revoked or expires, the right
+     * that came from the Apply ends too.
+     */
+    private boolean applicationAlive(GroupJoinRequest app, Instant now) {
+        JoinRequestStatus status = app.effectiveStatus(now);
+        if (status == JoinRequestStatus.PENDING) {
+            return true;
+        }
+        if (status != JoinRequestStatus.APPROVED) {
+            return false;
+        }
+        return requests.findBySourceApplicationIdAndType(app.getId(), JoinRequestType.INVITE).stream()
+                .map(i -> i.effectiveStatus(now))
+                .anyMatch(st -> st == JoinRequestStatus.PENDING || st == JoinRequestStatus.ACCEPTED);
     }
 
     // ------------------------------------------------------------------ helpers
@@ -342,8 +362,9 @@ public class GroupJoinService {
         }
     }
 
-    private void requireNoGroup(User student, String conflict) {
-        if (members.existsByUserIdAndStatus(student.getId(), MemberStatus.ACTIVE)) {
+    /** YC13: one official group per capstone round; while in one, no new Apply and no new Invite. */
+    private void requireNoGroup(User student, String semester, String conflict) {
+        if (members.existsActiveInSemester(student.getId(), semester)) {
             throw new ConflictException(conflict);
         }
     }

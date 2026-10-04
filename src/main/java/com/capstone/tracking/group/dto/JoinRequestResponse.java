@@ -30,15 +30,20 @@ public record JoinRequestResponse(
 ) {
     public record Profile(UUID userId, String fullName, String email, Campus campus, String avatarUrl, String bio,
                    String skills) {
-        static Profile of(User u) {
-            return new Profile(u.getId(), u.getFullName(), u.getEmail(), u.getCampus(), u.getAvatarUrl(), u.getBio(),
-                    u.getSkills());
+        static Profile of(User u, boolean withPrivate) {
+            return new Profile(u.getId(), u.getFullName(), u.getEmail(), u.getCampus(), u.getAvatarUrl(),
+                    withPrivate ? u.getBio() : null, withPrivate ? u.getSkills() : null);
         }
     }
 
-    public static JoinRequestResponse from(GroupJoinRequest r, Instant now, boolean showStudent, Integer support, Integer oppose) {
+    /**
+     * @param showStudent  whether the viewer may see who the student is
+     * @param showPrivate  whether they may also see the private recruiting part (bio, skills), YC22
+     */
+    public static JoinRequestResponse from(GroupJoinRequest r, Instant now, boolean showStudent, boolean showPrivate,
+                                           Integer support, Integer oppose) {
         return new JoinRequestResponse(r.getId(), r.getType(), r.effectiveStatus(now), r.getGroup().getId(),
                 r.getGroup().getGroupCode(), r.getMessage(), r.getSourceApplicationId(), r.getExpiresAt(),
-                r.getRespondedAt(), r.getCreatedAt(), showStudent ? Profile.of(r.getStudent()) : null, support, oppose);
+                r.getRespondedAt(), r.getCreatedAt(), showStudent ? Profile.of(r.getStudent(), showPrivate) : null, support, oppose);
     }
 }
