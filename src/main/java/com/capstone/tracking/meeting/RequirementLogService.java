@@ -2,6 +2,7 @@ package com.capstone.tracking.meeting;
 
 import com.capstone.tracking.audit.AuditAction;
 import com.capstone.tracking.audit.AuditService;
+import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.meeting.dto.RequirementCreateRequest;
@@ -37,6 +38,11 @@ public class RequirementLogService {
         StudentGroup group = session.getBooking().getGroup();
         writeAccess.requireParticipant(session.getBooking(), actingUser);
 
+        if (session.getSessionStatus() == SessionStatus.CANCELLED
+                || session.getBooking().getBookingStatus() == com.capstone.tracking.scheduling.BookingStatus.CANCELLED) {
+            throw new BadRequestException("Cannot create requirement logs for a cancelled meeting session");
+        }
+
         RequirementLog log = RequirementLog.builder()
                 .session(session)
                 .group(group)
@@ -56,6 +62,11 @@ public class RequirementLogService {
     public RequirementLog update(UUID id, RequirementUpdateRequest request, User actingUser) {
         RequirementLog log = getById(id);
         writeAccess.requireParticipant(log.getSession().getBooking(), actingUser);
+
+        if (log.getSession().getSessionStatus() == SessionStatus.CANCELLED
+                || log.getSession().getBooking().getBookingStatus() == com.capstone.tracking.scheduling.BookingStatus.CANCELLED) {
+            throw new BadRequestException("Cannot update requirement logs for a cancelled meeting session");
+        }
 
         if (request.status() != null) {
             log.setStatus(request.status());

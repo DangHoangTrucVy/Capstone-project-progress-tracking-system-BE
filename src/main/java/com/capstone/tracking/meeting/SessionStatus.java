@@ -4,5 +4,6 @@ package com.capstone.tracking.meeting;
 public enum SessionStatus {
     SCHEDULED,
     IN_PROGRESS,
-    CONCLUDED
+    CONCLUDED,
+    CANCELLED
 }

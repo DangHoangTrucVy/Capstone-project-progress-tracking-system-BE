@@ -34,7 +34,7 @@ public class MeetingSessionService {
 
     @Transactional
     public MeetingSession create(UUID bookingId, User actingUser) {
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingRepository.lockById(bookingId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
         writeAccess.requireParticipant(booking, actingUser);
         if (booking.getBookingStatus() != BookingStatus.CONFIRMED) {
@@ -58,11 +58,17 @@ public class MeetingSessionService {
     public MeetingSession start(UUID sessionId, User actingUser) {
         MeetingSession session = getById(sessionId);
         writeAccess.requireParticipant(session.getBooking(), actingUser);
+
+        Booking booking = bookingRepository.lockById(session.getBooking().getId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Booking", session.getBooking().getId()));
+        if (booking.getBookingStatus() != BookingStatus.CONFIRMED) {
+            throw new BadRequestException("Cannot start meeting for a booking that is " + booking.getBookingStatus());
+        }
         if (session.getSessionStatus() != SessionStatus.SCHEDULED) {
             throw new BadRequestException("Only a Scheduled session can be started");
         }
         Instant now = clock.instant();
-        Instant slotStart = session.getBooking().getSlot().getStartTime();
+        Instant slotStart = booking.getSlot().getStartTime();
         if (now.isBefore(slotStart)) {
             throw new BadRequestException("Cannot start meeting before its scheduled start time (" + slotStart + ")");
         }
@@ -77,11 +83,17 @@ public class MeetingSessionService {
     public MeetingSession end(UUID sessionId, EndSessionRequest request, User actingUser) {
         MeetingSession session = getById(sessionId);
         writeAccess.requireParticipant(session.getBooking(), actingUser);
+
+        Booking booking = bookingRepository.lockById(session.getBooking().getId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Booking", session.getBooking().getId()));
+        if (booking.getBookingStatus() != BookingStatus.CONFIRMED) {
+            throw new BadRequestException("Cannot conclude meeting for a booking that is " + booking.getBookingStatus());
+        }
         if (session.getSessionStatus() != SessionStatus.IN_PROGRESS) {
             throw new BadRequestException("Only an In Progress session can be ended");
         }
         Instant now = clock.instant();
-        Instant slotEnd = session.getBooking().getSlot().getEndTime();
+        Instant slotEnd = booking.getSlot().getEndTime();
         if (now.isBefore(slotEnd)) {
             throw new BadRequestException("Cannot conclude meeting before its scheduled end time (" + slotEnd + ")");
         }
@@ -91,7 +103,7 @@ public class MeetingSessionService {
         session.setSessionStatus(SessionStatus.CONCLUDED);
         session.setEndedAt(now);
         // The meeting happened: frees the group to book its next slot (BookingService.book, bước 3.2).
-        session.getBooking().setBookingStatus(BookingStatus.ATTENDED);
+        booking.setBookingStatus(BookingStatus.ATTENDED);
         auditService.record("MeetingSession", session.getId(), AuditAction.UPDATE, actingUser,
                 Map.of("sessionStatus", SessionStatus.CONCLUDED));
         return session;

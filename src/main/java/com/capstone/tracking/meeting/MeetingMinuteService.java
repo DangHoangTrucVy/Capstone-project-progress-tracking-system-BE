@@ -47,6 +47,11 @@ public class MeetingMinuteService {
                 .orElseThrow(() -> ResourceNotFoundException.of("MeetingSession", sessionId));
         writeAccess.requireParticipant(session.getBooking(), actingUser);
 
+        if (session.getSessionStatus() == SessionStatus.CANCELLED
+                || session.getBooking().getBookingStatus() == com.capstone.tracking.scheduling.BookingStatus.CANCELLED) {
+            throw new BadRequestException("Cannot generate minutes for a cancelled meeting session");
+        }
+
         String notes = request != null && request.notes() != null && !request.notes().isBlank()
                 ? request.notes()
                 : session.getRawNotes();
