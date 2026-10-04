@@ -20,6 +20,7 @@ import com.capstone.tracking.review.PanelSelection;
 import com.capstone.tracking.review.ReviewService;
 import com.capstone.tracking.review.ReviewSession;
 import com.capstone.tracking.review.ReviewSessionRepository;
+import com.capstone.tracking.scheduling.BookingRepository;
 import com.capstone.tracking.scheduling.ScheduleGuard;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
@@ -61,6 +62,7 @@ public class DefenseService {
     private final ApplicationEventPublisher events;
     private final ScheduleGuard scheduleGuard;
     private final ReviewSessionRepository reviewSessions;
+    private final BookingRepository bookingRepository;
     private final Clock clock;
 
     @Value("${app.defense.max-parallel:5}")
@@ -167,8 +169,9 @@ public class DefenseService {
             throw new ConflictException("Group " + group.getGroupCode() + " already has defense attempt " + attempt + " scheduled");
         }
         Instant end = scheduledAt.plus(Duration.ofMinutes(durationMinutes));
+        Instant earliestStart = scheduledAt.minus(Duration.ofHours(24));
         List<DefenseSession> overlapping = sessionRepository
-                .findByScheduledAtLessThan(end).stream()
+                .findByScheduledAtGreaterThanEqualAndScheduledAtLessThan(earliestStart, end).stream()
                 .filter(s -> s.endsAt().isAfter(scheduledAt))
                 .toList();
         Set<UUID> committeeIds = new HashSet<>(committee.ids());
@@ -193,13 +196,17 @@ public class DefenseService {
                 throw new ConflictException("At most " + maxParallel + " defenses may run at the same time; pick another time");
             }
         }
-        for (var other : reviewSessions.findByScheduledAtLessThan(end)) {
+        for (var other : reviewSessions.findByScheduledAtGreaterThanEqualAndScheduledAtLessThan(earliestStart, end)) {
             if (other.endsAt().isAfter(scheduledAt)
                     && (other.getLocation().equalsIgnoreCase(room.trim())
                         || other.getGroup().getId().equals(group.getId())
                         || other.getPanel().stream().anyMatch(m -> committeeIds.contains(m.getReviewer().getId())))) {
                 throw new ConflictException("Room, group or committee member already has a review at this time");
             }
+        }
+        if (bookingRepository.hasActiveOverlappingBookingForGroup(group.getId(), scheduledAt, end)
+                || bookingRepository.hasActiveOverlappingBookingForInstructors(committeeIds, scheduledAt, end)) {
+            throw new ConflictException("Group or committee member already has a consultation booking at this time");
         }
 
         DefenseSession session = DefenseSession.builder()

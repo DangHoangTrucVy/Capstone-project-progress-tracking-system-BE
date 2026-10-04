@@ -7,6 +7,8 @@ import com.capstone.tracking.config.CacheConfig;
 import com.capstone.tracking.scheduling.dto.SlotCreateRequest;
 import com.capstone.tracking.scheduling.dto.SlotPage;
 import com.capstone.tracking.scheduling.dto.SlotResponse;
+import com.capstone.tracking.defense.DefenseSessionRepository;
+import com.capstone.tracking.review.ReviewSessionRepository;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
@@ -31,10 +33,14 @@ public class ScheduleSlotService {
 
     private final ScheduleSlotRepository scheduleSlotRepository;
     private final UserRepository users;
+    private final ScheduleGuard scheduleGuard;
+    private final ReviewSessionRepository reviewSessionRepository;
+    private final DefenseSessionRepository defenseSessionRepository;
 
     @Transactional
     @CacheEvict(cacheNames = CacheConfig.SLOT_SEARCH, allEntries = true)
     public ScheduleSlot create(SlotCreateRequest request, User instructor) {
+        scheduleGuard.acquire();
         users.lockById(instructor.getId()).orElseThrow(() -> ResourceNotFoundException.of("User", instructor.getId()));
         if (instructor.getRole() != Role.INSTRUCTOR && instructor.getRole() != Role.ADMIN) {
             throw new BadRequestException("Only Instructor/Admin accounts can publish assessment slots");
@@ -44,6 +50,12 @@ public class ScheduleSlotService {
         }
         if (!scheduleSlotRepository.findOverlapping(instructor.getId(), request.startTime(), request.endTime()).isEmpty()) {
             throw new ConflictException("This time window overlaps an existing slot for this instructor");
+        }
+        if (reviewSessionRepository.hasOverlappingForReviewer(instructor.getId(), request.startTime(), request.endTime())) {
+            throw new ConflictException("Instructor already has a review session scheduled at this time");
+        }
+        if (defenseSessionRepository.hasOverlappingForCommitteeMember(instructor.getId(), request.startTime(), request.endTime())) {
+            throw new ConflictException("Instructor already has a defense session scheduled at this time");
         }
 
         ScheduleSlot slot = ScheduleSlot.builder()
