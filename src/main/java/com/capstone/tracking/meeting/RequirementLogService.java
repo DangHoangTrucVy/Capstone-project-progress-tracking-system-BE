@@ -20,11 +20,13 @@ import java.util.UUID;
 /** Sprint 4 — API-007: requirements logged during a meeting session. */
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class RequirementLogService {
 
     private final RequirementLogRepository requirementLogRepository;
     private final MeetingSessionRepository meetingSessionRepository;
     private final MeetingWriteAccess writeAccess;
+    private final MeetingReadAccess readAccess;
     private final UserService userService;
     private final AuditService auditService;
 
@@ -72,6 +74,13 @@ public class RequirementLogService {
 
     public Page<RequirementLog> listBySession(UUID sessionId, Pageable pageable) {
         return requirementLogRepository.findBySessionId(sessionId, pageable);
+    }
+
+    public Page<RequirementLog> listBySession(UUID sessionId, User currentUser, Pageable pageable) {
+        MeetingSession session = meetingSessionRepository.findById(sessionId)
+                .orElseThrow(() -> ResourceNotFoundException.of("MeetingSession", sessionId));
+        readAccess.requireCanRead(session, currentUser);
+        return listBySession(sessionId, pageable);
     }
 
 }

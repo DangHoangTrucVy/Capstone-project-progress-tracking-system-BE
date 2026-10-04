@@ -31,12 +31,14 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class MeetingMinuteService {
 
     private final MeetingMinuteRepository meetingMinuteRepository;
     private final MeetingSessionRepository meetingSessionRepository;
     private final RequirementLogRepository requirementLogRepository;
     private final MeetingWriteAccess writeAccess;
+    private final MeetingReadAccess readAccess;
     private final AuditService auditService;
 
     @Transactional
@@ -126,6 +128,13 @@ public class MeetingMinuteService {
     public MeetingMinute getBySession(UUID sessionId) {
         return meetingMinuteRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> ResourceNotFoundException.of("MeetingMinute for session", sessionId));
+    }
+
+    public MeetingMinute getBySession(UUID sessionId, User currentUser) {
+        MeetingSession session = meetingSessionRepository.findById(sessionId)
+                .orElseThrow(() -> ResourceNotFoundException.of("MeetingSession", sessionId));
+        readAccess.requireCanRead(session, currentUser);
+        return getBySession(sessionId);
     }
 
 }
