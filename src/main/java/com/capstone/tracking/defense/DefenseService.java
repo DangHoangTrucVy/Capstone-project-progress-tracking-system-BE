@@ -24,6 +24,7 @@ import com.capstone.tracking.scheduling.ScheduleGuard;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserService;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -60,6 +61,7 @@ public class DefenseService {
     private final ApplicationEventPublisher events;
     private final ScheduleGuard scheduleGuard;
     private final ReviewSessionRepository reviewSessions;
+    private final Clock clock;
 
     @Value("${app.defense.max-parallel:5}")
     private int maxParallel;
@@ -104,12 +106,16 @@ public class DefenseService {
         if (session.getStatus() != DefenseStatus.SCHEDULED) {
             throw new ConflictException("The result of this defense is already recorded");
         }
+        Instant now = clock.instant();
+        if (now.isBefore(session.getScheduledAt())) {
+            throw new BadRequestException("Cannot record defense result before the session's scheduled start time (" + session.getScheduledAt() + ")");
+        }
         boolean passed = request.passed();
         session.setStatus(passed ? DefenseStatus.PASSED : DefenseStatus.FAILED);
         session.setScore(request.score());
         session.setFeedback(request.feedback());
         session.setGradedBy(actingUser);
-        session.setGradedAt(Instant.now());
+        session.setGradedAt(now);
 
         StudentGroup group = session.getGroup();
         String outcome;
@@ -237,7 +243,7 @@ public class DefenseService {
         boolean failedFirst = sessionRepository.findByGroupIdAndAttempt(group.getId(), 1)
                 .map(d -> d.getStatus() == DefenseStatus.FAILED)
                 .orElse(false);
-        if (!failedFirst && !council.sendsToDefense2(Instant.now())) {
+        if (!failedFirst && !council.sendsToDefense2(clock.instant())) {
             throw new BadRequestException("Group " + group.getGroupCode()
                     + " goes to Defense 2 only after failing Defense 1 or being deferred by the closed council");
         }
