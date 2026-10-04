@@ -25,7 +25,9 @@ public interface StudentGroupRepository extends JpaRepository<StudentGroup, UUID
 
     Page<StudentGroup> findByTopicId(UUID topicId, Pageable pageable);
 
-    @Query("select g from StudentGroup g where "
-            + "(select count(m) from GroupMember m where m.group = g and m.status = :active) < :max")
+    /** Groups a student could still join: room left, not locked and still running. */
+    @Query("select g from StudentGroup g where g.locked = false "
+            + "and g.status in (com.capstone.tracking.group.GroupStatus.FORMED, com.capstone.tracking.group.GroupStatus.ACTIVE) "
+            + "and (select count(m) from GroupMember m where m.group = g and m.status = :active) < :max")
     Page<StudentGroup> findNotFull(@Param("active") MemberStatus active, @Param("max") long max, Pageable pageable);
 }

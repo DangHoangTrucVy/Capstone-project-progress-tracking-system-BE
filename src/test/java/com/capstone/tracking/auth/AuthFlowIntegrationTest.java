@@ -33,9 +33,12 @@ class AuthFlowIntegrationTest extends WorkflowTestSupport {
         User student = user("login-student", Role.STUDENT);
         student.setPasswordHash(encoder.encode("Password123"));
         userRepository.save(student);
-        postJson("/api/v1/auth/login", student, Map.of("email", student.getEmail(), "password", "Password123"))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("LEADER_LOGIN_REQUIRED"));
-        getAs("/api/v1/auth/me", student).andExpect(status().isForbidden());
+        // YC02: students sign in too; being eligible for the capstone is a separate check.
+        var studentLogin = body(postJson("/api/v1/auth/login", student,
+                Map.of("email", student.getEmail(), "password", "Password123"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.user.role").value("STUDENT")));
+        getAs("/api/v1/auth/me", student).andExpect(status().isOk()).andExpect(jsonPath("$.eligible").value(true));
+        getAs("/api/v1/users", student).andExpect(status().isForbidden());
     }
 
     @Test

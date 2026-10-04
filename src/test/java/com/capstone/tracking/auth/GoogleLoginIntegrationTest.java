@@ -50,13 +50,15 @@ class GoogleLoginIntegrationTest {
     }
 
     @Test
-    void studentCannotSignInEvenWithValidGoogleIdentity() throws Exception {
+    void studentSignsInEvenWhenNotEligible() throws Exception {
         String email = "gg-student-" + suffix + "@fpt.edu.vn";
         userRepository.save(User.builder().email(email).fullName("Member").role(Role.STUDENT)
-                .status(UserStatus.ACTIVE).build());
+                .eligible(false).ineligibleReason("Chua du tin chi").status(UserStatus.ACTIVE).build());
         googleSays(email);
-        login(Campus.HA_NOI).andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.errorCode").value("LEADER_LOGIN_REQUIRED"));
+        login(Campus.HA_NOI).andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role").value("STUDENT"))
+                .andExpect(jsonPath("$.user.eligible").value(false))
+                .andExpect(jsonPath("$.user.ineligibleReason").value("Chua du tin chi"));
     }
 
     @Test
