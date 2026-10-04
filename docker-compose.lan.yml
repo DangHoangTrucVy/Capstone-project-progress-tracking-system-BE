@@ -1,0 +1,58 @@
+# Self-host on this PC, reachable by other machines on the same LAN/Wi-Fi via http://<PC-IP>:8080
+# Easiest: run .\deploy-lan.ps1 (detects the IP, creates .env.lan, opens the firewall, starts the stack).
+# Manual: docker compose -p capstone-lan -f docker-compose.lan.yml --env-file .env.lan up -d --build
+name: capstone-lan
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-capstone_tracking}
+      POSTGRES_USER: ${POSTGRES_USER:-capstone_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Missing POSTGRES_PASSWORD - did you pass --env-file .env.lan?}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No "ports": the database is reachable only from the app container.
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-capstone_tracking}
+      DB_USERNAME: ${POSTGRES_USER:-capstone_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Missing POSTGRES_PASSWORD in .env.lan}
+      JWT_SECRET: ${JWT_SECRET:?Missing JWT_SECRET in .env.lan}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Missing CORS_ALLOWED_ORIGINS in .env.lan}
+      ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-fpt.edu.vn}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      PASSWORD_LOGIN_ENABLED: ${PASSWORD_LOGIN_ENABLED:-true}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-capstone-tracking@fpt.edu.vn}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      STORAGE_TYPE: local
+      STORAGE_LOCAL_DIR: /app/uploads
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx1g
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      # All interfaces, so other machines on the LAN can reach it at http://<PC-IP>:APP_PORT
+      - "0.0.0.0:${APP_PORT:-8080}:8080"
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  pgdata:
+  uploads:

@@ -1,0 +1,15 @@
+# Free public HTTPS URL (https://<random>.trycloudflare.com) via Cloudflare Quick Tunnel.
+# Layered on top of docker-compose.lan.yml - run with .\tunnel-up.ps1
+# The URL changes every time the cloudflared container restarts.
+services:
+  app:
+    environment:
+      # Behind Cloudflare's HTTPS: lets Swagger and redirects build https:// URLs.
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://app:8080
+    depends_on:
+      - app

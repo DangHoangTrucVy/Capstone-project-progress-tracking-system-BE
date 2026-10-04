@@ -29,6 +29,8 @@ target/
 # Env
 .env
 .env.prod
+.env.lan
+tunnel-url.txt
 *.log
 
 # Maven
@@ -453,3 +455,4 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+start-all.log
