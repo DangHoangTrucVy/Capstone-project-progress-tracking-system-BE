@@ -1,6 +1,7 @@
 package com.capstone.tracking.group.dto;
 
 import com.capstone.tracking.group.GroupStatus;
+import com.capstone.tracking.group.RosterStatus;
 import com.capstone.tracking.group.StudentGroup;
 import com.capstone.tracking.group.StudentGroupService;
 
@@ -18,6 +19,12 @@ public record StudentGroupResponse(
         GroupStatus status,
         int memberCount,
         boolean full,
+        /** YC06: a group is valid with 3-5 official members, Leader included. */
+        int minMembers,
+        boolean meetsMinimum,
+        boolean locked,
+        RosterStatus rosterStatus,
+        String rosterNote,
         List<GroupMemberResponse> members
 ) {
     public static StudentGroupResponse from(StudentGroup g, long memberCount) {
@@ -31,6 +38,8 @@ public record StudentGroupResponse(
         String supervisorName = g.getSupervisor() != null ? g.getSupervisor().getFullName() : null;
         return new StudentGroupResponse(g.getId(), g.getGroupCode(), topicId, topicTitle,
                 supervisorId, supervisorName, g.getSemester(), g.getStatus(),
-                (int) memberCount, memberCount >= StudentGroupService.MAX_MEMBERS, members);
+                (int) memberCount, memberCount >= StudentGroupService.MAX_MEMBERS,
+                StudentGroupService.MIN_MEMBERS, memberCount >= StudentGroupService.MIN_MEMBERS, g.isLocked(),
+                g.getRosterStatus(), g.getRosterNote(), members);
     }
 }

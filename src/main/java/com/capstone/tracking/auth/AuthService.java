@@ -9,7 +9,6 @@ import com.capstone.tracking.auth.dto.RegisterRequest;
 import com.capstone.tracking.common.exception.ApiException;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.security.JwtTokenProvider;
-import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
 import com.capstone.tracking.user.dto.UserResponse;
@@ -73,7 +72,7 @@ public class AuthService {
 
     /**
      * Giai đoạn 1: sign in with the school's Google Workspace account. The role comes from the account an Admin
-     * provisioned for that email; unknown accounts and ordinary student members cannot sign in. The
+     * provisioned for that email; unknown accounts and students sign in too, whether or not they are eligible. The
      * campus picked on the first sign-in is pinned to the account, and signing in under another campus is refused.
      */
     @Transactional
@@ -89,7 +88,6 @@ public class AuthService {
         User user = userRepository.findByEmailIgnoreCase(email).orElseThrow(() ->
                 new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_NOT_PROVISIONED",
                         "Ask an administrator to provision your account and role"));
-        requireLoginRole(user);
 
         if (!user.isAccountNonLocked()) {
             throw new LockedException("This account is suspended");
@@ -119,15 +117,7 @@ public class AuthService {
     }
 
     private LoginResponse issueTokens(User user) {
-        requireLoginRole(user);
         String token = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
         return LoginResponse.of(token, accessTokenExpMinutes * 60, UserResponse.from(user));
-    }
-
-    private void requireLoginRole(User user) {
-        if (user.getRole() == Role.STUDENT) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "LEADER_LOGIN_REQUIRED",
-                    "Only the group leader may sign in on behalf of student members");
-        }
     }
 }

@@ -5,12 +5,12 @@ import com.capstone.tracking.group.dto.GroupMemberResponse;
 import com.capstone.tracking.group.dto.StudentGroupCreateRequest;
 import com.capstone.tracking.group.dto.StudentGroupResponse;
 import com.capstone.tracking.group.dto.StudentGroupUpdateRequest;
-import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -33,8 +33,13 @@ public class StudentGroupController {
 
     private final StudentGroupService studentGroupService;
 
+    public record LeaderRequest(@NotNull UUID userId) {}
+
+    public record RosterReviewRequest(@NotNull Boolean approved, @Size(max = 1000) String note) {}
+
+    /** A student creates a group and becomes its Leader (YC07); an Admin may provision one with topic/supervisor. */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','STUDENT','GROUP_LEADER')")
     public ResponseEntity<StudentGroupResponse> create(@Valid @RequestBody StudentGroupCreateRequest request,
                                                        @AuthenticationPrincipal User currentUser) {
         StudentGroup created = studentGroupService.create(request, currentUser);
@@ -42,15 +47,20 @@ public class StudentGroupController {
                 .body(StudentGroupResponse.from(created, studentGroupService.countActiveMembers(created.getId())));
     }
 
-    /** available=true lists only groups that still have room (fewer than 5 active members). */
+    /**
+     * available=true lists only groups still recruiting (fewer than 5 active members, not locked). A student without a
+     * group always sees just those, so they can pick where to Apply; a leader sees their own group.
+     */
     @GetMapping
     public Page<StudentGroupResponse> list(@RequestParam(required = false) UUID supervisorId,
                                             @RequestParam(required = false) UUID topicId,
                                             @RequestParam(defaultValue = "false") boolean available,
                                             Pageable pageable, @AuthenticationPrincipal User currentUser) {
-        Page<StudentGroup> page = currentUser.getRole() == Role.GROUP_LEADER
-                ? studentGroupService.listForMember(currentUser.getId(), pageable)
-                : studentGroupService.list(supervisorId, topicId, available, pageable);
+        Page<StudentGroup> page = switch (currentUser.getRole()) {
+            case GROUP_LEADER -> studentGroupService.listForMember(currentUser.getId(), pageable);
+            case STUDENT -> studentGroupService.list(null, null, true, pageable);
+            default -> studentGroupService.list(supervisorId, topicId, available, pageable);
+        };
         Map<UUID, Long> counts = studentGroupService.countActiveMembers(
                 page.getContent().stream().map(StudentGroup::getId).toList());
         return page.map(g -> StudentGroupResponse.from(g, counts.getOrDefault(g.getId(), 0L)));
@@ -75,14 +85,6 @@ public class StudentGroupController {
         return StudentGroupResponse.from(updated, studentGroupService.countActiveMembers(updated.getId()));
     }
 
-    @Operation(summary = "Legacy self-join endpoint (disabled; Admin manages the roster)")
-    @PostMapping("/{id}/join")
-    @PreAuthorize("denyAll()")
-    public ResponseEntity<GroupMemberResponse> join(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
-        GroupMember member = studentGroupService.join(id, currentUser);
-        return ResponseEntity.status(HttpStatus.CREATED).body(GroupMemberResponse.from(member));
-    }
-
     @PostMapping("/{id}/members")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupMemberResponse> addMember(@PathVariable UUID id,
@@ -92,12 +94,51 @@ public class StudentGroupController {
         return ResponseEntity.status(HttpStatus.CREATED).body(GroupMemberResponse.from(member));
     }
 
+    /** The Leader kicks a member before Locked (YC18); an Admin may remove anyone at any time (YC19). */
     @DeleteMapping("/{id}/members/{memberId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeMember(@PathVariable UUID id,
                              @PathVariable UUID memberId,
                              @AuthenticationPrincipal User currentUser) {
         studentGroupService.removeMember(id, memberId, currentUser);
+    }
+
+    /** YC20: Admin replaces the leader (on the supervisor's report); the new leader must already be a member. */
+    @PutMapping("/{id}/leader")
+    @PreAuthorize("hasRole('ADMIN')")
+    public GroupMemberResponse replaceLeader(@PathVariable UUID id, @Valid @RequestBody LeaderRequest request) {
+        return GroupMemberResponse.from(studentGroupService.replaceLeader(id, request.userId()));
+    }
+
+    /** YC19: after Locked only an Admin edits the roster. */
+    @PostMapping("/{id}/lock")
+    @PreAuthorize("hasRole('ADMIN')")
+    public StudentGroupResponse lock(@PathVariable UUID id) {
+        return respond(studentGroupService.setLocked(id, true));
+    }
+
+    @PostMapping("/{id}/unlock")
+    @PreAuthorize("hasRole('ADMIN')")
+    public StudentGroupResponse unlock(@PathVariable UUID id) {
+        return respond(studentGroupService.setLocked(id, false));
+    }
+
+    /** YC16: the Leader sends the member list to the supervisor. */
+    @PostMapping("/{id}/roster/submit")
+    @PreAuthorize("hasRole('GROUP_LEADER')")
+    public StudentGroupResponse submitRoster(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        return respond(studentGroupService.submitRoster(id, currentUser));
+    }
+
+    @PostMapping("/{id}/roster/review")
+    @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
+    public StudentGroupResponse reviewRoster(@PathVariable UUID id, @Valid @RequestBody RosterReviewRequest request,
+                                             @AuthenticationPrincipal User currentUser) {
+        return respond(studentGroupService.reviewRoster(id, currentUser, request.approved(), request.note()));
+    }
+
+    private StudentGroupResponse respond(StudentGroup group) {
+        return StudentGroupResponse.from(group, studentGroupService.countActiveMembers(group.getId()));
     }
 }
