@@ -1,5 +1,6 @@
 package com.capstone.tracking.group;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.group.dto.ApplyRequest;
 import com.capstone.tracking.group.dto.GroupMemberResponse;
 import com.capstone.tracking.group.dto.InviteRequest;
@@ -56,6 +57,7 @@ public class GroupJoinController {
 
     // ------------------------------------------------------------------ Apply (student side)
 
+    @Operation(summary = "Apply to join a group")
     @PostMapping("/groups/{groupId}/applications")
     @PreAuthorize(STUDENT)
     public ResponseEntity<JoinRequestResponse> apply(@PathVariable UUID groupId,
@@ -66,17 +68,20 @@ public class GroupJoinController {
                 .body(joinService.toResponse(created, currentUser));
     }
 
+    @Operation(summary = "Withdraw my application")
     @PostMapping("/applications/{id}/withdraw")
     @PreAuthorize(STUDENT)
     public JoinRequestResponse withdraw(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return joinService.toResponse(joinService.withdrawApplication(id, currentUser), currentUser);
     }
 
+    @Operation(summary = "My applications")
     @GetMapping("/me/applications")
     public List<JoinRequestResponse> myApplications(@AuthenticationPrincipal User currentUser) {
         return joinService.listMine(JoinRequestType.APPLY, currentUser);
     }
 
+    @Operation(summary = "My pending invites")
     @GetMapping("/me/invites")
     public List<JoinRequestResponse> myInvites(@AuthenticationPrincipal User currentUser) {
         return joinService.listMine(JoinRequestType.INVITE, currentUser);
@@ -84,30 +89,35 @@ public class GroupJoinController {
 
     // ------------------------------------------------------------------ Apply (group side)
 
+    @Operation(summary = "Applications to a group")
     @GetMapping("/groups/{groupId}/applications")
     public List<JoinRequestResponse> applications(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser) {
         return joinService.listForGroup(groupId, JoinRequestType.APPLY, currentUser);
     }
 
     /** Approving an Apply sends the applicant an Invite; they join only when they Accept it (YC10). */
+    @Operation(summary = "Approve an application")
     @PostMapping("/applications/{id}/approve")
     @PreAuthorize(LEADER)
     public JoinRequestResponse approve(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return joinService.toResponse(joinService.approveApplication(id, currentUser), currentUser);
     }
 
+    @Operation(summary = "Reject an application")
     @PostMapping("/applications/{id}/reject")
     @PreAuthorize(LEADER)
     public JoinRequestResponse reject(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return joinService.toResponse(joinService.rejectApplication(id, currentUser), currentUser);
     }
 
+    @Operation(summary = "Member votes on an application")
     @PostMapping("/applications/{id}/votes")
     public VoteResponse vote(@PathVariable UUID id, @Valid @RequestBody VoteRequest request,
                              @AuthenticationPrincipal User currentUser) {
         return VoteResponse.from(joinService.vote(id, currentUser, request.vote(), request.comment()));
     }
 
+    @Operation(summary = "Votes on an application")
     @GetMapping("/applications/{id}/votes")
     public List<VoteResponse> votes(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return joinService.listVotes(id, currentUser).stream().map(VoteResponse::from).toList();
@@ -115,6 +125,7 @@ public class GroupJoinController {
 
     // ------------------------------------------------------------------ Invite
 
+    @Operation(summary = "Invite a student to the group")
     @PostMapping("/groups/{groupId}/invites")
     @PreAuthorize(LEADER)
     public ResponseEntity<JoinRequestResponse> invite(@PathVariable UUID groupId,
@@ -126,12 +137,14 @@ public class GroupJoinController {
                 .body(joinService.toResponse(created, currentUser));
     }
 
+    @Operation(summary = "Invites sent by a group")
     @GetMapping("/groups/{groupId}/invites")
     public List<JoinRequestResponse> invites(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser) {
         return joinService.listForGroup(groupId, JoinRequestType.INVITE, currentUser);
     }
 
     /** Accepting is the moment of joining: the student becomes an official member. */
+    @Operation(summary = "Accept an invite")
     @PostMapping("/invites/{id}/accept")
     @PreAuthorize(STUDENT)
     public ResponseEntity<GroupMemberResponse> accept(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
@@ -139,12 +152,14 @@ public class GroupJoinController {
                 .body(GroupMemberResponse.from(joinService.acceptInvite(id, currentUser)));
     }
 
+    @Operation(summary = "Decline an invite")
     @PostMapping("/invites/{id}/decline")
     @PreAuthorize(STUDENT)
     public JoinRequestResponse decline(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return joinService.toResponse(joinService.declineInvite(id, currentUser), currentUser);
     }
 
+    @Operation(summary = "Revoke an invite")
     @PostMapping("/invites/{id}/revoke")
     @PreAuthorize(LEADER)
     public JoinRequestResponse revoke(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
@@ -153,6 +168,7 @@ public class GroupJoinController {
 
     // ------------------------------------------------------------------ leaving
 
+    @Operation(summary = "Request to leave the group")
     @PostMapping("/groups/{groupId}/leave-requests")
     @PreAuthorize(STUDENT)
     public ResponseEntity<LeaveRequestResponse> requestLeave(@PathVariable UUID groupId,
@@ -162,23 +178,27 @@ public class GroupJoinController {
         return ResponseEntity.status(HttpStatus.CREATED).body(LeaveRequestResponse.from(created));
     }
 
+    @Operation(summary = "Leave requests of a group")
     @GetMapping("/groups/{groupId}/leave-requests")
     public List<LeaveRequestResponse> leaveRequests(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser) {
         return leaveService.list(groupId, currentUser).stream().map(LeaveRequestResponse::from).toList();
     }
 
+    @Operation(summary = "Approve a leave request")
     @PostMapping("/leave-requests/{id}/approve")
     @PreAuthorize(LEADER)
     public LeaveRequestResponse approveLeave(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return LeaveRequestResponse.from(leaveService.approve(id, currentUser));
     }
 
+    @Operation(summary = "Reject a leave request")
     @PostMapping("/leave-requests/{id}/reject")
     @PreAuthorize(LEADER)
     public LeaveRequestResponse rejectLeave(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return LeaveRequestResponse.from(leaveService.reject(id, currentUser));
     }
 
+    @Operation(summary = "Withdraw my leave request")
     @PostMapping("/leave-requests/{id}/withdraw")
     @PreAuthorize(STUDENT)
     public LeaveRequestResponse withdrawLeave(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
@@ -188,12 +208,14 @@ public class GroupJoinController {
     // ------------------------------------------------------------------ settings
 
     /** YC14: how long an unanswered Apply/Invite stays open in this semester (default 48 hours). */
+    @Operation(summary = "Get join settings of a semester (application/invite expiry)")
     @GetMapping("/semesters/{semester}/join-settings")
     @PreAuthorize("hasRole('ADMIN')")
     public TtlResponse getTtl(@PathVariable String semester) {
         return settings(semester);
     }
 
+    @Operation(summary = "Update join settings of a semester")
     @PutMapping("/semesters/{semester}/join-settings")
     @PreAuthorize("hasRole('ADMIN')")
     public TtlResponse setTtl(@PathVariable String semester, @Valid @RequestBody TtlRequest request) {
@@ -202,6 +224,7 @@ public class GroupJoinController {
     }
 
     /** YC17 / YC21: end of the permitted period in which students form, join and leave groups themselves. */
+    @Operation(summary = "Set the group formation deadline of a semester")
     @PutMapping("/semesters/{semester}/formation-deadline")
     @PreAuthorize("hasRole('ADMIN')")
     public TtlResponse setFormationDeadline(@PathVariable String semester, @RequestBody DeadlineRequest request) {
@@ -209,6 +232,7 @@ public class GroupJoinController {
         return settings(semester);
     }
 
+    @Operation(summary = "My group formation window (open, deadline)")
     @GetMapping("/me/formation-window")
     public FormationWindowResponse formationWindow(@RequestParam String semester) {
         Instant deadline = formationWindow.deadline(semester);

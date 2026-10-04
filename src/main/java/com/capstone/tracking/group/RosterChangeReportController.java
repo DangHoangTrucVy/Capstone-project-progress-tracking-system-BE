@@ -1,5 +1,6 @@
 package com.capstone.tracking.group;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -11,8 +12,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,7 +26,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@Tag(name = "Group Formation", description = "Roster change reports")
+@Tag(name = "Group Formation")
 @SecurityRequirement(name = "bearerAuth")
 public class RosterChangeReportController {
 
@@ -43,6 +46,7 @@ public class RosterChangeReportController {
         }
     }
 
+    @Operation(summary = "Report a roster change to the Admin")
     @PostMapping("/groups/{groupId}/roster-change-reports")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<ReportResponse> report(@PathVariable UUID groupId, @Valid @RequestBody ReportRequest request,
@@ -51,18 +55,21 @@ public class RosterChangeReportController {
                 service.report(groupId, currentUser, request.type(), request.description())));
     }
 
+    @Operation(summary = "Roster change reports of a group")
     @GetMapping("/groups/{groupId}/roster-change-reports")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public List<ReportResponse> forGroup(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser) {
         return service.listForGroup(groupId, currentUser).stream().map(ReportResponse::from).toList();
     }
 
+    @Operation(summary = "All roster change reports (filter by status)")
     @GetMapping("/roster-change-reports")
     @PreAuthorize("hasRole('ADMIN')")
-    public Page<ReportResponse> list(@RequestParam(required = false) RosterChangeReport.Status status, Pageable pageable) {
+    public Page<ReportResponse> list(@RequestParam(required = false) RosterChangeReport.Status status, @ParameterObject Pageable pageable) {
         return service.list(status, pageable).map(ReportResponse::from);
     }
 
+    @Operation(summary = "Resolve a roster change report")
     @PostMapping("/roster-change-reports/{id}/resolve")
     @PreAuthorize("hasRole('ADMIN')")
     public ReportResponse resolve(@PathVariable UUID id, @Valid @RequestBody(required = false) ResolveRequest request,

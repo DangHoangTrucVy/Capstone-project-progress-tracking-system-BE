@@ -1,5 +1,6 @@
 package com.capstone.tracking.scheduling;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.scheduling.dto.BookRequest;
 import com.capstone.tracking.scheduling.dto.BookingResponse;
 import com.capstone.tracking.scheduling.dto.CancelBookingRequest;
@@ -25,6 +26,7 @@ public class BookingController {
 
     private final BookingService bookingService;
 
+    @Operation(summary = "Group books a slot")
     @PostMapping("/api/v1/slots/{id}/book")
     @PreAuthorize("hasRole('GROUP_LEADER')")
     public ResponseEntity<BookingResponse> book(@PathVariable UUID id,
@@ -34,6 +36,7 @@ public class BookingController {
         return ResponseEntity.ok(BookingResponse.from(booking));
     }
 
+    @Operation(summary = "Cancel a booking")
     @DeleteMapping("/api/v1/bookings/{id}")
     @PreAuthorize("hasAnyRole('GROUP_LEADER','INSTRUCTOR','ADMIN')")
     public ResponseEntity<Map<String, String>> cancel(@PathVariable UUID id,

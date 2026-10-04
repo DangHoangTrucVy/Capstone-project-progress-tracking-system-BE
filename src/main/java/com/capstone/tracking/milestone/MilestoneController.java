@@ -1,5 +1,6 @@
 package com.capstone.tracking.milestone;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.milestone.dto.MilestoneCreateRequest;
 import com.capstone.tracking.milestone.dto.MilestoneResponse;
 import com.capstone.tracking.user.User;
@@ -31,6 +32,7 @@ public class MilestoneController {
 
     private final MilestoneService milestoneService;
 
+    @Operation(summary = "Create a milestone")
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MilestoneResponse> create(@Valid @RequestBody MilestoneCreateRequest request,
@@ -41,11 +43,13 @@ public class MilestoneController {
     }
 
     /** Ordered by sequenceNo; a semester has only a handful of milestones, so no paging. */
+    @Operation(summary = "List milestones")
     @GetMapping
     public List<MilestoneResponse> list(@RequestParam(required = false) String semester) {
         return milestoneService.listResponses(semester);
     }
 
+    @Operation(summary = "Get a milestone")
     @GetMapping("/{id}")
     public MilestoneResponse getById(@PathVariable UUID id) {
         return MilestoneResponse.from(milestoneService.getById(id));

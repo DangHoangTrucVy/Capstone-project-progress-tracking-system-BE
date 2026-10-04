@@ -1,5 +1,6 @@
 package com.capstone.tracking.group;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.group.dto.AddMemberRequest;
 import com.capstone.tracking.group.dto.GroupMemberResponse;
 import com.capstone.tracking.group.dto.StudentGroupCreateRequest;
@@ -16,8 +17,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,6 +41,7 @@ public class StudentGroupController {
     public record RosterReviewRequest(@NotNull Boolean approved, @Size(max = 1000) String note) {}
 
     /** A student creates a group and becomes its Leader (YC07); an Admin may provision one with topic/supervisor. */
+    @Operation(summary = "Create a group (the creator becomes Leader)")
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','STUDENT','GROUP_LEADER')")
     public ResponseEntity<StudentGroupResponse> create(@Valid @RequestBody StudentGroupCreateRequest request,
@@ -51,11 +55,12 @@ public class StudentGroupController {
      * available=true lists only groups still recruiting (fewer than 5 active members, not locked). A student without a
      * group always sees just those, so they can pick where to Apply; a leader sees their own group.
      */
+    @Operation(summary = "List groups (available=true: still recruiting)")
     @GetMapping
     public Page<StudentGroupResponse> list(@RequestParam(required = false) UUID supervisorId,
                                             @RequestParam(required = false) UUID topicId,
                                             @RequestParam(defaultValue = "false") boolean available,
-                                            Pageable pageable, @AuthenticationPrincipal User currentUser) {
+                                            @ParameterObject Pageable pageable, @AuthenticationPrincipal User currentUser) {
         Page<StudentGroup> page = switch (currentUser.getRole()) {
             case GROUP_LEADER -> studentGroupService.listForMember(currentUser.getId(), pageable);
             case STUDENT -> studentGroupService.list(null, null, true, pageable);
@@ -66,6 +71,7 @@ public class StudentGroupController {
         return page.map(g -> StudentGroupResponse.from(g, counts.getOrDefault(g.getId(), 0L)));
     }
 
+    @Operation(summary = "Get a group with its active members")
     @GetMapping("/{id}")
     public StudentGroupResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         studentGroupService.requireCanView(id, currentUser);
@@ -76,6 +82,7 @@ public class StudentGroupController {
         return StudentGroupResponse.from(group, members.size(), members);
     }
 
+    @Operation(summary = "Update a group (topic, supervisor...)")
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public StudentGroupResponse update(@PathVariable UUID id,
@@ -85,6 +92,7 @@ public class StudentGroupController {
         return StudentGroupResponse.from(updated, studentGroupService.countActiveMembers(updated.getId()));
     }
 
+    @Operation(summary = "Add a member to a group")
     @PostMapping("/{id}/members")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupMemberResponse> addMember(@PathVariable UUID id,
@@ -95,6 +103,7 @@ public class StudentGroupController {
     }
 
     /** The Leader kicks a member before Locked (YC18); an Admin may remove anyone at any time (YC19). */
+    @Operation(summary = "Remove a member from a group")
     @DeleteMapping("/{id}/members/{memberId}")
     @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -105,6 +114,7 @@ public class StudentGroupController {
     }
 
     /** YC20: Admin replaces the leader (on the supervisor's report); the new leader must already be a member. */
+    @Operation(summary = "Replace the group leader")
     @PutMapping("/{id}/leader")
     @PreAuthorize("hasRole('ADMIN')")
     public GroupMemberResponse replaceLeader(@PathVariable UUID id, @Valid @RequestBody LeaderRequest request) {
@@ -112,12 +122,14 @@ public class StudentGroupController {
     }
 
     /** YC19: after Locked only an Admin edits the roster. */
+    @Operation(summary = "Lock the group roster")
     @PostMapping("/{id}/lock")
     @PreAuthorize("hasRole('ADMIN')")
     public StudentGroupResponse lock(@PathVariable UUID id) {
         return respond(studentGroupService.setLocked(id, true));
     }
 
+    @Operation(summary = "Unlock the group roster")
     @PostMapping("/{id}/unlock")
     @PreAuthorize("hasRole('ADMIN')")
     public StudentGroupResponse unlock(@PathVariable UUID id) {
@@ -125,12 +137,14 @@ public class StudentGroupController {
     }
 
     /** YC16: the Leader sends the member list to the supervisor. */
+    @Operation(summary = "Leader submits the roster to the supervisor")
     @PostMapping("/{id}/roster/submit")
     @PreAuthorize("hasRole('GROUP_LEADER')")
     public StudentGroupResponse submitRoster(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return respond(studentGroupService.submitRoster(id, currentUser));
     }
 
+    @Operation(summary = "Supervisor approves or rejects the roster")
     @PostMapping("/{id}/roster/review")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public StudentGroupResponse reviewRoster(@PathVariable UUID id, @Valid @RequestBody RosterReviewRequest request,

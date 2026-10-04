@@ -32,6 +32,7 @@ public class ReviewController {
 
     private final ReviewService reviewService;
 
+    @Operation(summary = "Schedule a review session")
     @PostMapping("/api/v1/reviews")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ReviewSessionResponse> schedule(@Valid @RequestBody ReviewScheduleRequest request,
@@ -47,6 +48,7 @@ public class ReviewController {
         return reviewService.cloneRound(request, currentUser);
     }
 
+    @Operation(summary = "List review sessions of a round")
     @GetMapping("/api/v1/reviews")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','COUNCIL','ADMIN')")
     public List<ReviewSessionResponse> listByRound(@RequestParam ReviewRound round,
@@ -54,17 +56,20 @@ public class ReviewController {
         return reviewService.listByRound(round, semester);
     }
 
+    @Operation(summary = "My review sessions")
     @GetMapping("/api/v1/reviews/mine")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','COUNCIL')")
     public List<ReviewSessionResponse> listMine(@AuthenticationPrincipal User currentUser) {
         return reviewService.listMine(currentUser);
     }
 
+    @Operation(summary = "Get a review session")
     @GetMapping("/api/v1/reviews/{id}")
     public ReviewSessionResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return reviewService.getById(id, currentUser);
     }
 
+    @Operation(summary = "Review sessions of a group")
     @GetMapping("/api/v1/groups/{groupId}/reviews")
     public List<ReviewSessionResponse> listByGroup(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser) {
         return reviewService.listByGroup(groupId, currentUser);

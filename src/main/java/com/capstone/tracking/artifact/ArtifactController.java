@@ -14,9 +14,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -38,7 +40,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Documents / Artifacts", description = "Group document submissions: uploaded files or links, per milestone")
+@Tag(name = "Documents")
 @SecurityRequirement(name = "bearerAuth")
 public class ArtifactController {
 
@@ -69,14 +71,16 @@ public class ArtifactController {
         return created(artifactSubmissionService.upload(groupId, title, sessionId, milestoneId, file, url, currentUser));
     }
 
+    @Operation(summary = "Documents of a group")
     @GetMapping({"/api/v1/groups/{groupId}/artifacts", "/api/v1/groups/{groupId}/documents"})
     public Page<ArtifactResponse> listByGroup(@PathVariable UUID groupId,
                                               @RequestParam(required = false) UUID milestoneId,
-                                              Pageable pageable, @AuthenticationPrincipal User currentUser) {
+                                              @ParameterObject Pageable pageable, @AuthenticationPrincipal User currentUser) {
         groups.requireCanView(groupId, currentUser);
         return artifactSubmissionService.listByGroup(groupId, milestoneId, pageable).map(ArtifactResponse::from);
     }
 
+    @Operation(summary = "Get a document")
     @GetMapping({"/api/v1/artifacts/{id}", "/api/v1/documents/{id}"})
     public ArtifactResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         ArtifactSubmission artifact = artifactSubmissionService.getById(id);
@@ -97,12 +101,14 @@ public class ArtifactController {
                 .body(file.resource());
     }
 
+    @Operation(summary = "Supervisor accepts a document")
     @PostMapping({"/api/v1/artifacts/{id}/accept", "/api/v1/documents/{id}/accept"})
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public ArtifactResponse accept(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return ArtifactResponse.from(artifactSubmissionService.accept(id, currentUser));
     }
 
+    @Operation(summary = "Supervisor gives feedback on a document")
     @PutMapping({"/api/v1/artifacts/{id}/feedback", "/api/v1/documents/{id}/feedback"})
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public ArtifactResponse feedback(@PathVariable UUID id,

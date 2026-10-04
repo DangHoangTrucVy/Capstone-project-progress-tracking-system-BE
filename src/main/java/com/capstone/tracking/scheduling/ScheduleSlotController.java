@@ -1,5 +1,6 @@
 package com.capstone.tracking.scheduling;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.scheduling.dto.SlotCreateRequest;
 import com.capstone.tracking.scheduling.dto.SlotPage;
@@ -9,9 +10,11 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -32,6 +35,7 @@ public class ScheduleSlotController {
 
     private final ScheduleSlotService scheduleSlotService;
 
+    @Operation(summary = "Instructor opens an availability slot")
     @PostMapping
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public ResponseEntity<SlotResponse> create(@Valid @RequestBody SlotCreateRequest request,
@@ -41,12 +45,13 @@ public class ScheduleSlotController {
                 .body(SlotResponse.from(created));
     }
 
+    @Operation(summary = "Search slots (instructor, status, date range)")
     @GetMapping
     public Page<SlotResponse> search(@RequestParam(required = false) UUID instructorId,
                                       @RequestParam(required = false) SlotStatus status,
                                       @RequestParam(required = false) String fromDate,
                                       @RequestParam(required = false) String toDate,
-                                      Pageable pageable) {
+                                      @ParameterObject Pageable pageable) {
         SlotPage page = scheduleSlotService.searchPage(instructorId, status, parseInstant(fromDate), parseInstant(toDate), pageable);
         return new PageImpl<>(page.content(), pageable, page.totalElements());
     }
@@ -64,6 +69,7 @@ public class ScheduleSlotController {
         }
     }
 
+    @Operation(summary = "Get a slot")
     @GetMapping("/{id}")
     public SlotResponse getById(@PathVariable UUID id) {
         return scheduleSlotService.getResponse(id);

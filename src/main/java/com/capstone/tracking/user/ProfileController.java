@@ -1,5 +1,6 @@
 package com.capstone.tracking.user;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.user.dto.UserResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/me/profile")
 @RequiredArgsConstructor
-@Tag(name = "Users", description = "Own recruiting profile")
+@Tag(name = "Users")
 @SecurityRequirement(name = "bearerAuth")
 public class ProfileController {
 
@@ -22,11 +23,13 @@ public class ProfileController {
 
     public record ProfileRequest(@Size(max = 1000) String bio, @Size(max = 500) String skills) {}
 
+    @Operation(summary = "Get my recruiting profile")
     @GetMapping
     public UserResponse get(@AuthenticationPrincipal User currentUser) {
         return UserResponse.from(currentUser);
     }
 
+    @Operation(summary = "Update my recruiting profile")
     @PutMapping
     @Transactional
     public UserResponse update(@AuthenticationPrincipal User currentUser, @Valid @RequestBody ProfileRequest request) {

@@ -117,8 +117,16 @@ app:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+    # Collapsed tags, search box, token kept across reloads, request timing, schemas list hidden.
+    doc-expansion: none
+    filter: true
+    persist-authorization: true
+    display-request-duration: true
+    try-it-out-enabled: true
+    default-models-expand-depth: -1
   api-docs:
     path: /v3/api-docs
+  default-produces-media-type: application/json
 
 logging:
   level:

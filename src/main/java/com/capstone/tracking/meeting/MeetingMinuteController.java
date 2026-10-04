@@ -1,5 +1,6 @@
 package com.capstone.tracking.meeting;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.meeting.dto.MinuteGenerateRequest;
 import com.capstone.tracking.meeting.dto.MinuteGenerateResponse;
 import com.capstone.tracking.meeting.dto.MinuteResponse;
@@ -25,6 +26,7 @@ public class MeetingMinuteController {
 
     private final MeetingMinuteService meetingMinuteService;
 
+    @Operation(summary = "Generate the meeting minutes")
     @PostMapping("/generate")
     @PreAuthorize("hasAnyRole('GROUP_LEADER','INSTRUCTOR')")
     public MinuteGenerateResponse generate(@PathVariable UUID id, @RequestBody(required = false) MinuteGenerateRequest request,
@@ -32,6 +34,7 @@ public class MeetingMinuteController {
         return meetingMinuteService.generate(id, request, currentUser);
     }
 
+    @Operation(summary = "Sign the meeting minutes (Leader / Instructor)")
     @PutMapping("/sign")
     @PreAuthorize("hasAnyRole('GROUP_LEADER','INSTRUCTOR','ADMIN')")
     public MinuteResponse sign(@PathVariable UUID id, @Valid @RequestBody MinuteSignRequest request,
@@ -39,6 +42,7 @@ public class MeetingMinuteController {
         return MinuteResponse.from(meetingMinuteService.sign(id, request, currentUser));
     }
 
+    @Operation(summary = "Get the meeting minutes")
     @GetMapping
     public MinuteResponse getBySession(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return MinuteResponse.from(meetingMinuteService.getBySession(id, currentUser));

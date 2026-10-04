@@ -1,5 +1,6 @@
 package com.capstone.tracking.evaluation;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.evaluation.dto.EvaluationCreateRequest;
 import com.capstone.tracking.evaluation.dto.EvaluationResponse;
 import com.capstone.tracking.user.User;
@@ -7,8 +8,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,6 +29,7 @@ public class EvaluationController {
 
     private final EvaluationService evaluationService;
 
+    @Operation(summary = "Score a group on the 3 criteria")
     @PostMapping("/api/v1/groups/{groupId}/evaluations")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<EvaluationResponse> create(@PathVariable UUID groupId,
@@ -36,12 +40,14 @@ public class EvaluationController {
                 .body(EvaluationResponse.from(created));
     }
 
+    @Operation(summary = "Evaluations of a group")
     @GetMapping("/api/v1/groups/{groupId}/evaluations")
     public Page<EvaluationResponse> listByGroup(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser,
-                                                 Pageable pageable) {
+                                                 @ParameterObject Pageable pageable) {
         return evaluationService.listByGroup(groupId, currentUser, pageable).map(EvaluationResponse::from);
     }
 
+    @Operation(summary = "Get an evaluation")
     @GetMapping("/api/v1/evaluations/{id}")
     public EvaluationResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return EvaluationResponse.from(evaluationService.getById(id, currentUser));

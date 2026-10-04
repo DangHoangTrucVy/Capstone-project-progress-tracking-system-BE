@@ -54,6 +54,7 @@ public class ProgressController {
         return progressService.summary(groupId, currentUser);
     }
 
+    @Operation(summary = "Get a weekly report")
     @GetMapping("/api/v1/progress/{id}")
     public ProgressReportResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return progressService.getById(id, currentUser);

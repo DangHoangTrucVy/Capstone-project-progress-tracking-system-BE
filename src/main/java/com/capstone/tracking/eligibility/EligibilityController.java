@@ -1,5 +1,6 @@
 package com.capstone.tracking.eligibility;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.dto.UserResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -11,8 +12,10 @@ import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,6 +38,7 @@ public class EligibilityController {
 
     public record MyEligibility(boolean eligible, String reason) {}
 
+    @Operation(summary = "Import the eligible student list (JSON)")
     @PostMapping("/import")
     @PreAuthorize("hasRole('ADMIN')")
     public EligibilityService.ImportResult importList(@Valid @RequestBody ImportRequest request) {
@@ -42,25 +46,29 @@ public class EligibilityController {
     }
 
     /** YC03: the same import from the training department's CSV file (email, ho_ten, du_dieu_kien, ly_do). */
+    @Operation(summary = "Import the eligible student list from a CSV/Excel file")
     @PostMapping(value = "/import/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
     public EligibilityService.ImportResult importFile(@RequestPart("file") MultipartFile file) throws IOException {
         return eligibilityService.importCsv(file.getBytes());
     }
 
+    @Operation(summary = "Mark a student eligible or not eligible")
     @PutMapping("/{userId}")
     @PreAuthorize("hasRole('ADMIN')")
     public UserResponse setEligibility(@PathVariable UUID userId, @Valid @RequestBody FlagRequest request) {
         return UserResponse.from(eligibilityService.setEligibility(userId, request.eligible(), request.reason()));
     }
 
+    @Operation(summary = "List students marked not eligible")
     @GetMapping("/ineligible")
     @PreAuthorize("hasRole('ADMIN')")
-    public Page<UserResponse> ineligible(Pageable pageable) {
+    public Page<UserResponse> ineligible(@ParameterObject Pageable pageable) {
         return eligibilityService.listIneligible(pageable).map(UserResponse::from);
     }
 
     /** The signed-in student's own status and the reason, even when flagged. */
+    @Operation(summary = "My eligibility status")
     @GetMapping("/me")
     public MyEligibility mine(@AuthenticationPrincipal User currentUser) {
         return new MyEligibility(currentUser.isEligible(), currentUser.getIneligibleReason());

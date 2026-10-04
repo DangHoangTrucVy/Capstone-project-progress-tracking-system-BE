@@ -1,5 +1,6 @@
 package com.capstone.tracking.meeting;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.meeting.dto.EndSessionRequest;
 import com.capstone.tracking.meeting.dto.MeetingSessionResponse;
 import com.capstone.tracking.user.User;
@@ -23,6 +24,7 @@ public class MeetingSessionController {
 
     private final MeetingSessionService meetingSessionService;
 
+    @Operation(summary = "Create a meeting from a confirmed booking")
     @PostMapping("/api/v1/bookings/{bookingId}/meetings")
     @PreAuthorize("hasAnyRole('GROUP_LEADER','INSTRUCTOR')")
     public ResponseEntity<MeetingSessionResponse> create(@PathVariable UUID bookingId,
@@ -32,17 +34,20 @@ public class MeetingSessionController {
                 .body(MeetingSessionResponse.from(created));
     }
 
+    @Operation(summary = "Get a meeting")
     @GetMapping("/api/v1/meetings/{id}")
     public MeetingSessionResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return MeetingSessionResponse.from(meetingSessionService.getById(id, currentUser));
     }
 
+    @Operation(summary = "Start the meeting")
     @PutMapping("/api/v1/meetings/{id}/start")
     @PreAuthorize("hasAnyRole('GROUP_LEADER','INSTRUCTOR')")
     public MeetingSessionResponse start(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return MeetingSessionResponse.from(meetingSessionService.start(id, currentUser));
     }
 
+    @Operation(summary = "End the meeting")
     @PutMapping("/api/v1/meetings/{id}/end")
     @PreAuthorize("hasAnyRole('GROUP_LEADER','INSTRUCTOR')")
     public MeetingSessionResponse end(@PathVariable UUID id, @RequestBody(required = false) EndSessionRequest request,

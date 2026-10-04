@@ -1,5 +1,6 @@
 package com.capstone.tracking.warning;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.warning.dto.WarningFlagRequest;
 import com.capstone.tracking.warning.dto.WarningFlagResponse;
@@ -31,6 +32,7 @@ public class WarningFlagController {
 
     private final WarningFlagService flagService;
 
+    @Operation(summary = "Raise a warning on a group or member")
     @PostMapping("/api/v1/groups/{groupId}/warning-flags")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public ResponseEntity<WarningFlagResponse> raise(@PathVariable UUID groupId, @Valid @RequestBody WarningFlagRequest request,
@@ -38,6 +40,7 @@ public class WarningFlagController {
         return ResponseEntity.status(HttpStatus.CREATED).body(flagService.raise(groupId, request, currentUser));
     }
 
+    @Operation(summary = "Warnings of a group")
     @GetMapping("/api/v1/groups/{groupId}/warning-flags")
     public List<WarningFlagResponse> list(@PathVariable UUID groupId,
                                           @RequestParam(defaultValue = "false") boolean activeOnly,
@@ -46,6 +49,7 @@ public class WarningFlagController {
     }
 
     /** Body: {"note": "..."} (optional). */
+    @Operation(summary = "Resolve a warning")
     @PutMapping("/api/v1/warning-flags/{id}/resolve")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public WarningFlagResponse resolve(@PathVariable UUID id, @RequestBody(required = false) Map<String, String> body,

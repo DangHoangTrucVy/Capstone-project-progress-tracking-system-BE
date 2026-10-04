@@ -32,6 +32,7 @@ public class DefenseController {
 
     private final DefenseService defenseService;
 
+    @Operation(summary = "Schedule a defense")
     @PostMapping("/api/v1/defenses")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DefenseSessionResponse> schedule(@Valid @RequestBody DefenseScheduleRequest request,
@@ -47,6 +48,7 @@ public class DefenseController {
         return ResponseEntity.status(HttpStatus.CREATED).body(defenseService.scheduleRolling(request, currentUser));
     }
 
+    @Operation(summary = "List defenses (filter by attempt)")
     @GetMapping("/api/v1/defenses")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','COUNCIL','ADMIN')")
     public List<DefenseSessionResponse> listByAttempt(@RequestParam(defaultValue = "1") int attempt,
@@ -54,17 +56,20 @@ public class DefenseController {
         return defenseService.listByAttempt(attempt, semester);
     }
 
+    @Operation(summary = "My defenses")
     @GetMapping("/api/v1/defenses/mine")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','COUNCIL')")
     public List<DefenseSessionResponse> listMine(@AuthenticationPrincipal User currentUser) {
         return defenseService.listMine(currentUser);
     }
 
+    @Operation(summary = "Get a defense")
     @GetMapping("/api/v1/defenses/{id}")
     public DefenseSessionResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return defenseService.getById(id, currentUser);
     }
 
+    @Operation(summary = "Defenses of a group")
     @GetMapping("/api/v1/groups/{groupId}/defenses")
     public List<DefenseSessionResponse> listByGroup(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser) {
         return defenseService.listByGroup(groupId, currentUser);

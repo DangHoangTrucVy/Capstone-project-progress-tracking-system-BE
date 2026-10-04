@@ -12,8 +12,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -48,6 +50,7 @@ public class TopicProposalController {
         return ResponseEntity.created(URI.create("/api/v1/topic-proposals/" + created.id())).body(created);
     }
 
+    @Operation(summary = "Topic proposals of a group")
     @GetMapping("/api/v1/groups/{groupId}/topic-proposals")
     public List<TopicProposalResponse> listByGroup(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser) {
         return proposalService.listByGroup(groupId, currentUser);
@@ -57,10 +60,11 @@ public class TopicProposalController {
     @GetMapping("/api/v1/topic-proposals")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','COUNCIL','ADMIN')")
     public Page<TopicProposalResponse> queue(@RequestParam(required = false) ProposalStatus status,
-                                             @AuthenticationPrincipal User currentUser, Pageable pageable) {
+                                             @AuthenticationPrincipal User currentUser, @ParameterObject Pageable pageable) {
         return proposalService.queue(status, currentUser, pageable);
     }
 
+    @Operation(summary = "Get a topic proposal")
     @GetMapping("/api/v1/topic-proposals/{id}")
     public TopicProposalResponse getById(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return proposalService.getById(id, currentUser);
@@ -90,12 +94,14 @@ public class TopicProposalController {
         return proposalService.openRound(request, currentUser);
     }
 
+    @Operation(summary = "Close a proposal round")
     @PutMapping("/api/v1/proposal-rounds/{id}/close")
     @PreAuthorize("hasRole('ADMIN')")
     public ProposalRoundResponse closeRound(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return proposalService.closeRound(id, currentUser);
     }
 
+    @Operation(summary = "List proposal rounds")
     @GetMapping("/api/v1/proposal-rounds")
     public List<ProposalRoundResponse> listRounds(@RequestParam(required = false) String semester) {
         return proposalService.listRounds(semester);

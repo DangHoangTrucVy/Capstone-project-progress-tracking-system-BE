@@ -1,5 +1,6 @@
 package com.capstone.tracking.report;
 
+import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.report.dto.ReportSummaryResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +20,7 @@ public class ReportController {
 
     private final ReportService reportService;
 
+    @Operation(summary = "Progress statistics summary")
     @GetMapping("/api/v1/reports/summary")
     @PreAuthorize("hasRole('ADMIN')")
     public ReportSummaryResponse summary(@RequestParam String semester,
