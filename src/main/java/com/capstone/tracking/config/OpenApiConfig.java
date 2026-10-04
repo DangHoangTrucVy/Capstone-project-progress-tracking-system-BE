@@ -42,6 +42,7 @@ public class OpenApiConfig {
     static {
         TAGS.put("Auth", "Sign in and get a JWT. Start here.");
         TAGS.put("Users", "User accounts (Admin) and my own recruiting profile");
+        TAGS.put("Registrations", "Admin approves or rejects students who signed up with a personal email");
         TAGS.put("Semesters", "Semester calendar");
         TAGS.put("Eligibility", "Eligible student list import and the not-eligible flag");
         TAGS.put("Student Groups", "Groups, members, leader, roster lock and roster approval");

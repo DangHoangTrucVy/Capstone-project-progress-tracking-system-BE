@@ -76,6 +76,19 @@ public class User extends BaseEntity implements UserDetails {
     @Column(length = 20)
     private Campus campus;
 
+    /** Student code (MSSV), given when a student signs up with a personal email. */
+    @Column(length = 20, unique = true)
+    private String studentCode;
+
+    /** Signed up with a personal email (not provisioned by an Admin); such accounts may sign in outside the school domain. */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean selfRegistered = false;
+
+    /** Why an Admin rejected the sign-up; shown to the student when they try to sign in. */
+    @Column(length = 500)
+    private String rejectionReason;
+
     // --- UserDetails contract -------------------------------------------------
 
     @Override

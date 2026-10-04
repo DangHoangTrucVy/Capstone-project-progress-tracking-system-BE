@@ -12,10 +12,10 @@ class AuthFlowIntegrationTest extends WorkflowTestSupport {
     @Autowired private PasswordEncoder encoder;
 
     @Test
-    void selfRegistrationIsDisabled() throws Exception {
+    void signUpNeedsAStudentCodeAndCampus() throws Exception {
         postJson("/api/v1/auth/register", user("visitor", Role.STUDENT),
-                Map.of("email", "new@fpt.edu.vn", "fullName", "New", "password", "Password123"))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("REGISTRATION_DISABLED"));
+                Map.of("email", "new@gmail.com", "fullName", "New", "password", "Password123"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

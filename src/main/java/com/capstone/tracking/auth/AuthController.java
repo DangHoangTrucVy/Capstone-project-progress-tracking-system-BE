@@ -5,6 +5,7 @@ import com.capstone.tracking.auth.dto.GoogleLoginRequest;
 import com.capstone.tracking.auth.dto.LoginRequest;
 import com.capstone.tracking.auth.dto.LoginResponse;
 import com.capstone.tracking.auth.dto.RegisterRequest;
+import com.capstone.tracking.auth.dto.RegisterResponse;
 import com.capstone.tracking.user.Campus;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.dto.UserResponse;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -32,9 +34,10 @@ public class AuthController {
     /** clientId is what the FE passes to Google Identity Services; the button is hidden when it is null. */
     public record GoogleConfigResponse(boolean enabled, String clientId) {}
 
-    @Operation(summary = "Register an account with email and password")
+    @Operation(summary = "Student sign-up with a personal email and student code (waits for Admin approval)")
     @PostMapping("/register")
-    public LoginResponse register(@Valid @RequestBody RegisterRequest request) {
+    @ResponseStatus(HttpStatus.CREATED)
+    public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
     }
 

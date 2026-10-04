@@ -20,10 +20,14 @@ public record UserResponse(
         boolean eligible,
         String ineligibleReason,
         String bio,
-        String skills
+        String skills,
+        String studentCode,
+        boolean selfRegistered,
+        String rejectionReason
 ) {
     public static UserResponse from(User u) {
         return new UserResponse(u.getId(), u.getEmail(), u.getFullName(), u.getRole(), u.getStatus(), u.getAvatarUrl(), u.getCampus(), u.getCreatedAt(),
-                u.isEligible(), u.getIneligibleReason(), u.getBio(), u.getSkills());
+                u.isEligible(), u.getIneligibleReason(), u.getBio(), u.getSkills(),
+                u.getStudentCode(), u.isSelfRegistered(), u.getRejectionReason());
     }
 }

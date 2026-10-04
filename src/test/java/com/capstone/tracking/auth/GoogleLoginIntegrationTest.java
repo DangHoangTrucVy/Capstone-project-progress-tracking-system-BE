@@ -94,7 +94,9 @@ class GoogleLoginIntegrationTest {
     @Test
     void outsideDomainAndBadTokenAreRejected() throws Exception {
         googleSays("someone-" + suffix + "@outlook.com");
-        login(Campus.HA_NOI).andExpect(status().isBadRequest());
+        // A personal email has to sign up (student code + Admin approval) before it can sign in.
+        login(Campus.HA_NOI).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("REGISTRATION_REQUIRED"));
 
         when(googleTokenVerifier.verify(anyString())).thenThrow(new GoogleSignInException("Invalid Google ID token"));
         login(Campus.HA_NOI).andExpect(status().isUnauthorized())

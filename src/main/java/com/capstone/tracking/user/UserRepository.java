@@ -24,4 +24,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Page<User> findByRole(Role role, Pageable pageable);
 
     Page<User> findByEligibleFalse(Pageable pageable);
+
+    boolean existsByStudentCodeIgnoreCase(String studentCode);
+
+    Optional<User> findByStudentCodeIgnoreCase(String studentCode);
+
+    Page<User> findBySelfRegisteredTrueAndStatus(UserStatus status, Pageable pageable);
 }
