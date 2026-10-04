@@ -266,7 +266,7 @@ class GroupFormationFlowIntegrationTest extends WorkflowTestSupport {
                 .andExpect(status().isConflict());
         mockMvc.perform(delete(base + memberB).header("Authorization", bearer(admin))).andExpect(status().isNoContent());
         // A locked group is no longer offered to students looking for one.
-        getAs("/api/v1/groups?available=true", user("k-e", Role.STUDENT))
+        getAs("/api/v1/groups?available=true&size=1000", user("k-e", Role.STUDENT))
                 .andExpect(jsonPath("$.content[?(@.id=='" + group + "')]").isEmpty());
     }
 
@@ -427,7 +427,7 @@ class GroupFormationFlowIntegrationTest extends WorkflowTestSupport {
         getAs("/api/v1/notifications", student).andExpect(status().isOk());
         postJson("/api/v1/semesters/x/join-settings", student, Map.of()).andExpect(status().is4xxClientError());
         UUID group = createGroup(user("scope-leader", Role.STUDENT));
-        getAs("/api/v1/groups?available=true", student).andExpect(status().isOk())
+        getAs("/api/v1/groups?available=true&size=1000", student).andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[?(@.id=='" + group + "')]").isNotEmpty());
         getAs("/api/v1/groups/" + group, student).andExpect(status().isForbidden());
         getAs("/api/v1/groups/" + group + "/invites", student).andExpect(status().isForbidden());
