@@ -11,7 +11,7 @@ import org.springframework.http.MediaType;
 
 class GroupLeaderMemberManagementIntegrationTest extends WorkflowTestSupport {
     @Test
-    void onlyAdminManagesRosterAndLeaderSeesOnlyOwnGroup() throws Exception {
+    void onlyAdminAddsMembersLeaderKicksAndSeesOnlyOwnGroup() throws Exception {
         User admin = user("roster-admin", Role.ADMIN);
         User leader = user("roster-leader", Role.GROUP_LEADER);
         StudentGroup a = group("ROSTER-A", admin, false);
@@ -23,9 +23,10 @@ class GroupLeaderMemberManagementIntegrationTest extends WorkflowTestSupport {
         postJson("/api/v1/groups/" + b.getId() + "/members", leader, payload).andExpect(status().isForbidden());
         String memberId = body(postJson("/api/v1/groups/" + a.getId() + "/members", admin, payload)
                 .andExpect(status().isCreated())).get("id").asText();
-        mockMvc.perform(delete("/api/v1/groups/" + a.getId() + "/members/" + memberId).header("Authorization", bearer(leader)))
+        // YC18: before Locked the leader kicks a member of their own group, but not in someone else's group.
+        mockMvc.perform(delete("/api/v1/groups/" + b.getId() + "/members/" + memberId).header("Authorization", bearer(leader)))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(delete("/api/v1/groups/" + a.getId() + "/members/" + memberId).header("Authorization", bearer(admin)))
+        mockMvc.perform(delete("/api/v1/groups/" + a.getId() + "/members/" + memberId).header("Authorization", bearer(leader)))
                 .andExpect(status().isNoContent());
         mockMvc.perform(put("/api/v1/groups/" + a.getId()).header("Authorization", bearer(leader))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ACTIVE\"}"))
