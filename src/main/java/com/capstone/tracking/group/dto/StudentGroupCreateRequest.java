@@ -4,9 +4,12 @@ import jakarta.validation.constraints.NotBlank;
 
 import java.util.UUID;
 
-/** topicId/supervisorId are optional at creation — groups can form before a topic/supervisor is assigned; see {@link com.capstone.tracking.group.dto.StudentGroupUpdateRequest} to set them later. */
+/**
+ * A student creates a group with just a semester (and optionally a code; one is generated otherwise) and becomes its
+ * Leader (YC07). topicId/supervisorId are Admin-only and optional: groups form before a topic/supervisor is assigned.
+ */
 public record StudentGroupCreateRequest(
-        @NotBlank String groupCode,
+        String groupCode,
         UUID topicId,
         UUID supervisorId,
         @NotBlank String semester
