@@ -95,7 +95,7 @@ public class GroupJoinController {
         return joinService.listForGroup(groupId, JoinRequestType.APPLY, currentUser);
     }
 
-    /** Approving an Apply sends the applicant an Invite; they join only when they Accept it (YC10). */
+    /** Approving an Apply directly makes the applicant an active group member. */
     @Operation(summary = "Approve an application")
     @PostMapping("/applications/{id}/approve")
     @PreAuthorize(LEADER)

@@ -124,29 +124,28 @@ public class GroupJoinService {
         return close(app, JoinRequestStatus.WITHDRAWN);
     }
 
-    /** Leader accepts the Apply by inviting the applicant; the applicant is still not a member until they Accept. */
+    /** Leader approves a student's application (Apply), enrolling them as an active group member directly. */
     @Transactional
     public GroupJoinRequest approveApplication(UUID id, User leader) {
         GroupJoinRequest app = lock(id, JoinRequestType.APPLY);
+        User student = users.lockById(app.getStudent().getId()).orElseThrow();
         StudentGroup group = groups.lockById(app.getGroup().getId());
         groups.requireActiveLeader(group.getId(), leader);
         requirePending(app);
         window.requireOpen(group.getSemester());
         groups.requireRecruiting(group);
         requireRoom(group);
-        User student = app.getStudent();
         eligibility.requireEligible(student);
         requireNoGroup(student, group.getSemester(), "The applicant already belongs to a group");
 
-        Instant now = Instant.now();
-        GroupJoinRequest invite = requests.findPending(group.getId(), student.getId(), JoinRequestType.INVITE)
-                .filter(i -> i.getExpiresAt().isAfter(now))
-                .orElse(null);
-        if (invite == null) {
-            invite = newInvite(group, student, leader, app.getMessage(), app.getId(), now);
-        }
+        // Enrolls student directly as active member (or reactivates prior inactive membership row)
+        groups.enroll(group, student, false, app.getId());
         close(app, JoinRequestStatus.APPROVED);
-        return invite;
+
+        events.publishEvent(DomainEvent.of(DomainEventType.MEMBER_JOINED, group.getId(), app.getId(),
+                student.getId(), student.getFullName()));
+
+        return app;
     }
 
     @Transactional
@@ -302,7 +301,11 @@ public class GroupJoinService {
         if (status != JoinRequestStatus.APPROVED) {
             return false;
         }
-        return requests.findBySourceApplicationIdAndType(app.getId(), JoinRequestType.INVITE).stream()
+        List<GroupJoinRequest> invites = requests.findBySourceApplicationIdAndType(app.getId(), JoinRequestType.INVITE);
+        if (invites.isEmpty()) {
+            return true;
+        }
+        return invites.stream()
                 .map(i -> i.effectiveStatus(now))
                 .anyMatch(st -> st == JoinRequestStatus.PENDING || st == JoinRequestStatus.ACCEPTED);
     }
@@ -353,7 +356,7 @@ public class GroupJoinService {
     private GroupJoinRequest close(GroupJoinRequest request, JoinRequestStatus status) {
         request.setStatus(status);
         request.setRespondedAt(Instant.now());
-        return request;
+        return requests.save(request);
     }
 
     private void requireStudent(User user) {

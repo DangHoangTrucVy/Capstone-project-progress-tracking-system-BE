@@ -92,6 +92,16 @@ public class StudentGroupController {
         return StudentGroupResponse.from(updated, studentGroupService.countActiveMembers(updated.getId()));
     }
 
+    @Operation(summary = "Get active members of a group")
+    @GetMapping("/{id}/members")
+    public List<GroupMemberResponse> getMembers(@PathVariable UUID id,
+                                                @AuthenticationPrincipal User currentUser) {
+        studentGroupService.requireCanView(id, currentUser);
+        return studentGroupService.listActiveMembers(id).stream()
+                .map(GroupMemberResponse::from)
+                .toList();
+    }
+
     @Operation(summary = "Add a member to a group")
     @PostMapping("/{id}/members")
     @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
