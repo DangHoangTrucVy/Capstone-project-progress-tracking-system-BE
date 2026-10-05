@@ -19,9 +19,8 @@ class GroupLeaderMemberManagementIntegrationTest extends WorkflowTestSupport {
         join(a, leader, true);
         User member = user("roster-member", Role.STUDENT);
         Map<String,Object> payload = Map.of("userId", member.getId(), "isLeader", false);
-        postJson("/api/v1/groups/" + a.getId() + "/members", leader, payload).andExpect(status().isForbidden());
         postJson("/api/v1/groups/" + b.getId() + "/members", leader, payload).andExpect(status().isForbidden());
-        String memberId = body(postJson("/api/v1/groups/" + a.getId() + "/members", admin, payload)
+        String memberId = body(postJson("/api/v1/groups/" + a.getId() + "/members", leader, payload)
                 .andExpect(status().isCreated())).get("id").asText();
         // YC18: before Locked the leader kicks a member of their own group, but not in someone else's group.
         mockMvc.perform(delete("/api/v1/groups/" + b.getId() + "/members/" + memberId).header("Authorization", bearer(leader)))

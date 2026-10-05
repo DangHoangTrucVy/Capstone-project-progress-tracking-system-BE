@@ -94,7 +94,7 @@ public class StudentGroupController {
 
     @Operation(summary = "Add a member to a group")
     @PostMapping("/{id}/members")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
     public ResponseEntity<GroupMemberResponse> addMember(@PathVariable UUID id,
                                                          @Valid @RequestBody AddMemberRequest request,
                                                          @AuthenticationPrincipal User currentUser) {

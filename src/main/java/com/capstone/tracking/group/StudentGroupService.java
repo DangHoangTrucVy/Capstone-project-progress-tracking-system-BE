@@ -15,6 +15,7 @@ import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
 import com.capstone.tracking.user.UserService;
+import com.capstone.tracking.user.UserStatus;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
@@ -197,15 +198,19 @@ public class StudentGroupService {
 
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request, User actingUser) {
-        if (actingUser != null && actingUser.getRole() == Role.GROUP_LEADER) {
+        if (actingUser != null && actingUser.getRole() != Role.ADMIN) {
             requireGroupLeader(groupId, actingUser);
         }
-        User resolved = resolveStudent(request.userId(), request.email(), request.identifier());
+        User resolved = resolveStudent(request.userId(), request.email(), request.identifier(), request.studentCode());
         // Same lock order as Accept Invite (student, then group) so the two can never deadlock.
         User user = userRepository.lockById(resolved.getId()).orElseThrow();
         StudentGroup group = lockById(groupId);
+        if (actingUser != null && actingUser.getRole() != Role.ADMIN) {
+            requireNotLocked(group);
+        }
         eligibilityService.requireEligible(user);
-        return enroll(group, user, request.isLeader(), NO_REQUEST);
+        boolean isLeader = (actingUser == null || actingUser.getRole() == Role.ADMIN) && request.isLeader();
+        return enroll(group, user, isLeader, NO_REQUEST);
     }
 
     /**
@@ -222,6 +227,9 @@ public class StudentGroupService {
         }
         if (user.getRole() != Role.STUDENT && user.getRole() != Role.GROUP_LEADER) {
             throw new BadRequestException("Only Student/Group Leader accounts can be added as group members");
+        }
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new BadRequestException("Student account is " + user.getStatus().name().toLowerCase() + " and cannot be added to a group");
         }
         if (groupMemberRepository.countByGroupIdAndStatus(group.getId(), MemberStatus.ACTIVE) >= MAX_MEMBERS) {
             throw new ConflictException("Group is full: a group can have at most " + MAX_MEMBERS + " members");
@@ -251,25 +259,40 @@ public class StudentGroupService {
      * Resolves a student by userId, email, student code (email prefix before '@') or a UUID string.
      */
     public User resolveStudent(UUID userId, String email, String identifier) {
+        return resolveStudent(userId, email, identifier, null);
+    }
+
+    /**
+     * Resolves a student by userId, email, identifier, studentCode (MSSV) or UUID string.
+     */
+    public User resolveStudent(UUID userId, String email, String identifier, String studentCode) {
         if (userId != null) {
             return userService.getById(userId);
         }
 
-        String input = identifier != null && !identifier.isBlank()
-                ? identifier.trim()
-                : (email != null && !email.isBlank() ? email.trim() : null);
+        String input = studentCode != null && !studentCode.isBlank()
+                ? studentCode.trim()
+                : (identifier != null && !identifier.isBlank()
+                    ? identifier.trim()
+                    : (email != null && !email.isBlank() ? email.trim() : null));
 
-        if (input == null) {
-            throw new BadRequestException("A valid user identifier (email, student code, or userId) must be provided");
+        if (input == null || input.isBlank()) {
+            throw new BadRequestException("A valid user identifier (student code, email, or userId) must be provided");
         }
 
-        // 1. Try finding by email
+        // 1. Try finding by explicit studentCode column (MSSV, e.g. SE000001)
+        Optional<User> byStudentCode = userRepository.findByStudentCodeIgnoreCase(input);
+        if (byStudentCode.isPresent()) {
+            return byStudentCode.get();
+        }
+
+        // 2. Try finding by email
         Optional<User> byEmail = userRepository.findByEmailIgnoreCase(input);
         if (byEmail.isPresent()) {
             return byEmail.get();
         }
 
-        // 2. If input doesn't contain '@', try matching as student code (email prefix before '@')
+        // 3. If input doesn't contain '@', try matching as student code (email prefix before '@', e.g. se000001@fpt.edu.vn)
         if (!input.contains("@")) {
             List<User> matchingPrefix = userRepository.findByEmailStartingWithIgnoreCase(input + "@");
             if (!matchingPrefix.isEmpty()) {
@@ -277,14 +300,14 @@ public class StudentGroupService {
             }
         }
 
-        // 3. Try parsing as UUID if input might be a UUID string
+        // 4. Try parsing as UUID if input might be a UUID string
         try {
             UUID id = UUID.fromString(input);
             return userService.getById(id);
         } catch (IllegalArgumentException ignored) {
         }
 
-        throw new ResourceNotFoundException("Student with email or student code '" + input + "' not found");
+        throw new ResourceNotFoundException("Student with student code or email '" + input + "' not found");
     }
 
     /**
