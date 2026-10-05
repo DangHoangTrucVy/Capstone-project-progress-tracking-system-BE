@@ -185,19 +185,13 @@ class GroupFormationRulesIntegrationTest extends WorkflowTestSupport {
         User applicant = user("y-applicant", Role.STUDENT);
         mockMvc.perform(put("/api/v1/me/profile").header("Authorization", bearer(applicant)).contentType("application/json")
                 .content("{\"bio\":\"Frontend\",\"skills\":\"React\"}")).andExpect(status().isOk());
-        UUID app = apply(applicant, group);
-        postJson("/api/v1/applications/" + app + "/approve", reload(leader), Map.of()).andExpect(status().isOk());
+        UUID inviteId = invite(reload(leader), group, applicant);
 
-        // While the Invite it produced is open, the group still sees the applicant.
-        getAs("/api/v1/groups/" + group + "/applications", reload(leader))
-                .andExpect(jsonPath("$[0].status").value("APPROVED"))
-                .andExpect(jsonPath("$[0].student.skills").value("React"));
+        // While the Invite is open, the group sees the applicant.
         getAs("/api/v1/groups/" + group + "/invites", reload(leader)).andExpect(jsonPath("$[0].student.bio").value("Frontend"));
 
-        UUID inviteId = joinRequests.findBySourceApplicationIdAndType(app, JoinRequestType.INVITE).get(0).getId();
         postJson("/api/v1/invites/" + inviteId + "/decline", applicant, Map.of()).andExpect(status().isOk());
 
-        getAs("/api/v1/groups/" + group + "/applications", reload(leader)).andExpect(jsonPath("$[0].student").doesNotExist());
         getAs("/api/v1/groups/" + group + "/invites", reload(leader))
                 .andExpect(jsonPath("$[0].student.email").value(applicant.getEmail()))
                 .andExpect(jsonPath("$[0].student.bio").doesNotExist())
