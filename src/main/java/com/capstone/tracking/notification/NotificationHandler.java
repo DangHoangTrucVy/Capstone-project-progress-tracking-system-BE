@@ -157,7 +157,8 @@ public class NotificationHandler {
             }
             case JOIN_APPLICATION_REJECTED -> {
                 recipients.add(event.targetUserId());
-                yield "Nhóm " + code + " đã từ chối đơn xin gia nhập của bạn";
+                yield "Nhóm " + code + " đã từ chối đơn xin gia nhập của bạn"
+                        + (event.details() == null || event.details().isBlank() ? "" : ". Lý do: " + event.details());
             }
             case JOIN_INVITE_RECEIVED -> {
                 recipients.add(event.targetUserId());
@@ -178,7 +179,8 @@ public class NotificationHandler {
             case MEMBER_REMOVED -> {
                 addMembers(members, recipients);
                 recipients.add(event.targetUserId());
-                yield event.label() + " đã bị mời ra khỏi nhóm " + code;
+                yield event.label() + " đã bị mời ra khỏi nhóm " + code
+                        + (event.details() == null || event.details().isBlank() ? "" : " (" + event.details() + ")");
             }
             case LEAVE_REQUESTED -> {
                 addLeaders(members, recipients);
@@ -189,7 +191,12 @@ public class NotificationHandler {
                 yield "Yêu cầu rời nhóm " + code + " của bạn " + event.label();
             }
             case ROSTER_SUBMITTED -> {
-                addSupervisor(group, recipients);
+                // No supervisor assigned yet: the Admins receive the roster and assign one / review it.
+                if (group.getSupervisor() == null) {
+                    addAdmins(recipients);
+                } else {
+                    addSupervisor(group, recipients);
+                }
                 yield "Nhóm " + code + " gửi danh sách thành viên chờ duyệt";
             }
             case ROSTER_REVIEWED -> {

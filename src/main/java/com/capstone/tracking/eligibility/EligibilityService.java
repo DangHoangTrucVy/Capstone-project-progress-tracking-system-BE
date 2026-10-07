@@ -115,6 +115,10 @@ public class EligibilityService {
         if (changed && !eligible) {
             joinRequestRepository.cancelAllPending(user.getId(), Instant.now());
         }
+        if (!eligible) {
+            // YC04: an ineligible student cannot stay in a group; the group module removes them in this transaction.
+            events.publishEvent(new StudentMarkedIneligible(user.getId(), user.getIneligibleReason()));
+        }
         if (changed) {
             // YC03: the student is told about the flag and the reason, or that it was lifted.
             String label = eligible

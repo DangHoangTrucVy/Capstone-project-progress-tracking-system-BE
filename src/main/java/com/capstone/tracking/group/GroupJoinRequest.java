@@ -63,6 +63,10 @@ public class GroupJoinRequest extends BaseEntity {
 
     private Instant respondedAt;
 
+    /** Why the Leader rejected the Apply; shown to the applicant. */
+    @Column(name = "reject_reason", length = 1000)
+    private String rejectReason;
+
     /** PENDING past its deadline counts as EXPIRED even before the sweeper has written that down. */
     public JoinRequestStatus effectiveStatus(Instant now) {
         return status == JoinRequestStatus.PENDING && !expiresAt.isAfter(now) ? JoinRequestStatus.EXPIRED : status;

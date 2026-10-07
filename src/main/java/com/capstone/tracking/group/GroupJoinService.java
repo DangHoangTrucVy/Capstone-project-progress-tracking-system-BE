@@ -150,12 +150,21 @@ public class GroupJoinService {
 
     @Transactional
     public GroupJoinRequest rejectApplication(UUID id, User leader) {
+        return rejectApplication(id, leader, null);
+    }
+
+    /** The Leader turns an Apply down; the reason (if any) is kept on the request and sent to the applicant. */
+    @Transactional
+    public GroupJoinRequest rejectApplication(UUID id, User leader, String reason) {
         GroupJoinRequest app = lock(id, JoinRequestType.APPLY);
         groups.lockById(app.getGroup().getId());
         groups.requireActiveLeader(app.getGroup().getId(), leader);
         requirePending(app);
+        app.setRejectReason(blankToNull(reason));
         events.publishEvent(DomainEvent.of(DomainEventType.JOIN_APPLICATION_REJECTED, app.getGroup().getId(),
-                app.getId(), leader.getId(), app.getGroup().getGroupCode()).withTarget(app.getStudent().getId()));
+                        app.getId(), leader.getId(), app.getGroup().getGroupCode())
+                .withDetails(app.getRejectReason(), null)
+                .withTarget(app.getStudent().getId()));
         return close(app, JoinRequestStatus.REJECTED);
     }
 
@@ -165,13 +174,20 @@ public class GroupJoinService {
     @Transactional
     public GroupJoinRequest sendInvite(UUID groupId, User leader, UUID userId, String email, String identifier,
                                        String message) {
+        return sendInvite(groupId, leader, userId, email, identifier, null, message);
+    }
+
+    /** As above; the student may also be named by student code (MSSV). */
+    @Transactional
+    public GroupJoinRequest sendInvite(UUID groupId, User leader, UUID userId, String email, String identifier,
+                                       String studentCode, String message) {
         StudentGroup group = groups.lockById(groupId);
         groups.requireActiveLeader(groupId, leader);
         window.requireOpen(group.getSemester());
         groups.requireRecruiting(group);
         requireRoom(group);
 
-        User student = groups.resolveStudent(userId, email, identifier);
+        User student = groups.resolveStudent(userId, email, identifier, studentCode);
         requireStudent(student);
         eligibility.requireEligible(student);
         requireNoGroup(student, group.getSemester(), "This student already belongs to a group");

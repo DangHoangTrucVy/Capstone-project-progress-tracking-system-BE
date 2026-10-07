@@ -18,6 +18,7 @@ import com.capstone.tracking.user.UserService;
 import com.capstone.tracking.user.UserStatus;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -361,6 +362,33 @@ public class StudentGroupService {
         invalidateRoster(group);
     }
 
+    /**
+     * YC04: a student flagged not eligible may not do the capstone, so they leave every group they are an active member
+     * of, whatever its lock. If they led the group, the earliest-joined remaining member takes over as Leader.
+     */
+    @Transactional
+    public void removeIneligibleStudent(UUID userId, String reason) {
+        for (GroupMember member : groupMemberRepository.findByUserIdAndStatus(userId, MemberStatus.ACTIVE)) {
+            StudentGroup group = lockById(member.getGroup().getId());
+            boolean wasLeader = member.isLeader();
+            deactivate(group, member);
+            if (wasLeader) {
+                groupMemberRepository.findByGroupIdAndStatus(group.getId(), MemberStatus.ACTIVE).stream()
+                        .filter(m -> !m.getId().equals(member.getId()))
+                        .min(Comparator.comparing(GroupMember::getJoinedAt,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .ifPresent(next -> {
+                            next.setLeader(true);
+                            next.getUser().setRole(Role.GROUP_LEADER);
+                        });
+            }
+            events.publishEvent(DomainEvent.of(DomainEventType.MEMBER_REMOVED, group.getId(), member.getId(), null,
+                            member.getUser().getFullName())
+                    .withDetails("Chưa đủ điều kiện làm Capstone" + (reason == null || reason.isBlank() ? "" : ": " + reason), null)
+                    .withTarget(userId));
+        }
+    }
+
     /** YC20: Admin replaces (or assigns) the leader on behalf of the supervisor's report. */
     @Transactional
     public GroupMember replaceLeader(UUID groupId, UUID newLeaderUserId) {
@@ -387,22 +415,42 @@ public class StudentGroupService {
     public StudentGroup setLocked(UUID groupId, boolean locked) {
         StudentGroup group = lockById(groupId);
         group.setLocked(locked);
+        group.setLockedByAdmin(locked);
         return group;
     }
 
-    /** YC16: the Leader sends the member list (3-5 official members) to the group's supervisor. */
+    /**
+     * YC19: an Admin locks or unlocks any group. The group's active Leader may lock (finalize) their own roster and
+     * unlock it again, but cannot lift a lock an Admin put.
+     */
+    @Transactional
+    public StudentGroup setLocked(UUID groupId, boolean locked, User actingUser) {
+        if (actingUser == null || actingUser.getRole() == Role.ADMIN) {
+            return setLocked(groupId, locked);
+        }
+        requireGroupLeader(groupId, actingUser);
+        StudentGroup group = lockById(groupId);
+        if (!locked && group.isLocked() && group.isLockedByAdmin()) {
+            throw new AccessDeniedException("This roster was locked by an administrator; only an administrator can unlock it");
+        }
+        group.setLocked(locked);
+        group.setLockedByAdmin(false);
+        return group;
+    }
+
+    /**
+     * YC16: the Leader sends the member list (3-5 official members) for approval: to the group's supervisor, or to the
+     * Admins while no supervisor is assigned yet (an Admin can review it or assign the supervisor who then reviews it).
+     * Submitting does not change the roster, so it is allowed on a locked (finalized) roster too.
+     */
     @Transactional
     public StudentGroup submitRoster(UUID groupId, User actingUser) {
         StudentGroup group = lockById(groupId);
         requireGroupLeader(groupId, actingUser);
-        requireNotLocked(group);
         long members = groupMemberRepository.countByGroupIdAndStatus(groupId, MemberStatus.ACTIVE);
         if (members < MIN_MEMBERS || members > MAX_MEMBERS) {
             throw new ConflictException("A group needs " + MIN_MEMBERS + "-" + MAX_MEMBERS
                     + " official members before its roster can be submitted (currently " + members + ")");
-        }
-        if (group.getSupervisor() == null) {
-            throw new ConflictException("The group has no supervisor yet; the roster cannot be sent for approval");
         }
         if (group.getRosterStatus() == RosterStatus.SUBMITTED || group.getRosterStatus() == RosterStatus.APPROVED) {
             throw new ConflictException("The roster is already " + group.getRosterStatus().name().toLowerCase());

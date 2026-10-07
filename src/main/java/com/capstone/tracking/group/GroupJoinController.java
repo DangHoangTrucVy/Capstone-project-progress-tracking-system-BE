@@ -7,6 +7,7 @@ import com.capstone.tracking.group.dto.InviteRequest;
 import com.capstone.tracking.group.dto.JoinRequestResponse;
 import com.capstone.tracking.group.dto.LeaveRequestBody;
 import com.capstone.tracking.group.dto.LeaveRequestResponse;
+import com.capstone.tracking.group.dto.RejectApplicationRequest;
 import com.capstone.tracking.group.dto.VoteRequest;
 import com.capstone.tracking.group.dto.VoteResponse;
 import com.capstone.tracking.user.User;
@@ -103,11 +104,15 @@ public class GroupJoinController {
         return joinService.toResponse(joinService.approveApplication(id, currentUser), currentUser);
     }
 
-    @Operation(summary = "Reject an application")
+    /** The optional reason is stored on the application and sent to the applicant with the notification. */
+    @Operation(summary = "Reject an application (optional reason forwarded to the student)")
     @PostMapping("/applications/{id}/reject")
     @PreAuthorize(LEADER)
-    public JoinRequestResponse reject(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
-        return joinService.toResponse(joinService.rejectApplication(id, currentUser), currentUser);
+    public JoinRequestResponse reject(@PathVariable UUID id,
+                                      @Valid @RequestBody(required = false) RejectApplicationRequest request,
+                                      @AuthenticationPrincipal User currentUser) {
+        return joinService.toResponse(joinService.rejectApplication(id, currentUser,
+                request == null ? null : request.reason()), currentUser);
     }
 
     @Operation(summary = "Member votes on an application")
@@ -132,7 +137,7 @@ public class GroupJoinController {
                                                       @Valid @RequestBody InviteRequest request,
                                                       @AuthenticationPrincipal User currentUser) {
         GroupJoinRequest created = joinService.sendInvite(groupId, currentUser, request.userId(), request.email(),
-                request.identifier(), request.message());
+                request.identifier(), request.studentCode(), request.message());
         return ResponseEntity.created(URI.create("/api/v1/invites/" + created.getId()))
                 .body(joinService.toResponse(created, currentUser));
     }

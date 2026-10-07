@@ -254,9 +254,14 @@ class GroupFormationFlowIntegrationTest extends WorkflowTestSupport {
         UUID other = createGroup(otherLeader);
         accept(a, invite(otherLeader, other, a));
 
+        // The leader may lock (finalize) and unlock their own roster; an Admin's lock only an Admin lifts.
+        postJson("/api/v1/groups/" + group + "/lock", leader, Map.of()).andExpect(jsonPath("$.locked").value(true));
+        mockMvc.perform(delete(base + memberB).header("Authorization", bearer(leader))).andExpect(status().isConflict());
+        postJson("/api/v1/groups/" + group + "/unlock", leader, Map.of()).andExpect(jsonPath("$.locked").value(false));
+
         // Locked: the leader can no longer change the roster, an Admin still can (YC19).
-        postJson("/api/v1/groups/" + group + "/lock", leader, Map.of()).andExpect(status().isForbidden());
         postJson("/api/v1/groups/" + group + "/lock", admin, Map.of()).andExpect(jsonPath("$.locked").value(true));
+        postJson("/api/v1/groups/" + group + "/unlock", leader, Map.of()).andExpect(status().isForbidden());
         mockMvc.perform(delete(base + memberB).header("Authorization", bearer(leader))).andExpect(status().isConflict());
         postJson("/api/v1/groups/" + group + "/invites", leader, Map.of("userId", user("k-c", Role.STUDENT).getId()))
                 .andExpect(status().isConflict());
@@ -347,16 +352,16 @@ class GroupFormationFlowIntegrationTest extends WorkflowTestSupport {
         String submit = "/api/v1/groups/" + group + "/roster/submit";
         String review = "/api/v1/groups/" + group + "/roster/review";
 
-        // Too small (YC06) and no supervisor yet.
+        // Too small (YC06).
         postJson(submit, leader, Map.of()).andExpect(status().isConflict());
         fill(leader, group, 2);
         getAs("/api/v1/groups/" + group, leader).andExpect(jsonPath("$.meetsMinimum").value(true));
+
+        // No supervisor yet: the roster still goes out for approval (to the Admins), who then assign the supervisor.
+        postJson(submit, leader, Map.of()).andExpect(status().isOk()).andExpect(jsonPath("$.rosterStatus").value("SUBMITTED"));
         postJson(submit, leader, Map.of()).andExpect(status().isConflict());
         mockMvc.perform(put("/api/v1/groups/" + group).header("Authorization", bearer(admin)).contentType("application/json")
                 .content("{\"supervisorId\":\"" + supervisor.getId() + "\",\"status\":\"FORMED\"}")).andExpect(status().isOk());
-
-        postJson(submit, leader, Map.of()).andExpect(status().isOk()).andExpect(jsonPath("$.rosterStatus").value("SUBMITTED"));
-        postJson(submit, leader, Map.of()).andExpect(status().isConflict());
         // Only the group's own supervisor (or Admin) reviews it; a rejection needs a reason.
         postJson(review, user("ro-other", Role.INSTRUCTOR), Map.of("approved", true)).andExpect(status().isForbidden());
         postJson(review, leader, Map.of("approved", true)).andExpect(status().isForbidden());

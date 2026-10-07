@@ -13,6 +13,8 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, UUID> 
 
     List<GroupMember> findByGroupIdAndStatus(UUID groupId, MemberStatus status);
 
+    List<GroupMember> findByUserIdAndStatus(UUID userId, MemberStatus status);
+
     Optional<GroupMember> findByGroupIdAndUserId(UUID groupId, UUID userId);
 
     Optional<GroupMember> findByGroupIdAndUserIdAndStatus(UUID groupId, UUID userId, MemberStatus status);
