@@ -23,6 +23,8 @@ public record JoinRequestResponse(
         UUID sourceApplicationId,
         Instant expiresAt,
         Instant respondedAt,
+        /** Why the Leader rejected the application (APPLY + REJECTED only). */
+        String rejectReason,
         Instant createdAt,
         Profile student,
         Integer supportVotes,
@@ -44,6 +46,6 @@ public record JoinRequestResponse(
                                            Integer support, Integer oppose) {
         return new JoinRequestResponse(r.getId(), r.getType(), r.effectiveStatus(now), r.getGroup().getId(),
                 r.getGroup().getGroupCode(), r.getMessage(), r.getSourceApplicationId(), r.getExpiresAt(),
-                r.getRespondedAt(), r.getCreatedAt(), showStudent ? Profile.of(r.getStudent(), showPrivate) : null, support, oppose);
+                r.getRespondedAt(), r.getRejectReason(), r.getCreatedAt(), showStudent ? Profile.of(r.getStudent(), showPrivate) : null, support, oppose);
     }
 }

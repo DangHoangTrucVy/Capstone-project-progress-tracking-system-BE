@@ -23,6 +23,8 @@ public record StudentGroupResponse(
         int minMembers,
         boolean meetsMinimum,
         boolean locked,
+        /** Locked by an Admin: the Leader cannot unlock it. */
+        boolean lockedByAdmin,
         RosterStatus rosterStatus,
         String rosterNote,
         List<GroupMemberResponse> members
@@ -40,6 +42,6 @@ public record StudentGroupResponse(
                 supervisorId, supervisorName, g.getSemester(), g.getStatus(),
                 (int) memberCount, memberCount >= StudentGroupService.MAX_MEMBERS,
                 StudentGroupService.MIN_MEMBERS, memberCount >= StudentGroupService.MIN_MEMBERS, g.isLocked(),
-                g.getRosterStatus(), g.getRosterNote(), members);
+                g.isLocked() && g.isLockedByAdmin(), g.getRosterStatus(), g.getRosterNote(), members);
     }
 }

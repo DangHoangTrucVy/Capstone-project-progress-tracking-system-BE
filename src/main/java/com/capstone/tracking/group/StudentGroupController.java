@@ -131,22 +131,25 @@ public class StudentGroupController {
         return GroupMemberResponse.from(studentGroupService.replaceLeader(id, request.userId()));
     }
 
-    /** YC19: after Locked only an Admin edits the roster. */
-    @Operation(summary = "Lock the group roster")
+    /**
+     * YC19: after Locked only an Admin edits the roster. The group's Leader may lock (finalize) their own roster and
+     * unlock it again, unless an Admin locked it.
+     */
+    @Operation(summary = "Lock the group roster (Admin or the group's Leader)")
     @PostMapping("/{id}/lock")
-    @PreAuthorize("hasRole('ADMIN')")
-    public StudentGroupResponse lock(@PathVariable UUID id) {
-        return respond(studentGroupService.setLocked(id, true));
+    @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
+    public StudentGroupResponse lock(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        return respond(studentGroupService.setLocked(id, true, currentUser));
     }
 
-    @Operation(summary = "Unlock the group roster")
+    @Operation(summary = "Unlock the group roster (Admin, or the Leader when they locked it)")
     @PostMapping("/{id}/unlock")
-    @PreAuthorize("hasRole('ADMIN')")
-    public StudentGroupResponse unlock(@PathVariable UUID id) {
-        return respond(studentGroupService.setLocked(id, false));
+    @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
+    public StudentGroupResponse unlock(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        return respond(studentGroupService.setLocked(id, false, currentUser));
     }
 
-    /** YC16: the Leader sends the member list to the supervisor. */
+    /** YC16: the Leader sends the member list to the supervisor (or to the Admins while none is assigned). */
     @Operation(summary = "Leader submits the roster to the supervisor")
     @PostMapping("/{id}/roster/submit")
     @PreAuthorize("hasRole('GROUP_LEADER')")
