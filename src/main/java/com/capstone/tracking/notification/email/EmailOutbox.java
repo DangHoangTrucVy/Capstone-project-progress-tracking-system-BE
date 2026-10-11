@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -73,7 +74,7 @@ public class EmailOutbox extends BaseEntity {
                 .subject(message.subject().length() > 255 ? message.subject().substring(0, 254) + "…" : message.subject())
                 .body(message.body())
                 .status(Status.PENDING)
-                .nextAttemptAt(Instant.now())
+                .nextAttemptAt(Instant.now().truncatedTo(ChronoUnit.MICROS)) // never stored after "now" (DB rounding)
                 .build();
     }
 

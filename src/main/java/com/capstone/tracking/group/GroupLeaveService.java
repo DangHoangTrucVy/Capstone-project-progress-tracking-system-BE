@@ -40,6 +40,10 @@ public class GroupLeaveService {
             throw new AccessDeniedException("You are not an active member of this group");
         }
         boolean leader = isLeader(groupId, current);
+        if (leader && (reason == null || reason.isBlank())) {
+            // The Admin decides the Leader's request and must know why (LEA-05).
+            throw new BadRequestException("Say why you want to leave the group");
+        }
         if (!leader) {
             // The Leader's request is decided by an Admin, who may change even a Locked roster.
             groups.requireNotLocked(group);

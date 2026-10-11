@@ -27,6 +27,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -91,6 +92,7 @@ public abstract class WorkflowTestSupport {
     }
 
     protected JsonNode body(ResultActions result) throws Exception {
-        return objectMapper.readTree(result.andReturn().getResponse().getContentAsString());
+        // JSON responses carry no charset, so MockMvc would decode them as ISO-8859-1 and garble Vietnamese text.
+        return objectMapper.readTree(result.andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
     }
 }

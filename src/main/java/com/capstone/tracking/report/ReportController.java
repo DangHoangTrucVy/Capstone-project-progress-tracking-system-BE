@@ -4,7 +4,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.report.dto.ReportSummaryResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -26,6 +28,9 @@ public class ReportController {
     private static final MediaType XLSX =
             MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
+    private static final DateTimeFormatter FILE_STAMP =
+            DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
+
     private final ReportService reportService;
     private final HandoverExportService handoverExportService;
 
@@ -37,17 +42,21 @@ public class ReportController {
         return reportService.summary(semester, weekNumber);
     }
 
-    /** "Xuất danh sách bàn giao": sheets Danh_sach_nhom and Chua_co_nhom; no semester = every semester. */
+    /**
+     * "Xuất danh sách bàn giao": sheets Danh_sach_nhom and Chua_co_nhom; no semester = every semester. The file is
+     * named Danh_sach_ghep_nhom_[semester_]yyyyMMdd_HHmmss.xlsx (Vietnam time).
+     */
     @Operation(summary = "Export the handover list (Excel: Danh_sach_nhom, Chua_co_nhom)")
-    @GetMapping("/api/v1/reports/handover/export")
+    @GetMapping({"/api/v1/reports/export", "/api/v1/reports/handover/export"})
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<byte[]> exportHandover(@RequestParam(required = false) String semester) {
-        String name = "danh_sach_ban_giao" + (semester == null || semester.isBlank()
-                ? "" : "_" + semester.trim().replaceAll("[^A-Za-z0-9_-]", "")) + ".xlsx";
+        String term = semester == null ? "" : semester.trim().replaceAll("[^A-Za-z0-9_-]", "");
+        String name = "Danh_sach_ghep_nhom_" + (term.isEmpty() ? "" : term + "_")
+                + FILE_STAMP.format(Instant.now()) + ".xlsx";
         return ResponseEntity.ok()
                 .contentType(XLSX)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(name, StandardCharsets.UTF_8).build().toString())
+                        ContentDisposition.attachment().filename(name).build().toString())
                 .body(handoverExportService.export(semester));
     }
 }

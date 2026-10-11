@@ -163,13 +163,13 @@ class LeaderLeaveRequestAndAdminFixesIntegrationTest extends WorkflowTestSupport
         addMember(leader, group, a);
         addMember(leader, group, b);
 
-        String first = body(postJson("/api/v1/groups/" + group + "/leave-requests", leader, Map.of())
+        String first = body(postJson("/api/v1/groups/" + group + "/leave-requests", leader, Map.of("reason", "Chuyển trường"))
                 .andExpect(status().isCreated())).get("id").asText();
         postJson("/api/v1/leave-requests/" + first + "/reject", admin, Map.of())
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REJECTED"));
         assertThat(isLeader(group, leader)).isTrue();
 
-        String second = body(postJson("/api/v1/groups/" + group + "/leave-requests", leader, Map.of())
+        String second = body(postJson("/api/v1/groups/" + group + "/leave-requests", leader, Map.of("reason", "Chuyển trường"))
                 .andExpect(status().isCreated())).get("id").asText();
         postJson("/api/v1/leave-requests/" + second + "/approve", admin, Map.of()).andExpect(status().isOk());
         assertThat(isLeader(group, a)).isTrue();
@@ -222,7 +222,7 @@ class LeaderLeaveRequestAndAdminFixesIntegrationTest extends WorkflowTestSupport
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type",
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".xlsx")))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Danh_sach_ghep_nhom_S-")))
                 .andReturn().getResponse().getContentAsByteArray();
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(file))) {
