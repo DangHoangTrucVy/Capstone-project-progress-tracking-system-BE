@@ -10,6 +10,7 @@ import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.net.URI;
@@ -36,7 +37,16 @@ public class StudentGroupController {
 
     private final StudentGroupService studentGroupService;
 
-    public record LeaderRequest(@NotNull UUID userId) {}
+    /**
+     * Who becomes the leader: the user id, the membership id (the {@code id} in the member list), or the student's
+     * MSSV / e-mail. At least one is required.
+     */
+    public record LeaderRequest(
+            @JsonAlias({"newLeaderUserId", "leaderId", "leaderUserId"}) UUID userId,
+            UUID memberId,
+            @JsonAlias({"mssv", "studentId", "student_code"}) String studentCode,
+            String email,
+            String identifier) {}
 
     public record RosterReviewRequest(@NotNull Boolean approved, @Size(max = 1000) String note) {}
 
@@ -125,10 +135,11 @@ public class StudentGroupController {
 
     /** YC20: Admin replaces the leader (on the supervisor's report); the new leader must already be a member. */
     @Operation(summary = "Replace the group leader")
-    @PutMapping("/{id}/leader")
+    @RequestMapping(value = "/{id}/leader", method = {RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.POST})
     @PreAuthorize("hasRole('ADMIN')")
     public GroupMemberResponse replaceLeader(@PathVariable UUID id, @Valid @RequestBody LeaderRequest request) {
-        return GroupMemberResponse.from(studentGroupService.replaceLeader(id, request.userId()));
+        return GroupMemberResponse.from(studentGroupService.replaceLeader(id, request.userId(), request.memberId(),
+                request.studentCode(), request.email(), request.identifier()));
     }
 
     /**

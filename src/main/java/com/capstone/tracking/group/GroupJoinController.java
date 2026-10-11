@@ -1,6 +1,7 @@
 package com.capstone.tracking.group;
 
 import io.swagger.v3.oas.annotations.Operation;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.capstone.tracking.group.dto.ApplyRequest;
 import com.capstone.tracking.group.dto.GroupMemberResponse;
 import com.capstone.tracking.group.dto.InviteRequest;
@@ -39,6 +40,10 @@ public class GroupJoinController {
 
     private static final String STUDENT = "hasAnyRole('STUDENT','GROUP_LEADER')";
     private static final String LEADER = "hasRole('GROUP_LEADER')";
+    private static final String LEADER_OR_ADMIN = "hasAnyRole('GROUP_LEADER','ADMIN')";
+
+    /** Approving a Leader's own request: who leads next (optional; else the earliest-joined member). */
+    public record LeaveDecisionBody(@JsonAlias({"leaderUserId", "newLeaderId"}) UUID newLeaderUserId) {}
 
     private final GroupJoinService joinService;
     private final GroupLeaveService leaveService;
@@ -191,16 +196,28 @@ public class GroupJoinController {
 
     @Operation(summary = "Approve a leave request")
     @PostMapping("/leave-requests/{id}/approve")
-    @PreAuthorize(LEADER)
-    public LeaveRequestResponse approveLeave(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
-        return LeaveRequestResponse.from(leaveService.approve(id, currentUser));
+    @PreAuthorize(LEADER_OR_ADMIN)
+    public LeaveRequestResponse approveLeave(@PathVariable UUID id,
+                                             @RequestBody(required = false) LeaveDecisionBody body,
+                                             @AuthenticationPrincipal User currentUser) {
+        return LeaveRequestResponse.from(leaveService.approve(id, currentUser,
+                body == null ? null : body.newLeaderUserId()));
     }
 
     @Operation(summary = "Reject a leave request")
     @PostMapping("/leave-requests/{id}/reject")
-    @PreAuthorize(LEADER)
+    @PreAuthorize(LEADER_OR_ADMIN)
     public LeaveRequestResponse rejectLeave(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return LeaveRequestResponse.from(leaveService.reject(id, currentUser));
+    }
+
+    /** Admin inbox: the Leaders' requests to leave come here (leaderOnly=true), together with any other request. */
+    @Operation(summary = "All leave requests (Admin), e.g. the Leaders' pending requests")
+    @GetMapping("/leave-requests")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<LeaveRequestResponse> allLeaveRequests(@RequestParam(required = false) LeaveRequestStatus status,
+                                                       @RequestParam(defaultValue = "false") boolean leaderOnly) {
+        return leaveService.listAll(status, leaderOnly).stream().map(LeaveRequestResponse::from).toList();
     }
 
     @Operation(summary = "Withdraw my leave request")

@@ -30,12 +30,21 @@ public record JoinRequestResponse(
         Integer supportVotes,
         Integer opposeVotes
 ) {
+    /** {@code studentCode}: the MSSV, or the e-mail prefix (se000001@fpt.edu.vn) when none was recorded. */
     public record Profile(UUID userId, String fullName, String email, Campus campus, String avatarUrl, String bio,
-                   String skills) {
+                   String skills, String studentCode) {
         static Profile of(User u, boolean withPrivate) {
             return new Profile(u.getId(), u.getFullName(), u.getEmail(), u.getCampus(), u.getAvatarUrl(),
-                    withPrivate ? u.getBio() : null, withPrivate ? u.getSkills() : null);
+                    withPrivate ? u.getBio() : null, withPrivate ? u.getSkills() : null, studentCodeOf(u));
         }
+    }
+
+    public static String studentCodeOf(User u) {
+        if (u.getStudentCode() != null && !u.getStudentCode().isBlank()) {
+            return u.getStudentCode();
+        }
+        String email = u.getEmail();
+        return email != null && email.contains("@") ? email.substring(0, email.indexOf('@')) : null;
     }
 
     /**

@@ -53,6 +53,16 @@ public class EligibilityController {
         return eligibilityService.importCsv(file.getBytes());
     }
 
+    /** The students the import created/updated, with their MSSV and eligibility; filter by eligible and keyword. */
+    @Operation(summary = "List the imported students (detail, paged)")
+    @GetMapping({"/students", "/imported"})
+    @PreAuthorize("hasRole('ADMIN')")
+    public Page<UserResponse> imported(@RequestParam(required = false) Boolean eligible,
+                                       @RequestParam(required = false) String q,
+                                       @ParameterObject Pageable pageable) {
+        return eligibilityService.listImported(eligible, q, pageable).map(UserResponse::from);
+    }
+
     @Operation(summary = "Mark a student eligible or not eligible")
     @PutMapping("/{userId}")
     @PreAuthorize("hasRole('ADMIN')")

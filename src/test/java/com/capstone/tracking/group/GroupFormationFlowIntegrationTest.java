@@ -283,7 +283,10 @@ class GroupFormationFlowIntegrationTest extends WorkflowTestSupport {
         accept(a, invite(leader, group, a));
         accept(b, invite(leader, group, b));
 
-        postJson("/api/v1/groups/" + group + "/leave-requests", leader, Map.of("reason", "x")).andExpect(status().isBadRequest());
+        // The Leader's own request goes to the Admins (see LeaderLeaveRequestAndAdminFixesIntegrationTest).
+        String leaderLeave = body(postJson("/api/v1/groups/" + group + "/leave-requests", leader, Map.of("reason", "x"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.leaderRequest").value(true))).get("id").asText();
+        postJson("/api/v1/leave-requests/" + leaderLeave + "/withdraw", leader, Map.of()).andExpect(status().isOk());
         postJson("/api/v1/groups/" + group + "/leave-requests", user("lv-out", Role.STUDENT), Map.of())
                 .andExpect(status().isForbidden());
         String leaveId = body(postJson("/api/v1/groups/" + group + "/leave-requests", a, Map.of("reason", "overloaded"))

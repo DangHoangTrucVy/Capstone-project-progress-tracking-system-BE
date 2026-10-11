@@ -43,6 +43,10 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, UUID> 
 
     long countByGroupIdAndStatus(UUID groupId, MemberStatus status);
 
+    /** Every membership with the given status, user and group loaded (one query for the handover export). */
+    @Query("select m from GroupMember m join fetch m.user join fetch m.group where m.status = :status")
+    List<GroupMember> findAllWithUserByStatus(@Param("status") MemberStatus status);
+
     @Query("select m.group.id, count(m) from GroupMember m "
             + "where m.group.id in :groupIds and m.status = :status group by m.group.id")
     List<Object[]> countByGroupIds(@Param("groupIds") Collection<UUID> groupIds, @Param("status") MemberStatus status);

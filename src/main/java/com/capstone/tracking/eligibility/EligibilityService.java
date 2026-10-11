@@ -10,6 +10,9 @@ import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
 import com.capstone.tracking.user.UserService;
 import com.capstone.tracking.user.UserStatus;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.time.Instant;
@@ -20,6 +23,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,9 +51,28 @@ public class EligibilityService {
     private final GroupJoinRequestRepository joinRequestRepository;
     private final ApplicationEventPublisher events;
 
-    public record Entry(String email, String fullName, boolean eligible, String reason) {}
+    /** One line of the list; {@code studentCode} (MSSV) is optional. */
+    public record Entry(String email, String fullName, boolean eligible, String reason,
+                        @JsonAlias({"mssv", "studentId", "student_code"}) String studentCode) {
+        public Entry(String email, String fullName, boolean eligible, String reason) {
+            this(email, fullName, eligible, reason, null);
+        }
+    }
 
-    public record ImportResult(int created, int updated, int flagged, int cleared, List<String> invalid) {}
+    public enum ImportAction { CREATED, UPDATED }
+
+    /** A student the import created or updated, as it stands after the import. */
+    public record ImportedStudent(UUID userId, String email, String fullName, String studentCode, boolean eligible,
+                                  String ineligibleReason, ImportAction action) {
+        static ImportedStudent of(User u, ImportAction action) {
+            return new ImportedStudent(u.getId(), u.getEmail(), u.getFullName(), u.getStudentCode(), u.isEligible(),
+                    u.getIneligibleReason(), action);
+        }
+    }
+
+    /** The counts, plus the detail of every created/updated student ({@code students}). */
+    public record ImportResult(int created, int updated, int flagged, int cleared, List<String> invalid,
+                               List<ImportedStudent> students) {}
 
     /** Throws 403 NOT_ELIGIBLE when the student is flagged; the message carries the reason. */
     public void requireEligible(User student) {
@@ -63,6 +91,8 @@ public class EligibilityService {
         int flagged = 0;
         int cleared = 0;
         List<String> invalid = new ArrayList<>();
+        List<ImportedStudent> students = new ArrayList<>();
+        Instant now = Instant.now();
         for (Entry entry : entries) {
             String email = entry.email() == null ? "" : entry.email().trim().toLowerCase();
             if (email.isEmpty() || !email.contains("@")) {
@@ -70,17 +100,31 @@ public class EligibilityService {
                 continue;
             }
             User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
+            ImportAction action;
             if (user == null) {
                 String name = entry.fullName() == null || entry.fullName().isBlank() ? email : entry.fullName().trim();
                 user = userRepository.save(User.builder().email(email).fullName(name).role(Role.STUDENT)
                         .status(UserStatus.ACTIVE).build());
                 created++;
+                action = ImportAction.CREATED;
             } else if (user.getRole() != Role.STUDENT && user.getRole() != Role.GROUP_LEADER) {
                 invalid.add(email + " (not a student account)");
                 continue;
             } else {
                 updated++;
+                action = ImportAction.UPDATED;
             }
+            String code = entry.studentCode() == null ? null : entry.studentCode().trim();
+            if (code != null && !code.isEmpty() && !code.equalsIgnoreCase(user.getStudentCode())) {
+                UUID self = user.getId();
+                if (code.length() > 20 || userRepository.findByStudentCodeIgnoreCase(code)
+                        .filter(other -> !other.getId().equals(self)).isPresent()) {
+                    invalid.add(email + " (student code " + code + " is invalid or used by another account)");
+                } else {
+                    user.setStudentCode(code);
+                }
+            }
+            user.setImportedAt(now);
             if (apply(user, entry.eligible(), entry.reason())) {
                 if (entry.eligible()) {
                     cleared++;
@@ -88,8 +132,9 @@ public class EligibilityService {
                     flagged++;
                 }
             }
+            students.add(ImportedStudent.of(user, action));
         }
-        return new ImportResult(created, updated, flagged, cleared, invalid);
+        return new ImportResult(created, updated, flagged, cleared, invalid, students);
     }
 
     /** Flag (eligible=false, with a reason) or un-flag a single student. */
@@ -101,6 +146,12 @@ public class EligibilityService {
         }
         apply(user, eligible, reason);
         return user;
+    }
+
+    /** Students the list import created or updated (latest state), for the Admin's "imported students" screen. */
+    public Page<User> listImported(Boolean eligible, String keyword, Pageable pageable) {
+        String q = keyword == null || keyword.isBlank() ? "%" : "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
+        return userRepository.searchImported(eligible == null, eligible == null || eligible, q, pageable);
     }
 
     public Page<User> listIneligible(Pageable pageable) {
@@ -138,7 +189,8 @@ public class EligibilityService {
      */
     @Transactional
     public ImportResult importCsv(byte[] data) {
-        List<List<String>> rows = readCsv(new String(data, StandardCharsets.UTF_8).replace("\uFEFF", ""));
+        List<List<String>> rows = isXlsx(data) ? readXlsx(data)
+                : readCsv(new String(data, StandardCharsets.UTF_8).replace("\uFEFF", ""));
         if (rows.isEmpty()) {
             throw new BadRequestException("The file is empty");
         }
@@ -151,6 +203,8 @@ public class EligibilityService {
                 case "ho ten", "ho va ten", "full name", "fullname", "name" -> col.putIfAbsent("name", i);
                 case "du dieu kien", "dieu kien", "eligible" -> col.putIfAbsent("eligible", i);
                 case "ly do", "reason" -> col.putIfAbsent("reason", i);
+                case "mssv", "ma sv", "ma so sinh vien", "ma sinh vien", "student code", "studentcode", "student id" ->
+                        col.putIfAbsent("code", i);
                 default -> { }
             }
         }
@@ -171,11 +225,12 @@ public class EligibilityService {
                 continue;
             }
             entries.add(new Entry(cell(row, col.get("email")), cell(row, col.get("name")), eligible,
-                    cell(row, col.get("reason"))));
+                    cell(row, col.get("reason")), cell(row, col.get("code"))));
         }
         ImportResult result = importList(entries);
         invalid.addAll(0, result.invalid());
-        return new ImportResult(result.created(), result.updated(), result.flagged(), result.cleared(), invalid);
+        return new ImportResult(result.created(), result.updated(), result.flagged(), result.cleared(), invalid,
+                result.students());
     }
 
     private static Boolean parseEligible(String raw) {
@@ -200,6 +255,31 @@ public class EligibilityService {
     private static String fold(String s) {
         return Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}+", "")
                 .replace('đ', 'd').replace('Đ', 'D').toLowerCase(Locale.ROOT);
+    }
+
+    /** An .xlsx file is a zip archive: it starts with "PK". */
+    private static boolean isXlsx(byte[] data) {
+        return data.length > 3 && data[0] == 'P' && data[1] == 'K' && data[2] == 3 && data[3] == 4;
+    }
+
+    /** The first sheet of an Excel file, every cell read as the text Excel shows. */
+    static List<List<String>> readXlsx(byte[] data) {
+        List<List<String>> rows = new ArrayList<>();
+        DataFormatter formatter = new DataFormatter();
+        try (Workbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
+            Sheet sheet = workbook.getSheetAt(0);
+            for (Row row : sheet) {
+                List<String> cells = new ArrayList<>();
+                for (int c = 0; c < Math.max(row.getLastCellNum(), 0); c++) {
+                    Cell cell = row.getCell(c);
+                    cells.add(cell == null ? "" : formatter.formatCellValue(cell));
+                }
+                rows.add(cells);
+            }
+        } catch (IOException | RuntimeException e) {
+            throw new BadRequestException("Cannot read the Excel file: " + e.getMessage());
+        }
+        return rows;
     }
 
     /** RFC 4180: quoted fields may hold separators, doubled quotes and line breaks. */
