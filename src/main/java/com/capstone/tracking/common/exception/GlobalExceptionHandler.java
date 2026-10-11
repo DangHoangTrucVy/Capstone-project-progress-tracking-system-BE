@@ -117,6 +117,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
+    /** A broken multipart request (no boundary, not multipart, missing part) is the client's fault: 400, not 500. */
+    @ExceptionHandler({org.springframework.web.multipart.MultipartException.class,
+            org.springframework.web.multipart.support.MissingServletRequestPartException.class})
+    public ResponseEntity<ErrorResponse> handleBadMultipart(Exception ex, HttpServletRequest request) {
+        ErrorResponse body = ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "BAD_MULTIPART",
+                "Send the file as multipart/form-data in a part named 'file': " + ex.getMessage(), request.getRequestURI());
+        return ResponseEntity.badRequest().body(body);
+    }
+
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
         ErrorResponse body = ErrorResponse.of(HttpStatus.METHOD_NOT_ALLOWED.value(), "METHOD_NOT_ALLOWED",

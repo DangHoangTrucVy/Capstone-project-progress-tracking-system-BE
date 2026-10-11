@@ -28,7 +28,7 @@ import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,11 +51,21 @@ public class EligibilityService {
     private final GroupJoinRequestRepository joinRequestRepository;
     private final ApplicationEventPublisher events;
 
-    /** One line of the list; {@code studentCode} (MSSV) is optional. */
-    public record Entry(String email, String fullName, boolean eligible, String reason,
+    /**
+     * One line of the list. {@code email} identifies the student; it may be left out for a student who already has an
+     * account with that {@code studentCode} (MSSV). {@code eligible} left out means eligible, as a blank cell in the CSV.
+     */
+    public record Entry(String email,
+                        @JsonAlias({"name", "hoTen", "ho_ten"}) String fullName,
+                        @JsonAlias({"duDieuKien", "du_dieu_kien"}) Boolean eligible,
+                        @JsonAlias({"lyDo", "ly_do", "ineligibleReason"}) String reason,
                         @JsonAlias({"mssv", "studentId", "student_code"}) String studentCode) {
         public Entry(String email, String fullName, boolean eligible, String reason) {
             this(email, fullName, eligible, reason, null);
+        }
+
+        boolean isEligible() {
+            return eligible == null || eligible;
         }
     }
 
@@ -83,9 +93,29 @@ public class EligibilityService {
         }
     }
 
-    /** Upserts the imported students. Existing non-student accounts are never touched. */
+    /**
+     * Upserts the imported students. Existing non-student accounts are never touched. Lines that cannot be used are
+     * listed in {@code invalid}; when no line at all can be used the import fails with 400 instead of answering
+     * "0 created" as if it had worked.
+     */
     @Transactional
     public ImportResult importList(List<Entry> entries) {
+        if (entries == null || entries.isEmpty()) {
+            throw new BadRequestException("The student list is empty");
+        }
+        return requireSomethingImported(upsert(entries));
+    }
+
+    private static ImportResult requireSomethingImported(ImportResult result) {
+        if (result.students().isEmpty() && !result.invalid().isEmpty()) {
+            List<String> shown = result.invalid().subList(0, Math.min(10, result.invalid().size()));
+            throw new BadRequestException("No student was imported. Invalid lines: " + String.join("; ", shown)
+                    + (result.invalid().size() > shown.size() ? " (+" + (result.invalid().size() - shown.size()) + " more)" : ""));
+        }
+        return result;
+    }
+
+    private ImportResult upsert(List<Entry> entries) {
         int created = 0;
         int updated = 0;
         int flagged = 0;
@@ -93,13 +123,27 @@ public class EligibilityService {
         List<String> invalid = new ArrayList<>();
         List<ImportedStudent> students = new ArrayList<>();
         Instant now = Instant.now();
+        int line = 0;
         for (Entry entry : entries) {
+            line++;
             String email = entry.email() == null ? "" : entry.email().trim().toLowerCase();
-            if (email.isEmpty() || !email.contains("@")) {
-                invalid.add(String.valueOf(entry.email()));
+            String givenCode = entry.studentCode() == null ? "" : entry.studentCode().trim();
+            User user;
+            if (email.isEmpty()) {
+                // No e-mail: only an existing account can be matched, by its MSSV.
+                user = givenCode.isEmpty() ? null : userRepository.findByStudentCodeIgnoreCase(givenCode).orElse(null);
+                if (user == null) {
+                    invalid.add("line " + line + ": email is required"
+                            + (givenCode.isEmpty() ? "" : " (no account has student code " + givenCode + ")"));
+                    continue;
+                }
+                email = user.getEmail();
+            } else if (!email.contains("@")) {
+                invalid.add("line " + line + ": invalid email '" + entry.email().trim() + "'");
                 continue;
+            } else {
+                user = userRepository.findByEmailIgnoreCase(email).orElse(null);
             }
-            User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
             ImportAction action;
             if (user == null) {
                 String name = entry.fullName() == null || entry.fullName().isBlank() ? email : entry.fullName().trim();
@@ -125,8 +169,8 @@ public class EligibilityService {
                 }
             }
             user.setImportedAt(now);
-            if (apply(user, entry.eligible(), entry.reason())) {
-                if (entry.eligible()) {
+            if (apply(user, entry.isEligible(), entry.reason())) {
+                if (entry.isEligible()) {
                     cleared++;
                 } else {
                     flagged++;
@@ -189,7 +233,7 @@ public class EligibilityService {
      */
     @Transactional
     public ImportResult importCsv(byte[] data) {
-        List<List<String>> rows = isXlsx(data) ? readXlsx(data)
+        List<List<String>> rows = isExcel(data) ? readExcel(data)
                 : readCsv(new String(data, StandardCharsets.UTF_8).replace("\uFEFF", ""));
         if (rows.isEmpty()) {
             throw new BadRequestException("The file is empty");
@@ -208,8 +252,9 @@ public class EligibilityService {
                 default -> { }
             }
         }
-        if (!col.containsKey("email")) {
-            throw new BadRequestException("The file needs an 'email' column");
+        if (!col.containsKey("email") && !col.containsKey("code")) {
+            throw new BadRequestException("The file needs an 'email' column (or 'mssv' for students who already have an"
+                    + " account); supported formats: .csv, .xlsx, .xls");
         }
         List<Entry> entries = new ArrayList<>();
         List<String> invalid = new ArrayList<>();
@@ -227,10 +272,13 @@ public class EligibilityService {
             entries.add(new Entry(cell(row, col.get("email")), cell(row, col.get("name")), eligible,
                     cell(row, col.get("reason")), cell(row, col.get("code"))));
         }
-        ImportResult result = importList(entries);
+        if (entries.isEmpty() && invalid.isEmpty()) {
+            throw new BadRequestException("The file has no student rows");
+        }
+        ImportResult result = upsert(entries);
         invalid.addAll(0, result.invalid());
-        return new ImportResult(result.created(), result.updated(), result.flagged(), result.cleared(), invalid,
-                result.students());
+        return requireSomethingImported(new ImportResult(result.created(), result.updated(), result.flagged(),
+                result.cleared(), invalid, result.students()));
     }
 
     private static Boolean parseEligible(String raw) {
@@ -257,16 +305,19 @@ public class EligibilityService {
                 .replace('đ', 'd').replace('Đ', 'D').toLowerCase(Locale.ROOT);
     }
 
-    /** An .xlsx file is a zip archive: it starts with "PK". */
-    private static boolean isXlsx(byte[] data) {
-        return data.length > 3 && data[0] == 'P' && data[1] == 'K' && data[2] == 3 && data[3] == 4;
+    /** .xlsx is a zip archive ("PK\3\4"); .xls (Excel 97-2003) is an OLE2 compound file (D0 CF 11 E0). */
+    private static boolean isExcel(byte[] data) {
+        boolean xlsx = data.length > 3 && data[0] == 'P' && data[1] == 'K' && data[2] == 3 && data[3] == 4;
+        boolean xls = data.length > 3 && (data[0] & 0xFF) == 0xD0 && (data[1] & 0xFF) == 0xCF
+                && (data[2] & 0xFF) == 0x11 && (data[3] & 0xFF) == 0xE0;
+        return xlsx || xls;
     }
 
-    /** The first sheet of an Excel file, every cell read as the text Excel shows. */
-    static List<List<String>> readXlsx(byte[] data) {
+    /** The first sheet of an Excel file (.xlsx or .xls), every cell read as the text Excel shows. */
+    static List<List<String>> readExcel(byte[] data) {
         List<List<String>> rows = new ArrayList<>();
         DataFormatter formatter = new DataFormatter();
-        try (Workbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(data))) {
             Sheet sheet = workbook.getSheetAt(0);
             for (Row row : sheet) {
                 List<String> cells = new ArrayList<>();
