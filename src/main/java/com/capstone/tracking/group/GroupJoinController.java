@@ -1,6 +1,7 @@
 package com.capstone.tracking.group;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.capstone.tracking.group.dto.ApplyRequest;
 import com.capstone.tracking.group.dto.GroupMemberResponse;
@@ -64,6 +65,7 @@ public class GroupJoinController {
     // ------------------------------------------------------------------ Apply (student side)
 
     @Operation(summary = "Apply to join a group")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/groups/{groupId}/applications")
     @PreAuthorize(STUDENT)
     public ResponseEntity<JoinRequestResponse> apply(@PathVariable UUID groupId,
@@ -136,6 +138,7 @@ public class GroupJoinController {
     // ------------------------------------------------------------------ Invite
 
     @Operation(summary = "Invite a student to the group")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/groups/{groupId}/invites")
     @PreAuthorize(LEADER)
     public ResponseEntity<JoinRequestResponse> invite(@PathVariable UUID groupId,
@@ -155,6 +158,7 @@ public class GroupJoinController {
 
     /** Accepting is the moment of joining: the student becomes an official member. */
     @Operation(summary = "Accept an invite")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/invites/{id}/accept")
     @PreAuthorize(STUDENT)
     public ResponseEntity<GroupMemberResponse> accept(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
@@ -179,6 +183,7 @@ public class GroupJoinController {
     // ------------------------------------------------------------------ leaving
 
     @Operation(summary = "Request to leave the group")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/groups/{groupId}/leave-requests")
     @PreAuthorize(STUDENT)
     public ResponseEntity<LeaveRequestResponse> requestLeave(@PathVariable UUID groupId,

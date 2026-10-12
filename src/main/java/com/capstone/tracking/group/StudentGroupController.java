@@ -1,6 +1,7 @@
 package com.capstone.tracking.group;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.group.dto.AddMemberRequest;
 import com.capstone.tracking.group.dto.GroupMemberResponse;
 import com.capstone.tracking.group.dto.StudentGroupCreateRequest;
@@ -52,6 +53,7 @@ public class StudentGroupController {
 
     /** A student creates a group and becomes its Leader (YC07); an Admin may provision one with topic/supervisor. */
     @Operation(summary = "Create a group (the creator becomes Leader)")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','STUDENT','GROUP_LEADER')")
     public ResponseEntity<StudentGroupResponse> create(@Valid @RequestBody StudentGroupCreateRequest request,
@@ -113,6 +115,7 @@ public class StudentGroupController {
     }
 
     @Operation(summary = "Add a member to a group")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/{id}/members")
     @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
     public ResponseEntity<GroupMemberResponse> addMember(@PathVariable UUID id,

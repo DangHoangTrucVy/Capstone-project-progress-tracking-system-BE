@@ -1,6 +1,7 @@
 package com.capstone.tracking.warning;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.warning.dto.WarningFlagRequest;
 import com.capstone.tracking.warning.dto.WarningFlagResponse;
@@ -33,6 +34,7 @@ public class WarningFlagController {
     private final WarningFlagService flagService;
 
     @Operation(summary = "Raise a warning on a group or member")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/api/v1/groups/{groupId}/warning-flags")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public ResponseEntity<WarningFlagResponse> raise(@PathVariable UUID groupId, @Valid @RequestBody WarningFlagRequest request,

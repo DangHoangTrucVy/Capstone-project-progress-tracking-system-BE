@@ -7,6 +7,7 @@ import com.capstone.tracking.artifact.dto.ArtifactResponse;
 import com.capstone.tracking.group.StudentGroupService;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -48,6 +49,7 @@ public class ArtifactController {
     private final StudentGroupService groups;
 
     @Operation(summary = "Submit a link document (JSON)")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping(value = {"/api/v1/groups/{groupId}/artifacts", "/api/v1/groups/{groupId}/documents"},
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('GROUP_LEADER')")
@@ -58,6 +60,7 @@ public class ArtifactController {
     }
 
     @Operation(summary = "Upload a file or submit a link (multipart/form-data: title, file | url, milestoneId?, sessionId?)")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping(value = {"/api/v1/groups/{groupId}/artifacts", "/api/v1/groups/{groupId}/documents"},
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('GROUP_LEADER')")
@@ -89,6 +92,9 @@ public class ArtifactController {
     }
 
     @Operation(summary = "Download the uploaded file of a FILE document")
+    @ApiResponse(responseCode = "200", description = "The file, with the Content-Type it was uploaded with",
+            content = @io.swagger.v3.oas.annotations.media.Content(mediaType = "application/octet-stream",
+                    schema = @io.swagger.v3.oas.annotations.media.Schema(type = "string", format = "binary")))
     @GetMapping({"/api/v1/artifacts/{id}/file", "/api/v1/documents/{id}/file"})
     public ResponseEntity<Resource> download(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         DownloadableFile file = artifactSubmissionService.loadFile(id, currentUser);

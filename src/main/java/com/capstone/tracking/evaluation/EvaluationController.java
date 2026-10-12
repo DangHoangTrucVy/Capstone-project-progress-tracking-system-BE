@@ -1,6 +1,7 @@
 package com.capstone.tracking.evaluation;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.evaluation.dto.EvaluationCreateRequest;
 import com.capstone.tracking.evaluation.dto.EvaluationResponse;
 import com.capstone.tracking.user.User;
@@ -30,6 +31,7 @@ public class EvaluationController {
     private final EvaluationService evaluationService;
 
     @Operation(summary = "Score a group on the 3 criteria")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/api/v1/groups/{groupId}/evaluations")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<EvaluationResponse> create(@PathVariable UUID groupId,

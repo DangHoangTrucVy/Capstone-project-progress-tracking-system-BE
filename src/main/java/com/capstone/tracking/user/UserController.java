@@ -1,6 +1,7 @@
 package com.capstone.tracking.user;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.user.dto.UserCreateRequest;
 import com.capstone.tracking.user.dto.UserResponse;
 import com.capstone.tracking.user.dto.UserUpdateRequest;
@@ -34,6 +35,7 @@ public class UserController {
     private final UserService userService;
 
     @Operation(summary = "Create a user account")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserResponse> create(@Valid @RequestBody UserCreateRequest request) {

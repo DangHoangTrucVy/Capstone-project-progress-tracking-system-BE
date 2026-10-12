@@ -1,6 +1,10 @@
 package com.capstone.tracking.report;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.report.dto.ReportSummaryResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -46,7 +50,13 @@ public class ReportController {
      * "Xuất danh sách bàn giao": sheets Danh_sach_nhom and Chua_co_nhom; no semester = every semester. The file is
      * named Danh_sach_ghep_nhom_[semester_]yyyyMMdd_HHmmss.xlsx (Vietnam time).
      */
-    @Operation(summary = "Export the handover list (Excel: Danh_sach_nhom, Chua_co_nhom)")
+    @Operation(summary = "Export the handover list (Excel: Danh_sach_nhom, Chua_co_nhom)",
+            description = "Returns the .xlsx file itself, not JSON; errors (401/403/500) are JSON.")
+    @ApiResponse(responseCode = "200", description = "The Excel file",
+            headers = @Header(name = "Content-Disposition",
+                    description = "attachment; filename=\"Danh_sach_ghep_nhom_[semester_]yyyyMMdd_HHmmss.xlsx\""),
+            content = @Content(mediaType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    schema = @Schema(type = "string", format = "binary")))
     @GetMapping({"/api/v1/reports/export", "/api/v1/reports/handover/export"})
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<byte[]> exportHandover(@RequestParam(required = false) String semester) {
