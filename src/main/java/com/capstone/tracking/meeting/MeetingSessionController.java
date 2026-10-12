@@ -1,6 +1,7 @@
 package com.capstone.tracking.meeting;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.meeting.dto.EndSessionRequest;
 import com.capstone.tracking.meeting.dto.MeetingSessionResponse;
 import com.capstone.tracking.user.User;
@@ -25,6 +26,7 @@ public class MeetingSessionController {
     private final MeetingSessionService meetingSessionService;
 
     @Operation(summary = "Create a meeting from a confirmed booking")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/api/v1/bookings/{bookingId}/meetings")
     @PreAuthorize("hasAnyRole('GROUP_LEADER','INSTRUCTOR')")
     public ResponseEntity<MeetingSessionResponse> create(@PathVariable UUID bookingId,

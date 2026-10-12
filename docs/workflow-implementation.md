@@ -134,6 +134,31 @@ Content-Type: application/json
   - Thứ tự khóa nhất quán: `ScheduleGuard` -> `StudentGroup / User` -> `ScheduleSlot / Booking` tránh hoàn toàn nguy cơ deadlock.
   - Thao tác theo lô (`cloneRound`, `scheduleRolling`) nằm trọn trong một transaction; nếu gặp xung đột giữa chừng sẽ rollback toàn bộ lô, không lưu một phần ngoài chủ đích.
 
+## 8. Nhóm, Leader, import sinh viên và xuất danh sách bàn giao
+
+- **Sinh viên chỉ vào nhóm khi Accept Invite (YC10, YC11)**:
+  - Leader duyệt Apply bằng `POST /api/v1/applications/{id}/approve`. Thao tác này **không** đưa sinh viên vào nhóm: đơn chuyển sang `APPROVED` và BE gửi cho sinh viên một Invite. Response là Invite đó (`type: INVITE`, `status: PENDING`, `sourceApplicationId` = mã đơn). Nếu Leader đã mời trực tiếp sinh viên này thì dùng lại Invite đang có.
+  - Sinh viên `POST /api/v1/invites/{id}/accept` thì mới thành thành viên chính thức. Lúc này BE kiểm tra lại sức chứa (YC15) và hủy các đơn, Invite khác (YC13).
+  - `POST /api/v1/groups/{id}/members` (thêm thẳng thành viên) **chỉ dành cho Admin**: xếp sinh viên chưa có nhóm, sửa danh sách đã khóa (YC19). Leader gọi sẽ nhận 403 và phải dùng Invite.
+- **Mời sinh viên**: `POST /api/v1/groups/{groupId}/invites` nhận `studentCode` (alias `mssv`, `studentId`, `student_code`), hoặc `userId` / `email` / `identifier`, kèm `message`. Trong response, `student.studentCode` là MSSV, hoặc phần trước `@` của email nếu tài khoản chưa có MSSV.
+- **Admin đổi Leader**: `PUT` (hoặc `PATCH`/`POST`) `/api/v1/groups/{id}/leader`, body là một trong các trường `userId`, `memberId` (chính là `id` trong danh sách thành viên), `studentCode`, `email`. Người được chọn phải đang là thành viên ACTIVE của nhóm; Leader cũ bị hạ về `STUDENT`. Có thể đổi Leader bằng hai cách khác:
+  - `POST /api/v1/groups/{id}/members` với `isLeader: true`: thành viên hiện có sẽ được nâng lên Leader, sinh viên mới sẽ được thêm vào rồi thay Leader cũ. Nếu người đó đã là Leader thì trả 409.
+  - `PUT /api/v1/groups/{id}` với `leaderUserId`. Trường `status` giờ không bắt buộc.
+- **Leader xin rời nhóm**: Leader gọi `POST /api/v1/groups/{id}/leave-requests` như thành viên thường, nhưng **bắt buộc có `reason`** (tối đa 1.000 ký tự; để trống trả 400). Response có `leaderRequest: true`. Yêu cầu này được gửi được cả khi nhóm đã khóa hoặc đã hết hạn lập nhóm. Mọi Admin (và GVHD) nhận thông báo `LEADER_LEAVE_REQUESTED`.
+  - Hộp thư của Admin: `GET /api/v1/leave-requests?status=PENDING&leaderOnly=true`.
+  - Admin duyệt bằng `POST /api/v1/leave-requests/{id}/approve`, body tùy chọn `{ "newLeaderUserId": "..." }`. Nếu không chỉ định, thành viên vào nhóm sớm nhất sẽ thành Leader. Admin từ chối bằng `POST .../reject`. Leader không thể tự duyệt yêu cầu của mình (403).
+  - Admin cũng duyệt/từ chối được yêu cầu của thành viên thường, bỏ qua khóa nhóm và hạn lập nhóm.
+  - Khi Leader thay đổi, thành viên nhóm nhận thông báo `LEADER_CHANGED`.
+- **Import sinh viên (JSON)**: `POST /api/v1/eligibility/import` nhận `{"students":[...]}` **hoặc mảng `[...]`**. Mỗi phần tử: `email`, `fullName` (alias `ho_ten`), `studentCode` (alias `mssv`), `eligible` (alias `du_dieu_kien`, bỏ trống = đủ điều kiện), `reason` (alias `ly_do`). `email` bắt buộc, trừ khi MSSV đã thuộc một tài khoản có sẵn. Dòng không dùng được nằm trong `invalid` (ví dụ `line 2: email is required`); nếu **không dòng nào** dùng được thì trả 400 thay vì 200 với `created: 0`.
+- **Import sinh viên (file)**: `/import/file` (multipart, field `file`) nhận `.csv`, `.xlsx` và `.xls`. Request multipart hỏng (thiếu boundary, sai tên field) trả 400 `BAD_MULTIPART`.
+- Response của cả hai cách import có thêm `students[]`. Mỗi phần tử gồm `userId, email, fullName, studentCode, eligible, ineligibleReason, action` (`CREATED`/`UPDATED`). File import chấp nhận CSV và `.xlsx` (lấy sheet đầu), có thể có thêm cột `mssv`.
+  - Xem danh sách đã import: `GET /api/v1/eligibility/students?eligible=&q=&page=&size=` (alias `/imported`), trả về `UserResponse` có `importedAt`.
+- **Xuất danh sách bàn giao**: `GET /api/v1/reports/export?semester=` (alias `/api/v1/reports/handover/export`; chỉ Admin; bỏ `semester` để lấy mọi học kỳ). Tên file: `Danh_sach_ghep_nhom_<HK>_yyyyMMdd_HHmmss.xlsx`. Trả về file `.xlsx` gồm 2 sheet:
+  - `Danh_sach_nhom`: mỗi thành viên một dòng, gồm mã nhóm, học kỳ, đề tài, GVHD, trạng thái, khóa/duyệt danh sách, MSSV, họ tên, email, vai trò.
+  - `Chua_co_nhom`: sinh viên ACTIVE chưa thuộc nhóm nào, gồm MSSV, họ tên, email, campus, đủ điều kiện, lý do.
+  - Tên file nằm trong header `Content-Disposition` (đã expose qua CORS).
+- Kịch bản test BE cho các luồng trên: [docs/testing/BE-test-scenarios.md](testing/BE-test-scenarios.md).
+
 ## Thông báo và tích hợp frontend
 
 - Domain event được lưu vào `domain_event_outbox` cùng transaction nghiệp vụ, gửi sau commit, và retry nếu bộ xử lý hoặc broker lỗi. Giữ nguyên event ID để chống tạo notification/email trùng. Retry tăng dần, tối đa một giờ giữa các lần thử.

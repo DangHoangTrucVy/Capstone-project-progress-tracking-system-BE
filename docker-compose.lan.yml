@@ -45,7 +45,7 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       STORAGE_TYPE: local
       STORAGE_LOCAL_DIR: /app/uploads
-      JAVA_TOOL_OPTIONS: -Xms256m -Xmx1g
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx1g -Djava.awt.headless=true
       TZ: Asia/Ho_Chi_Minh
     ports:
       # All interfaces, so other machines on the LAN can reach it at http://<PC-IP>:APP_PORT

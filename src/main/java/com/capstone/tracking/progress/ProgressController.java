@@ -6,6 +6,7 @@ import com.capstone.tracking.progress.dto.ProgressReportResponse;
 import com.capstone.tracking.progress.dto.ProgressSummaryResponse;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,6 +34,7 @@ public class ProgressController {
     private final ProgressService progressService;
 
     @Operation(summary = "Report a week's progress (one report per group and week)")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/api/v1/groups/{groupId}/progress")
     @PreAuthorize("hasRole('GROUP_LEADER')")
     public ResponseEntity<ProgressReportResponse> create(@PathVariable UUID groupId,

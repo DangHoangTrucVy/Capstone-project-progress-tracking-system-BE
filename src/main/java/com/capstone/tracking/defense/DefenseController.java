@@ -6,6 +6,7 @@ import com.capstone.tracking.defense.dto.DefenseSessionResponse;
 import com.capstone.tracking.defense.dto.RollingScheduleRequest;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,6 +34,7 @@ public class DefenseController {
     private final DefenseService defenseService;
 
     @Operation(summary = "Schedule a defense")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/api/v1/defenses")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DefenseSessionResponse> schedule(@Valid @RequestBody DefenseScheduleRequest request,
@@ -41,6 +43,7 @@ public class DefenseController {
     }
 
     @Operation(summary = "Schedule groups back to back in one room with one committee (cuốn chiếu)")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/api/v1/defenses/rolling")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<DefenseSessionResponse>> scheduleRolling(@Valid @RequestBody RollingScheduleRequest request,

@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSupport {
 
     @Test
-    @DisplayName("Case 1 & 8: Group Leader adds member directly by valid MSSV; internal UUID is preserved")
+    @DisplayName("Case 1 & 8: Admin adds a member by valid MSSV; internal UUID is preserved")
     void case1And8_validMssvAddsMemberAndPreservesInternalUuid() throws Exception {
         User admin = user("cs1-admin", Role.ADMIN);
         User leader = user("cs1-leader", Role.GROUP_LEADER);
@@ -39,8 +39,8 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
 
         String url = "/api/v1/groups/" + group.getId() + "/members";
 
-        // Group Leader calls with studentCode
-        postJson(url, leader, Map.of("studentCode", mssv, "isLeader", false))
+        // Admin calls with studentCode
+        postJson(url, admin, Map.of("studentCode", mssv, "isLeader", false))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.userId").value(student.getId().toString()))
                 .andExpect(jsonPath("$.userFullName").value("Nguyen Van A"))
@@ -64,7 +64,7 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
 
         String url = "/api/v1/groups/" + group.getId() + "/members";
 
-        postJson(url, leader, Map.of("studentCode", "SE999999", "isLeader", false))
+        postJson(url, admin, Map.of("studentCode", "SE999999", "isLeader", false))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("NOT_FOUND"));
     }
@@ -80,15 +80,15 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
         String url = "/api/v1/groups/" + group.getId() + "/members";
 
         // Empty string
-        postJson(url, leader, Map.of("studentCode", "", "isLeader", false))
+        postJson(url, admin, Map.of("studentCode", "", "isLeader", false))
                 .andExpect(status().isBadRequest());
 
         // Whitespace only
-        postJson(url, leader, Map.of("studentCode", "   ", "isLeader", false))
+        postJson(url, admin, Map.of("studentCode", "   ", "isLeader", false))
                 .andExpect(status().isBadRequest());
 
         // Empty JSON object
-        postJson(url, leader, Map.of("isLeader", false))
+        postJson(url, admin, Map.of("isLeader", false))
                 .andExpect(status().isBadRequest());
     }
 
@@ -114,11 +114,11 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
         String url = "/api/v1/groups/" + group.getId() + "/members";
 
         // First add: success
-        postJson(url, leader, Map.of("studentCode", mssv))
+        postJson(url, admin, Map.of("studentCode", mssv))
                 .andExpect(status().isCreated());
 
         // Duplicate add: 409 Conflict
-        postJson(url, leader, Map.of("studentCode", mssv))
+        postJson(url, admin, Map.of("studentCode", mssv))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("CONFLICT"));
     }
@@ -145,7 +145,7 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
                     .status(UserStatus.ACTIVE)
                     .eligible(true)
                     .build());
-            postJson(url, leader, Map.of("studentCode", code)).andExpect(status().isCreated());
+            postJson(url, admin, Map.of("studentCode", code)).andExpect(status().isCreated());
         }
 
         // Try adding 6th student
@@ -160,13 +160,13 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
                 .eligible(true)
                 .build());
 
-        postJson(url, leader, Map.of("studentCode", sixthCode))
+        postJson(url, admin, Map.of("studentCode", sixthCode))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("CONFLICT"));
     }
 
     @Test
-    @DisplayName("Case 6: Leader of another group cannot add member (403 Forbidden)")
+    @DisplayName("Case 6: no Leader adds a member directly, in another group or their own (403, YC11)")
     void case6_leaderOfAnotherGroupForbidden() throws Exception {
         User admin = user("cs6-admin", Role.ADMIN);
         User leaderA = user("cs6-leader-a", Role.GROUP_LEADER);
@@ -177,7 +177,7 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
         join(groupB, leaderB, true);
 
         String mssv = "SE" + suffix.toUpperCase();
-        userRepository.save(User.builder()
+        User student = userRepository.save(User.builder()
                 .email("student-cs6-" + suffix + "@gmail.com")
                 .fullName("Student Six")
                 .studentCode(mssv)
@@ -190,6 +190,10 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
         // Leader B tries to add member to Group A -> 403 Forbidden
         postJson("/api/v1/groups/" + groupA.getId() + "/members", leaderB, Map.of("studentCode", mssv))
                 .andExpect(status().isForbidden());
+        // YC11: not even into their own group; a Leader invites and the student joins by accepting
+        postJson("/api/v1/groups/" + groupA.getId() + "/members", leaderA, Map.of("studentCode", mssv))
+                .andExpect(status().isForbidden());
+        assertThat(groupMemberRepository.findByGroupIdAndUserId(groupA.getId(), student.getId())).isEmpty();
     }
 
     @Test
@@ -214,7 +218,7 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
         String url = "/api/v1/groups/" + group.getId() + "/members";
 
         // 1. Add by MSSV
-        String memberId = body(postJson(url, leader, Map.of("studentCode", mssv))
+        String memberId = body(postJson(url, admin, Map.of("studentCode", mssv))
                 .andExpect(status().isCreated()))
                 .get("id").asText();
 
@@ -227,7 +231,7 @@ class GroupLeaderAddMemberByStudentCodeIntegrationTest extends WorkflowTestSuppo
                 .isEqualTo(MemberStatus.REMOVED);
 
         // 3. Re-add same MSSV
-        postJson(url, leader, Map.of("studentCode", mssv))
+        postJson(url, admin, Map.of("studentCode", mssv))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(memberId))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));

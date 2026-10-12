@@ -1,6 +1,7 @@
 package com.capstone.tracking.scheduling;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.scheduling.dto.SlotCreateRequest;
 import com.capstone.tracking.scheduling.dto.SlotPage;
@@ -36,6 +37,7 @@ public class ScheduleSlotController {
     private final ScheduleSlotService scheduleSlotService;
 
     @Operation(summary = "Instructor opens an availability slot")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public ResponseEntity<SlotResponse> create(@Valid @RequestBody SlotCreateRequest request,

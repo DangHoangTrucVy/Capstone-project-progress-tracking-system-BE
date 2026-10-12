@@ -13,9 +13,14 @@ RUN mvn -B clean package -DskipTests
 FROM eclipse-temurin:17-jre-alpine AS runtime
 WORKDIR /app
 
+# Headless JVM: the Excel export (Apache POI) must never try to open a display.
+ENV JAVA_TOOL_OPTIONS="-Djava.awt.headless=true"
+
 RUN addgroup -S spring && adduser -S spring -G spring && mkdir -p /app/uploads && chown spring:spring /app/uploads
 COPY --from=build /app/target/*.jar app.jar
 USER spring:spring
 
 EXPOSE 8080
+# Swagger's API docs are public and answer once the app (and Flyway migrations) are up.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5     CMD wget -qO- http://localhost:8080/v3/api-docs > /dev/null || exit 1
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -28,6 +28,9 @@ public enum DomainEventType {
     MEMBER_REMOVED(false),
     LEAVE_REQUESTED(false),
     LEAVE_DECIDED(false),
+    /** The Leader asks to leave: the Admins (and the supervisor) decide, not the group. */
+    LEADER_LEAVE_REQUESTED(false),
+    LEADER_CHANGED(false),
     ROSTER_SUBMITTED(false),
     ROSTER_REVIEWED(false),
     ROSTER_CHANGE_REPORTED(false),

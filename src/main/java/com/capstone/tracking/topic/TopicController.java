@@ -1,6 +1,7 @@
 package com.capstone.tracking.topic;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.topic.dto.TopicCreateRequest;
 import com.capstone.tracking.topic.dto.TopicResponse;
 import com.capstone.tracking.topic.dto.TopicUpdateRequest;
@@ -32,6 +33,7 @@ public class TopicController {
     private final TopicService topicService;
 
     @Operation(summary = "Create a topic")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<TopicResponse> create(@Valid @RequestBody TopicCreateRequest request,

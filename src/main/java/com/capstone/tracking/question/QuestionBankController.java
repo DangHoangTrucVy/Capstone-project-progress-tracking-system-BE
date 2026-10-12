@@ -1,6 +1,7 @@
 package com.capstone.tracking.question;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.question.dto.QuestionCreateRequest;
 import com.capstone.tracking.question.dto.QuestionResponse;
 import com.capstone.tracking.user.User;
@@ -32,6 +33,7 @@ public class QuestionBankController {
 
     /** Admin: any topic. Group Leader: only their own group's topic (checked in the service). */
     @Operation(summary = "Add a question to the topic's bank")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
     public ResponseEntity<QuestionResponse> create(@PathVariable UUID topicId,

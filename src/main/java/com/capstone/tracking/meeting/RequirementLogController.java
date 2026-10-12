@@ -1,6 +1,7 @@
 package com.capstone.tracking.meeting;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.meeting.dto.RequirementCreateRequest;
 import com.capstone.tracking.meeting.dto.RequirementResponse;
 import com.capstone.tracking.meeting.dto.RequirementUpdateRequest;
@@ -31,6 +32,7 @@ public class RequirementLogController {
     private final RequirementLogService requirementLogService;
 
     @Operation(summary = "Log a requirement raised in the meeting")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/api/v1/meetings/{id}/requirements")
     @PreAuthorize("hasAnyRole('GROUP_LEADER','INSTRUCTOR')")
     public ResponseEntity<RequirementResponse> create(@PathVariable UUID id,

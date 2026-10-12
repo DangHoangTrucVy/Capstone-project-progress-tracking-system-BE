@@ -1,6 +1,8 @@
 package com.capstone.tracking.group;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.capstone.tracking.group.dto.ApplyRequest;
 import com.capstone.tracking.group.dto.GroupMemberResponse;
 import com.capstone.tracking.group.dto.InviteRequest;
@@ -39,6 +41,10 @@ public class GroupJoinController {
 
     private static final String STUDENT = "hasAnyRole('STUDENT','GROUP_LEADER')";
     private static final String LEADER = "hasRole('GROUP_LEADER')";
+    private static final String LEADER_OR_ADMIN = "hasAnyRole('GROUP_LEADER','ADMIN')";
+
+    /** Approving a Leader's own request: who leads next (optional; else the earliest-joined member). */
+    public record LeaveDecisionBody(@JsonAlias({"leaderUserId", "newLeaderId"}) UUID newLeaderUserId) {}
 
     private final GroupJoinService joinService;
     private final GroupLeaveService leaveService;
@@ -59,6 +65,7 @@ public class GroupJoinController {
     // ------------------------------------------------------------------ Apply (student side)
 
     @Operation(summary = "Apply to join a group")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/groups/{groupId}/applications")
     @PreAuthorize(STUDENT)
     public ResponseEntity<JoinRequestResponse> apply(@PathVariable UUID groupId,
@@ -96,8 +103,11 @@ public class GroupJoinController {
         return joinService.listForGroup(groupId, JoinRequestType.APPLY, currentUser);
     }
 
-    /** Approving an Apply directly makes the applicant an active group member. */
-    @Operation(summary = "Approve an application")
+    /**
+     * YC10: approving an Apply sends the applicant an Invite (returned here, {@code type=INVITE}); they become a member
+     * only when they Accept it.
+     */
+    @Operation(summary = "Approve an application: sends the applicant an Invite (they join when they accept it)")
     @PostMapping("/applications/{id}/approve")
     @PreAuthorize(LEADER)
     public JoinRequestResponse approve(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
@@ -131,6 +141,7 @@ public class GroupJoinController {
     // ------------------------------------------------------------------ Invite
 
     @Operation(summary = "Invite a student to the group")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/groups/{groupId}/invites")
     @PreAuthorize(LEADER)
     public ResponseEntity<JoinRequestResponse> invite(@PathVariable UUID groupId,
@@ -150,6 +161,7 @@ public class GroupJoinController {
 
     /** Accepting is the moment of joining: the student becomes an official member. */
     @Operation(summary = "Accept an invite")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/invites/{id}/accept")
     @PreAuthorize(STUDENT)
     public ResponseEntity<GroupMemberResponse> accept(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
@@ -174,6 +186,7 @@ public class GroupJoinController {
     // ------------------------------------------------------------------ leaving
 
     @Operation(summary = "Request to leave the group")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/groups/{groupId}/leave-requests")
     @PreAuthorize(STUDENT)
     public ResponseEntity<LeaveRequestResponse> requestLeave(@PathVariable UUID groupId,
@@ -191,16 +204,28 @@ public class GroupJoinController {
 
     @Operation(summary = "Approve a leave request")
     @PostMapping("/leave-requests/{id}/approve")
-    @PreAuthorize(LEADER)
-    public LeaveRequestResponse approveLeave(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
-        return LeaveRequestResponse.from(leaveService.approve(id, currentUser));
+    @PreAuthorize(LEADER_OR_ADMIN)
+    public LeaveRequestResponse approveLeave(@PathVariable UUID id,
+                                             @RequestBody(required = false) LeaveDecisionBody body,
+                                             @AuthenticationPrincipal User currentUser) {
+        return LeaveRequestResponse.from(leaveService.approve(id, currentUser,
+                body == null ? null : body.newLeaderUserId()));
     }
 
     @Operation(summary = "Reject a leave request")
     @PostMapping("/leave-requests/{id}/reject")
-    @PreAuthorize(LEADER)
+    @PreAuthorize(LEADER_OR_ADMIN)
     public LeaveRequestResponse rejectLeave(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return LeaveRequestResponse.from(leaveService.reject(id, currentUser));
+    }
+
+    /** Admin inbox: the Leaders' requests to leave come here (leaderOnly=true), together with any other request. */
+    @Operation(summary = "All leave requests (Admin), e.g. the Leaders' pending requests")
+    @GetMapping("/leave-requests")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<LeaveRequestResponse> allLeaveRequests(@RequestParam(required = false) LeaveRequestStatus status,
+                                                       @RequestParam(defaultValue = "false") boolean leaderOnly) {
+        return leaveService.listAll(status, leaderOnly).stream().map(LeaveRequestResponse::from).toList();
     }
 
     @Operation(summary = "Withdraw my leave request")

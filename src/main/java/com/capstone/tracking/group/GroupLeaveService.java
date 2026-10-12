@@ -19,8 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * YC17: before the roster is Locked, and within the semester's permitted period ({@link FormationWindow}), a member
  * asks to leave and the Leader approves. After Locked the change goes
- * through the supervisor and an Admin instead (see {@link StudentGroupService#removeMember}). The Leader cannot leave
- * this way; an Admin replaces the Leader first (YC20).
+ * through the supervisor and an Admin instead (see {@link StudentGroupService#removeMember}). The Leader's own request
+ * goes to the Admins (YC20): they are notified, and on approval they name the next Leader or the earliest-joined
+ * member takes over. An Admin may also decide any member's request.
  */
 @Service
 @RequiredArgsConstructor
@@ -38,12 +39,16 @@ public class GroupLeaveService {
         if (!groups.isActiveMember(groupId, current.getId())) {
             throw new AccessDeniedException("You are not an active member of this group");
         }
-        if (groups.listActiveMembers(groupId).stream()
-                .anyMatch(m -> m.isLeader() && m.getUser().getId().equals(current.getId()))) {
-            throw new BadRequestException("The leader cannot leave directly; ask an administrator to replace the leader");
+        boolean leader = isLeader(groupId, current);
+        if (leader && (reason == null || reason.isBlank())) {
+            // The Admin decides the Leader's request and must know why (LEA-05).
+            throw new BadRequestException("Say why you want to leave the group");
         }
-        groups.requireNotLocked(group);
-        window.requireOpen(group.getSemester());
+        if (!leader) {
+            // The Leader's request is decided by an Admin, who may change even a Locked roster.
+            groups.requireNotLocked(group);
+            window.requireOpen(group.getSemester());
+        }
         if (leaveRequests.findByGroupIdAndUserIdAndStatus(groupId, current.getId(), LeaveRequestStatus.PENDING).isPresent()) {
             throw new ConflictException("You already asked to leave this group");
         }
@@ -51,9 +56,10 @@ public class GroupLeaveService {
                 .group(group)
                 .user(current)
                 .reason(reason == null || reason.isBlank() ? null : reason.trim())
+                .leaderRequest(leader)
                 .build());
-        events.publishEvent(DomainEvent.of(DomainEventType.LEAVE_REQUESTED, groupId, saved.getId(), current.getId(),
-                current.getFullName()).withDetails(saved.getReason(), null));
+        events.publishEvent(DomainEvent.of(leader ? DomainEventType.LEADER_LEAVE_REQUESTED : DomainEventType.LEAVE_REQUESTED,
+                groupId, saved.getId(), current.getId(), current.getFullName()).withDetails(saved.getReason(), null));
         return saved;
     }
 
@@ -69,32 +75,74 @@ public class GroupLeaveService {
         return request;
     }
 
-    /** Leader approves: the member leaves and may join another group afterwards (YC21). */
     @Transactional
-    public MemberLeaveRequest approve(UUID id, User leader) {
+    public MemberLeaveRequest approve(UUID id, User actor) {
+        return approve(id, actor, null);
+    }
+
+    /**
+     * The Leader (or an Admin) approves a member's request: the member leaves and may join another group afterwards
+     * (YC21). A Leader's own request only an Admin approves; {@code newLeaderUserId} names the member who takes over,
+     * otherwise the earliest-joined remaining member does.
+     */
+    @Transactional
+    public MemberLeaveRequest approve(UUID id, User actor, UUID newLeaderUserId) {
         MemberLeaveRequest request = lock(id);
         StudentGroup group = groups.lockById(request.getGroup().getId());
-        groups.requireActiveLeader(group.getId(), leader);
+        requireDecider(request, actor);
         requirePending(request);
-        groups.requireNotLocked(group);
-        window.requireOpen(group.getSemester());
-        decide(request, LeaveRequestStatus.APPROVED, leader);
-        groups.removeActiveMember(group.getId(), request.getUser().getId());
+        if (actor.getRole() != Role.ADMIN) {
+            groups.requireNotLocked(group);
+            window.requireOpen(group.getSemester());
+        }
+        UUID leaving = request.getUser().getId();
+        decide(request, LeaveRequestStatus.APPROVED, actor);
+        if (request.isLeaderRequest() && newLeaderUserId != null) {
+            if (newLeaderUserId.equals(leaving)) {
+                throw new BadRequestException("The new leader must be another member of the group");
+            }
+            groups.replaceLeader(group.getId(), newLeaderUserId);
+        }
+        groups.removeActiveMember(group.getId(), leaving);
+        if (request.isLeaderRequest()) {
+            groups.promoteSuccessorIfLeaderless(group.getId());
+        }
         events.publishEvent(DomainEvent.of(DomainEventType.LEAVE_DECIDED, group.getId(), request.getId(),
-                leader.getId(), "đã được chấp nhận").withTarget(request.getUser().getId()));
+                actor.getId(), "đã được chấp nhận").withTarget(leaving));
         events.publishEvent(DomainEvent.of(DomainEventType.MEMBER_LEFT, group.getId(), request.getId(),
-                leader.getId(), request.getUser().getFullName()));
+                actor.getId(), request.getUser().getFullName()));
         return request;
     }
 
     @Transactional
-    public MemberLeaveRequest reject(UUID id, User leader) {
+    public MemberLeaveRequest reject(UUID id, User actor) {
         MemberLeaveRequest request = lock(id);
-        groups.requireActiveLeader(request.getGroup().getId(), leader);
+        requireDecider(request, actor);
         requirePending(request);
         events.publishEvent(DomainEvent.of(DomainEventType.LEAVE_DECIDED, request.getGroup().getId(), request.getId(),
-                leader.getId(), "bị từ chối").withTarget(request.getUser().getId()));
-        return decide(request, LeaveRequestStatus.REJECTED, leader);
+                actor.getId(), "bị từ chối").withTarget(request.getUser().getId()));
+        return decide(request, LeaveRequestStatus.REJECTED, actor);
+    }
+
+    /** Admin inbox: every leave request, optionally only one status and/or only the Leaders' own requests. */
+    public List<MemberLeaveRequest> listAll(LeaveRequestStatus status, boolean leaderOnly) {
+        return leaveRequests.search(status, leaderOnly);
+    }
+
+    /** An Admin decides any request; the group's Leader decides the members' requests, not their own. */
+    private void requireDecider(MemberLeaveRequest request, User actor) {
+        if (actor.getRole() == Role.ADMIN) {
+            return;
+        }
+        if (request.isLeaderRequest()) {
+            throw new AccessDeniedException("A leader's request to leave is decided by an administrator");
+        }
+        groups.requireActiveLeader(request.getGroup().getId(), actor);
+    }
+
+    private boolean isLeader(UUID groupId, User user) {
+        return groups.listActiveMembers(groupId).stream()
+                .anyMatch(m -> m.isLeader() && m.getUser().getId().equals(user.getId()));
     }
 
     /** The Leader and Admin see every request of the group; a member sees only their own. */
@@ -106,9 +154,7 @@ public class GroupLeaveService {
         if (!groups.isActiveMember(groupId, viewer.getId())) {
             throw new AccessDeniedException("You are not an active member of this group");
         }
-        boolean leader = groups.listActiveMembers(groupId).stream()
-                .anyMatch(m -> m.isLeader() && m.getUser().getId().equals(viewer.getId()));
-        return leader ? all : all.stream().filter(r -> r.getUser().getId().equals(viewer.getId())).toList();
+        return isLeader(groupId, viewer) ? all : all.stream().filter(r -> r.getUser().getId().equals(viewer.getId())).toList();
     }
 
     private MemberLeaveRequest decide(MemberLeaveRequest request, LeaveRequestStatus status, User by) {

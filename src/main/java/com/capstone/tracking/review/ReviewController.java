@@ -6,6 +6,7 @@ import com.capstone.tracking.review.dto.ReviewScheduleRequest;
 import com.capstone.tracking.review.dto.ReviewSessionResponse;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,6 +34,7 @@ public class ReviewController {
     private final ReviewService reviewService;
 
     @Operation(summary = "Schedule a review session")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/api/v1/reviews")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ReviewSessionResponse> schedule(@Valid @RequestBody ReviewScheduleRequest request,

@@ -184,13 +184,22 @@ public class StudentGroupService {
         if (request.supervisorId() != null) {
             group.setSupervisor(requireRole(request.supervisorId(), Role.INSTRUCTOR, Role.ADMIN));
         }
-        group.setStatus(request.status());
+        if (request.status() != null) {
+            group.setStatus(request.status());
+        }
+        if (request.leaderUserId() != null) {
+            if (actingUser != null && actingUser.getRole() != Role.ADMIN) {
+                throw new AccessDeniedException("Only an administrator can replace the group leader");
+            }
+            replaceLeader(id, request.leaderUserId());
+        }
         return group;
     }
 
     /**
-     * Admin adds a member (also the only way to change a Locked roster, YC19). Setting isLeader=true promotes that
-     * user's global role to GROUP_LEADER; a group may only have one active leader at a time.
+     * Admin adds a member: placing a student who has no group, or changing a Locked roster (YC19). Setting
+     * isLeader=true promotes that user's global role to GROUP_LEADER; a group may only have one active leader at a time.
+     * A Leader cannot add anyone directly: a student joins only by accepting an Invite (YC10, YC11).
      */
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request) {
@@ -200,17 +209,27 @@ public class StudentGroupService {
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request, User actingUser) {
         if (actingUser != null && actingUser.getRole() != Role.ADMIN) {
-            requireGroupLeader(groupId, actingUser);
+            throw new AccessDeniedException("Only an administrator can add a member directly; a Leader sends an Invite"
+                    + " (POST /api/v1/groups/" + groupId + "/invites) and the student joins by accepting it");
         }
         User resolved = resolveStudent(request.userId(), request.email(), request.identifier(), request.studentCode());
         // Same lock order as Accept Invite (student, then group) so the two can never deadlock.
         User user = userRepository.lockById(resolved.getId()).orElseThrow();
         StudentGroup group = lockById(groupId);
-        if (actingUser != null && actingUser.getRole() != Role.ADMIN) {
-            requireNotLocked(group);
-        }
         eligibilityService.requireEligible(user);
-        boolean isLeader = (actingUser == null || actingUser.getRole() == Role.ADMIN) && request.isLeader();
+        boolean isLeader = request.isLeader();
+        if (isLeader) {
+            // Admin "add as leader": a current member is simply promoted, and an existing leader is replaced instead
+            // of blocking the request with "already has an active leader".
+            if (groupMemberRepository.existsByGroupIdAndUserIdAndIsLeaderTrueAndStatus(groupId, user.getId(), MemberStatus.ACTIVE)) {
+                throw new ConflictException("This student is already the leader of this group");
+            }
+            if (groupMemberRepository.existsByGroupIdAndUserIdAndStatus(groupId, user.getId(), MemberStatus.ACTIVE)) {
+                return replaceLeader(groupId, user.getId());
+            }
+            enroll(group, user, false, NO_REQUEST);
+            return replaceLeader(groupId, user.getId());
+        }
         return enroll(group, user, isLeader, NO_REQUEST);
     }
 
@@ -373,20 +392,41 @@ public class StudentGroupService {
             boolean wasLeader = member.isLeader();
             deactivate(group, member);
             if (wasLeader) {
-                groupMemberRepository.findByGroupIdAndStatus(group.getId(), MemberStatus.ACTIVE).stream()
-                        .filter(m -> !m.getId().equals(member.getId()))
-                        .min(Comparator.comparing(GroupMember::getJoinedAt,
-                                Comparator.nullsLast(Comparator.naturalOrder())))
-                        .ifPresent(next -> {
-                            next.setLeader(true);
-                            next.getUser().setRole(Role.GROUP_LEADER);
-                        });
+                promoteSuccessorIfLeaderless(group.getId());
             }
             events.publishEvent(DomainEvent.of(DomainEventType.MEMBER_REMOVED, group.getId(), member.getId(), null,
                             member.getUser().getFullName())
                     .withDetails("Chưa đủ điều kiện làm Capstone" + (reason == null || reason.isBlank() ? "" : ": " + reason), null)
                     .withTarget(userId));
         }
+    }
+
+    /**
+     * YC20: Admin replaces the leader, naming the new one by user id, membership id, MSSV or e-mail. A {@code userId}
+     * that is in fact a membership id (the {@code id} of the member list) is accepted too.
+     */
+    @Transactional
+    public GroupMember replaceLeader(UUID groupId, UUID userId, UUID memberId, String studentCode, String email,
+                                     String identifier) {
+        UUID target = null;
+        for (UUID candidate : new UUID[] {memberId, userId}) {
+            if (target == null && candidate != null) {
+                target = groupMemberRepository.findById(candidate)
+                        .filter(m -> m.getGroup().getId().equals(groupId))
+                        .map(m -> m.getUser().getId())
+                        .orElse(null);
+            }
+        }
+        if (target == null && userId != null) {
+            target = userId;
+        }
+        if (target == null) {
+            if (memberId != null && studentCode == null && email == null && identifier == null) {
+                throw new BadRequestException("The new leader must be an active member of the group");
+            }
+            target = resolveStudent(null, email, identifier, studentCode).getId();
+        }
+        return replaceLeader(groupId, target);
     }
 
     /** YC20: Admin replaces (or assigns) the leader on behalf of the supervisor's report. */
@@ -407,6 +447,26 @@ public class StudentGroupService {
         next.setLeader(true);
         next.getUser().setRole(Role.GROUP_LEADER);
         invalidateRoster(group);
+        events.publishEvent(DomainEvent.of(DomainEventType.LEADER_CHANGED, groupId, next.getId(), null,
+                next.getUser().getFullName()));
+        return next;
+    }
+
+    /** A group whose leader left: the earliest-joined remaining member takes over. Nothing happens when it is empty. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<GroupMember> promoteSuccessorIfLeaderless(UUID groupId) {
+        List<GroupMember> active = groupMemberRepository.findByGroupIdAndStatus(groupId, MemberStatus.ACTIVE);
+        if (active.stream().anyMatch(GroupMember::isLeader)) {
+            return Optional.empty();
+        }
+        Optional<GroupMember> next = active.stream()
+                .min(Comparator.comparing(GroupMember::getJoinedAt, Comparator.nullsLast(Comparator.naturalOrder())));
+        next.ifPresent(m -> {
+            m.setLeader(true);
+            m.getUser().setRole(Role.GROUP_LEADER);
+            events.publishEvent(DomainEvent.of(DomainEventType.LEADER_CHANGED, groupId, m.getId(), null,
+                    m.getUser().getFullName()));
+        });
         return next;
     }
 

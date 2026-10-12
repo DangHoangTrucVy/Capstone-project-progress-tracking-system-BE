@@ -21,8 +21,11 @@ Log "=== start-all (BE: $BeDir, FE: $FeDir)"
 # 1. Docker Desktop
 docker info *> $null
 if ($LASTEXITCODE -ne 0) {
-    $dd = "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
-    if (Test-Path $dd) { Log "Starting Docker Desktop"; Start-Process $dd }
+    # Docker Desktop may be installed for all users (Program Files) or per user (LocalAppData).
+    $dd = @("$env:ProgramFiles\Docker\Docker\Docker Desktop.exe",
+            "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe") |
+        Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($dd) { Log "Starting Docker Desktop ($dd)"; Start-Process $dd } else { Log "WARN: Docker Desktop.exe not found" }
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 5
         docker info *> $null

@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 /** Durable handoff from the business transaction to the notification sink. */
@@ -20,6 +21,8 @@ public class DomainEventOutbox {
     public DomainEventOutbox(UUID id, String payload) {
         this.id = id;
         this.payload = payload;
-        this.nextAttemptAt = Instant.now();
+        // Databases keep microseconds and round: an un-truncated "now" can be stored slightly in the future, so the
+        // immediate delivery right after commit would skip the event and leave it to the next retry sweep.
+        this.nextAttemptAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 }

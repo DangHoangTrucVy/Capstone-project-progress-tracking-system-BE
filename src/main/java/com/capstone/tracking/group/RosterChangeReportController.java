@@ -1,6 +1,7 @@
 package com.capstone.tracking.group;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -47,6 +48,7 @@ public class RosterChangeReportController {
     }
 
     @Operation(summary = "Report a roster change to the Admin")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/groups/{groupId}/roster-change-reports")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<ReportResponse> report(@PathVariable UUID groupId, @Valid @RequestBody ReportRequest request,

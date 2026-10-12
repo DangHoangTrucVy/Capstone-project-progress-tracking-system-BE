@@ -186,6 +186,17 @@ public class NotificationHandler {
                 addLeaders(members, recipients);
                 yield event.label() + " xin rời nhóm " + code;
             }
+            case LEADER_LEAVE_REQUESTED -> {
+                addAdmins(recipients);
+                addSupervisor(group, recipients);
+                yield "Leader " + event.label() + " của nhóm " + code + " xin rời nhóm, chờ Admin duyệt"
+                        + (event.details() == null || event.details().isBlank() ? "" : ". Lý do: " + event.details());
+            }
+            case LEADER_CHANGED -> {
+                addMembers(members, recipients);
+                addSupervisor(group, recipients);
+                yield event.label() + " là Leader mới của nhóm " + code;
+            }
             case LEAVE_DECIDED -> {
                 recipients.add(event.targetUserId());
                 yield "Yêu cầu rời nhóm " + code + " của bạn " + event.label();

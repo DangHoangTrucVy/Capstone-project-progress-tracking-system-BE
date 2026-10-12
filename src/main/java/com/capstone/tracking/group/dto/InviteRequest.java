@@ -9,7 +9,7 @@ public record InviteRequest(
         UUID userId,
         String email,
         String identifier,
-        @JsonAlias({"mssv", "studentId"})
+        @JsonAlias({"mssv", "studentId", "student_code"})
         String studentCode,
         @Size(max = 1000) String message
 ) {

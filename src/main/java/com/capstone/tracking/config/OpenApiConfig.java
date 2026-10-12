@@ -1,7 +1,16 @@
 package com.capstone.tracking.config;
 
+import com.capstone.tracking.common.exception.ErrorResponse;
+import io.swagger.v3.core.converter.ModelConverters;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
+import io.swagger.v3.oas.models.media.Content;
+import io.swagger.v3.oas.models.media.MediaType;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.responses.ApiResponse;
+import io.swagger.v3.oas.models.responses.ApiResponses;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
@@ -46,7 +55,8 @@ public class OpenApiConfig {
         TAGS.put("Semesters", "Semester calendar");
         TAGS.put("Eligibility", "Eligible student list import and the not-eligible flag");
         TAGS.put("Student Groups", "Groups, members, leader, roster lock and roster approval");
-        TAGS.put("Group Formation", "Apply, invite, member votes, leave requests, roster change reports, formation deadline");
+        TAGS.put("Group Formation", "Apply, invite, member votes, leave requests, roster change reports, formation deadline. "
+                + "A student joins a group only by accepting an Invite; approving an Apply sends that Invite (YC10, YC11).");
         TAGS.put("Topics", "Topic catalogue managed by Admin");
         TAGS.put("Question Bank", "Per-topic question bank");
         TAGS.put("Topic Proposals", "Leader submits topics, supervisor forwards one, Council decides; proposal rounds");
@@ -82,6 +92,21 @@ public class OpenApiConfig {
             """;
 
     private static final Pattern ROLE = Pattern.compile("'([A-Z_]+)'");
+
+    private static final String ERROR_SCHEMA = "ErrorResponse";
+
+    /** The error answers every endpoint may give; the body is always {@link ErrorResponse} (see GlobalExceptionHandler). */
+    private static final Map<String, String> ERRORS = new LinkedHashMap<>();
+
+    static {
+        ERRORS.put("400", "Invalid request: validation failed (VALIDATION_FAILED, with fieldErrors) or bad input (BAD_REQUEST)");
+        ERRORS.put("401", "Missing, invalid or expired token (UNAUTHORIZED)");
+        ERRORS.put("403", "Role not allowed, not the owner (e.g. not this group's Leader) or student not eligible "
+                + "(FORBIDDEN, NOT_ELIGIBLE)");
+        ERRORS.put("404", "Resource not found (NOT_FOUND)");
+        ERRORS.put("409", "Business rule conflict, e.g. group full, already in a group, roster locked, deadline passed, "
+                + "request no longer pending (CONFLICT)");
+    }
 
     @Bean
     public OpenAPI openApi() {
@@ -125,7 +150,7 @@ public class OpenApiConfig {
         };
     }
 
-    /** Orders and describes tags, hides alias paths and marks the sign-in endpoints as public. */
+    /** Orders and describes tags, hides alias paths, marks the sign-in endpoints as public and lists error answers. */
     @Bean
     public OpenApiCustomizer cleanupCustomizer() {
         return openApi -> {
@@ -137,6 +162,7 @@ public class OpenApiConfig {
                         item.readOperations().forEach(op -> op.setSecurity(List.of()));
                     }
                 });
+                addErrorResponses(openApi);
             }
 
             List<Tag> tags = new ArrayList<>();
@@ -146,5 +172,52 @@ public class OpenApiConfig {
             }
             openApi.setTags(tags);
         };
+    }
+
+    /**
+     * Documents the error answers next to each operation: 401/403 when it needs a token, 400 when it takes input,
+     * 404 when it names a resource in the path, 409 when it changes something. Codes an operation already documents
+     * are left alone.
+     */
+    private static void addErrorResponses(OpenAPI openApi) {
+        if (openApi.getComponents() == null) {
+            openApi.setComponents(new Components());
+        }
+        ModelConverters.getInstance().readAll(ErrorResponse.class)
+                .forEach((name, schema) -> openApi.getComponents().addSchemas(name, schema));
+        openApi.getPaths().forEach((path, item) -> item.readOperationsMap().forEach((method, op) -> {
+            boolean secured = op.getSecurity() == null || !op.getSecurity().isEmpty();
+            boolean input = op.getRequestBody() != null || (op.getParameters() != null && !op.getParameters().isEmpty());
+            boolean writes = method != PathItem.HttpMethod.GET;
+            if (input) {
+                addError(op, "400");
+            }
+            if (secured) {
+                addError(op, "401");
+                addError(op, "403");
+            } else if (path.equals("/api/v1/auth/login") || path.equals("/api/v1/auth/google")) {
+                addError(op, "401", "Wrong email/password (INVALID_CREDENTIALS) or Google sign-in rejected "
+                        + "(GOOGLE_SIGN_IN_FAILED)");
+            }
+            if (path.contains("{")) {
+                addError(op, "404");
+            }
+            if (writes && secured) {
+                addError(op, "409");
+            }
+        }));
+    }
+
+    private static void addError(Operation op, String code) {
+        addError(op, code, ERRORS.get(code));
+    }
+
+    private static void addError(Operation op, String code, String description) {
+        if (op.getResponses() == null) {
+            op.setResponses(new ApiResponses());
+        }
+        op.getResponses().computeIfAbsent(code, c -> new ApiResponse().description(description)
+                .content(new Content().addMediaType("application/json",
+                        new MediaType().schema(new Schema<>().$ref("#/components/schemas/" + ERROR_SCHEMA)))));
     }
 }

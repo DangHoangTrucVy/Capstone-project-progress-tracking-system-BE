@@ -17,6 +17,12 @@ public interface MemberLeaveRequestRepository extends JpaRepository<MemberLeaveR
 
     List<MemberLeaveRequest> findByGroupIdOrderByCreatedAtDesc(UUID groupId);
 
+    @Query("""
+            select r from MemberLeaveRequest r
+            where (:status is null or r.status = :status) and (:leaderOnly = false or r.leaderRequest = true)
+            order by r.createdAt desc""")
+    List<MemberLeaveRequest> search(@Param("status") LeaveRequestStatus status, @Param("leaderOnly") boolean leaderOnly);
+
     Optional<MemberLeaveRequest> findByGroupIdAndUserIdAndStatus(UUID groupId, UUID userId, LeaveRequestStatus status);
 
     List<MemberLeaveRequest> findByGroupIdAndUserIdAndStatusIn(UUID groupId, UUID userId, List<LeaveRequestStatus> statuses);

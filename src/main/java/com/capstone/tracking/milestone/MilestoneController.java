@@ -1,6 +1,7 @@
 package com.capstone.tracking.milestone;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import com.capstone.tracking.milestone.dto.MilestoneCreateRequest;
 import com.capstone.tracking.milestone.dto.MilestoneResponse;
 import com.capstone.tracking.user.User;
@@ -33,6 +34,7 @@ public class MilestoneController {
     private final MilestoneService milestoneService;
 
     @Operation(summary = "Create a milestone")
+    @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MilestoneResponse> create(@Valid @RequestBody MilestoneCreateRequest request,
