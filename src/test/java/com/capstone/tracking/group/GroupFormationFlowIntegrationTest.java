@@ -60,17 +60,19 @@ class GroupFormationFlowIntegrationTest extends WorkflowTestSupport {
         UUID app = apply(student, group);
         postJson("/api/v1/groups/" + group + "/applications", student, Map.of()).andExpect(status().isConflict());
 
-        // The leader approves: the student immediately becomes an active group member
-        postJson("/api/v1/applications/" + app + "/approve", leader, Map.of())
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.type").value("APPLY"))
-                .andExpect(jsonPath("$.status").value("APPROVED"));
-
-        assertThat(groupMemberRepository.existsByGroupIdAndUserIdAndStatus(group, student.getId(), MemberStatus.ACTIVE)).isTrue();
+        // The leader approves: the student is NOT a member yet, they just get an Invite (YC10).
+        String inviteId = body(postJson("/api/v1/applications/" + app + "/approve", leader, Map.of())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.type").value("INVITE"))
+                .andExpect(jsonPath("$.status").value("PENDING"))).get("id").asText();
+        assertThat(groupMemberRepository.existsByUserIdAndStatus(student.getId(), MemberStatus.ACTIVE)).isFalse();
         getAs("/api/v1/me/applications", student).andExpect(jsonPath("$[0].status").value("APPROVED"));
-        getAs("/api/v1/groups/" + group, leader).andExpect(jsonPath("$.memberCount").value(2));
+        getAs("/api/v1/me/invites", student).andExpect(jsonPath("$[0].id").value(inviteId));
 
-        // A member can no longer apply to another group (YC13).
+        accept(student, UUID.fromString(inviteId));
+        assertThat(groupMemberRepository.existsByGroupIdAndUserIdAndStatus(group, student.getId(), MemberStatus.ACTIVE)).isTrue();
+        getAs("/api/v1/groups/" + group, leader).andExpect(jsonPath("$.memberCount").value(2));
+        // An accepted invite cannot be accepted twice and a member can no longer apply (YC13).
+        postJson("/api/v1/invites/" + inviteId + "/accept", student, Map.of()).andExpect(status().isConflict());
         UUID other = createGroup(user("leader2", Role.STUDENT));
         postJson("/api/v1/groups/" + other + "/applications", student, Map.of()).andExpect(status().isConflict());
     }
@@ -462,12 +464,11 @@ class GroupFormationFlowIntegrationTest extends WorkflowTestSupport {
         assertThat(hasNotification(applicant, "JOIN_APPLICATION_RECEIVED")).isFalse();
 
         postJson("/api/v1/applications/" + app + "/approve", leader, Map.of()).andExpect(status().isOk());
+        assertThat(hasNotification(applicant, "JOIN_INVITE_RECEIVED")).isTrue();
+        UUID invite = joinRequests.findByStudentIdAndTypeOrderByCreatedAtDesc(applicant.getId(), JoinRequestType.INVITE)
+                .get(0).getId();
+        accept(applicant, invite);
         assertThat(hasNotification(leader, "MEMBER_JOINED")).isTrue();
-
-        User invitee = user("n-invitee", Role.STUDENT);
-        UUID invite = invite(leader, group, invitee);
-        assertThat(hasNotification(invitee, "JOIN_INVITE_RECEIVED")).isTrue();
-        accept(invitee, invite);
 
         User declined = user("n-declined", Role.STUDENT);
         UUID declinedInvite = invite(leader, group, declined);

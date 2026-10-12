@@ -197,8 +197,9 @@ public class StudentGroupService {
     }
 
     /**
-     * Admin adds a member (also the only way to change a Locked roster, YC19). Setting isLeader=true promotes that
-     * user's global role to GROUP_LEADER; a group may only have one active leader at a time.
+     * Admin adds a member: placing a student who has no group, or changing a Locked roster (YC19). Setting
+     * isLeader=true promotes that user's global role to GROUP_LEADER; a group may only have one active leader at a time.
+     * A Leader cannot add anyone directly: a student joins only by accepting an Invite (YC10, YC11).
      */
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request) {
@@ -208,17 +209,15 @@ public class StudentGroupService {
     @Transactional
     public GroupMember addMember(UUID groupId, AddMemberRequest request, User actingUser) {
         if (actingUser != null && actingUser.getRole() != Role.ADMIN) {
-            requireGroupLeader(groupId, actingUser);
+            throw new AccessDeniedException("Only an administrator can add a member directly; a Leader sends an Invite"
+                    + " (POST /api/v1/groups/" + groupId + "/invites) and the student joins by accepting it");
         }
         User resolved = resolveStudent(request.userId(), request.email(), request.identifier(), request.studentCode());
         // Same lock order as Accept Invite (student, then group) so the two can never deadlock.
         User user = userRepository.lockById(resolved.getId()).orElseThrow();
         StudentGroup group = lockById(groupId);
-        if (actingUser != null && actingUser.getRole() != Role.ADMIN) {
-            requireNotLocked(group);
-        }
         eligibilityService.requireEligible(user);
-        boolean isLeader = (actingUser == null || actingUser.getRole() == Role.ADMIN) && request.isLeader();
+        boolean isLeader = request.isLeader();
         if (isLeader) {
             // Admin "add as leader": a current member is simply promoted, and an existing leader is replaced instead
             // of blocking the request with "already has an active leader".

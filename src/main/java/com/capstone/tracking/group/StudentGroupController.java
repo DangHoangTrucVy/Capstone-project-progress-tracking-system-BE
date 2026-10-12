@@ -114,10 +114,10 @@ public class StudentGroupController {
                 .toList();
     }
 
-    @Operation(summary = "Add a member to a group")
+    @Operation(summary = "Admin adds a member to a group (Leaders invite instead, YC11)")
     @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/{id}/members")
-    @PreAuthorize("hasAnyRole('ADMIN','GROUP_LEADER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupMemberResponse> addMember(@PathVariable UUID id,
                                                          @Valid @RequestBody AddMemberRequest request,
                                                          @AuthenticationPrincipal User currentUser) {

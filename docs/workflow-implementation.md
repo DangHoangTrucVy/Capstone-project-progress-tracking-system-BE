@@ -136,6 +136,10 @@ Content-Type: application/json
 
 ## 8. Nhóm, Leader, import sinh viên và xuất danh sách bàn giao
 
+- **Sinh viên chỉ vào nhóm khi Accept Invite (YC10, YC11)**:
+  - Leader duyệt Apply bằng `POST /api/v1/applications/{id}/approve`. Thao tác này **không** đưa sinh viên vào nhóm: đơn chuyển sang `APPROVED` và BE gửi cho sinh viên một Invite. Response là Invite đó (`type: INVITE`, `status: PENDING`, `sourceApplicationId` = mã đơn). Nếu Leader đã mời trực tiếp sinh viên này thì dùng lại Invite đang có.
+  - Sinh viên `POST /api/v1/invites/{id}/accept` thì mới thành thành viên chính thức. Lúc này BE kiểm tra lại sức chứa (YC15) và hủy các đơn, Invite khác (YC13).
+  - `POST /api/v1/groups/{id}/members` (thêm thẳng thành viên) **chỉ dành cho Admin**: xếp sinh viên chưa có nhóm, sửa danh sách đã khóa (YC19). Leader gọi sẽ nhận 403 và phải dùng Invite.
 - **Mời sinh viên**: `POST /api/v1/groups/{groupId}/invites` nhận `studentCode` (alias `mssv`, `studentId`, `student_code`), hoặc `userId` / `email` / `identifier`, kèm `message`. Trong response, `student.studentCode` là MSSV, hoặc phần trước `@` của email nếu tài khoản chưa có MSSV.
 - **Admin đổi Leader**: `PUT` (hoặc `PATCH`/`POST`) `/api/v1/groups/{id}/leader`, body là một trong các trường `userId`, `memberId` (chính là `id` trong danh sách thành viên), `studentCode`, `email`. Người được chọn phải đang là thành viên ACTIVE của nhóm; Leader cũ bị hạ về `STUDENT`. Có thể đổi Leader bằng hai cách khác:
   - `POST /api/v1/groups/{id}/members` với `isLeader: true`: thành viên hiện có sẽ được nâng lên Leader, sinh viên mới sẽ được thêm vào rồi thay Leader cũ. Nếu người đó đã là Leader thì trả 409.

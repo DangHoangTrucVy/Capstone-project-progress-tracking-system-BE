@@ -124,28 +124,35 @@ public class GroupJoinService {
         return close(app, JoinRequestStatus.WITHDRAWN);
     }
 
-    /** Leader approves a student's application (Apply), enrolling them as an active group member directly. */
+    /**
+     * YC10: the Leader accepts an Apply by inviting the applicant. The applicant is still not a member: they join only
+     * when they Accept the Invite (YC11), which is when capacity is checked again (YC15). Returns the Invite.
+     */
     @Transactional
     public GroupJoinRequest approveApplication(UUID id, User leader) {
         GroupJoinRequest app = lock(id, JoinRequestType.APPLY);
-        User student = users.lockById(app.getStudent().getId()).orElseThrow();
         StudentGroup group = groups.lockById(app.getGroup().getId());
         groups.requireActiveLeader(group.getId(), leader);
         requirePending(app);
         window.requireOpen(group.getSemester());
         groups.requireRecruiting(group);
         requireRoom(group);
+        User student = app.getStudent();
         eligibility.requireEligible(student);
         requireNoGroup(student, group.getSemester(), "The applicant already belongs to a group");
 
-        // Enrolls student directly as active member (or reactivates prior inactive membership row)
-        groups.enroll(group, student, false, app.getId());
+        Instant now = Instant.now();
+        // The Leader may already have invited this student directly: that Invite now answers the Apply too.
+        GroupJoinRequest invite = requests.findPending(group.getId(), student.getId(), JoinRequestType.INVITE)
+                .filter(i -> i.getExpiresAt().isAfter(now))
+                .orElse(null);
+        if (invite == null) {
+            invite = newInvite(group, student, leader, app.getMessage(), app.getId(), now);
+        } else if (invite.getSourceApplicationId() == null) {
+            invite.setSourceApplicationId(app.getId());
+        }
         close(app, JoinRequestStatus.APPROVED);
-
-        events.publishEvent(DomainEvent.of(DomainEventType.MEMBER_JOINED, group.getId(), app.getId(),
-                student.getId(), student.getFullName()));
-
-        return app;
+        return invite;
     }
 
     @Transactional

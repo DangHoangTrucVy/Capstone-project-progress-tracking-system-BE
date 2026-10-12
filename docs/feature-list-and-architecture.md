@@ -34,7 +34,7 @@ Ký hiệu trạng thái: ✅ Hoàn chỉnh (có endpoint + service + rule nghi�
 | 11 | Xem chi tiết nhóm + danh sách thành viên | `GET /api/v1/groups/{id}` | Mọi vai trò | ✅ |
 | 12 | Cập nhật thông tin nhóm (đề tài, supervisor, học kỳ, trạng thái) | `PUT /api/v1/groups/{id}` | Admin, Instructor | ✅ |
 | 13 | **Sinh viên tự tham gia nhóm (self-join)** | `POST /api/v1/groups/{id}/join` | Student | ✅ — mới trên nhánh này; chặn nếu SV đã thuộc 1 nhóm active khác, chặn nếu nhóm đã đủ 5 thành viên active |
-| 14 | Thêm thành viên vào nhóm (do người quản lý thêm) | `POST /api/v1/groups/{id}/members` | Admin, Instructor, Group Leader | ✅ |
+| 14 | Thêm thành viên vào nhóm (Admin xếp nhóm; Leader dùng Invite, YC11) | `POST /api/v1/groups/{id}/members` | Admin | ✅ |
 | 15 | Gỡ thành viên khỏi nhóm (tự động hạ quyền Group Leader → Student nếu gỡ leader) | `DELETE /api/v1/groups/{id}/members/{memberId}` | Admin, Instructor, Group Leader | ✅ |
 | — | Giới hạn tối đa **5 thành viên active/nhóm** | — (rule dùng chung cho #9, #13, #14) | — | ✅ |
 
