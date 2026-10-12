@@ -38,6 +38,25 @@ class OpenApiDocsIntegrationTest extends WorkflowTestSupport {
     }
 
     @Test
+    @DisplayName("Error answers are documented with the ErrorResponse body; public sign-in has no 401/403 from the token")
+    void errorResponses() throws Exception {
+        JsonNode paths = paths();
+        JsonNode invite = paths.get("/api/v1/groups/{groupId}/invites").get("post").get("responses");
+        for (String code : new String[] {"400", "401", "403", "404", "409"}) {
+            assertThat(invite.has(code)).as(code).isTrue();
+            assertThat(invite.get(code).toString()).as(code).contains("#/components/schemas/ErrorResponse");
+        }
+        JsonNode list = paths.get("/api/v1/groups").get("get").get("responses");
+        assertThat(list.has("401")).isTrue();
+        assertThat(list.has("404")).isFalse();
+        assertThat(list.has("409")).isFalse();
+        JsonNode login = paths.get("/api/v1/auth/login").get("post").get("responses");
+        assertThat(login.has("400")).isTrue();
+        assertThat(login.has("401")).isTrue();
+        assertThat(login.has("403")).isFalse();
+    }
+
+    @Test
     @DisplayName("The handover export is documented as an .xlsx file, not JSON")
     void exportIsXlsx() throws Exception {
         JsonNode content = paths().get("/api/v1/reports/export").get("get").get("responses").get("200").get("content");

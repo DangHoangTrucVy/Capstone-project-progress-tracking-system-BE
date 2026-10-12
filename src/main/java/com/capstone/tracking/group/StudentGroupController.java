@@ -164,14 +164,14 @@ public class StudentGroupController {
     }
 
     /** YC16: the Leader sends the member list to the supervisor (or to the Admins while none is assigned). */
-    @Operation(summary = "Leader submits the roster to the supervisor")
+    @Operation(summary = "Leader submits the roster (3-5 members) for approval by the supervisor or an Admin")
     @PostMapping("/{id}/roster/submit")
     @PreAuthorize("hasRole('GROUP_LEADER')")
     public StudentGroupResponse submitRoster(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
         return respond(studentGroupService.submitRoster(id, currentUser));
     }
 
-    @Operation(summary = "Supervisor approves or rejects the roster")
+    @Operation(summary = "Supervisor or Admin approves or rejects the roster (a rejection needs a note)")
     @PostMapping("/{id}/roster/review")
     @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
     public StudentGroupResponse reviewRoster(@PathVariable UUID id, @Valid @RequestBody RosterReviewRequest request,
