@@ -1,72 +1,92 @@
 package com.capstone.tracking.report;
 
+import com.capstone.tracking.audit.AuditService;
+import com.capstone.tracking.audit.SystemAuditTrail;
+import com.capstone.tracking.semester.Access;
+import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import com.capstone.tracking.report.dto.ReportSummaryResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Sprint 5 — API-011 / US-008: weekly progress dashboard summary. No "Dept Head" role exists in
- * the Role enum, so this is scoped to Admin only. */
 @RestController
+@RequestMapping("/api/v1/semesters/{semester}")
 @RequiredArgsConstructor
-@Tag(name = "Reports", description = "Periodic progress statistics")
+@Tag(name = "Statistics & export", description = "Statistics (7.3), the handover Excel file (10) and the history (11)")
 @SecurityRequirement(name = "bearerAuth")
 public class ReportController {
 
     private static final MediaType XLSX =
             MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-    private static final DateTimeFormatter FILE_STAMP =
-            DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
+    private final StatisticsService statistics;
+    private final ExcelExportService export;
+    private final AuditService audit;
+    private final Access access;
 
-    private final ReportService reportService;
-    private final HandoverExportService handoverExportService;
-
-    @Operation(summary = "Progress statistics summary")
-    @GetMapping("/api/v1/reports/summary")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ReportSummaryResponse summary(@RequestParam String semester,
-                                          @RequestParam(required = false) Integer weekNumber) {
-        return reportService.summary(semester, weekNumber);
+    public record AuditEntry(UUID id, String entityName, UUID entityId, String action, UUID performedBy,
+                             String performedByName, Instant performedAt, String details) {
+        static AuditEntry from(SystemAuditTrail a) {
+            return new AuditEntry(a.getId(), a.getEntityName(), a.getEntityId(), a.getAction(),
+                    a.getPerformedBy() == null ? null : a.getPerformedBy().getId(),
+                    a.getPerformedBy() == null ? "Hệ thống" : a.getPerformedBy().getFullName(), a.getPerformedAt(),
+                    a.getDetailsJson());
+        }
     }
 
-    /**
-     * "Xuất danh sách bàn giao": sheets Danh_sach_nhom and Chua_co_nhom; no semester = every semester. The file is
-     * named Danh_sach_ghep_nhom_[semester_]yyyyMMdd_HHmmss.xlsx (Vietnam time).
-     */
-    @Operation(summary = "Export the handover list (Excel: Danh_sach_nhom, Chua_co_nhom)",
-            description = "Returns the .xlsx file itself, not JSON; errors (401/403/500) are JSON.")
+    @Operation(summary = "Statistics of the semester, a subject or one major (Admin, Moderator)")
+    @GetMapping("/statistics")
+    public StatisticsService.Statistics statistics(@PathVariable String semester,
+                                                   @RequestParam(required = false) UUID subjectId,
+                                                   @RequestParam(required = false) UUID majorId,
+                                                   @AuthenticationPrincipal User currentUser) {
+        return statistics.compute(semester, subjectId, majorId, currentUser);
+    }
+
+    @Operation(summary = "Export the handover list (Excel: Danh sách nhóm, Chưa có nhóm) by major, subject or semester",
+            description = "Returns the .xlsx file itself, not JSON; errors are JSON.")
     @ApiResponse(responseCode = "200", description = "The Excel file",
             headers = @Header(name = "Content-Disposition",
-                    description = "attachment; filename=\"Danh_sach_ghep_nhom_[semester_]yyyyMMdd_HHmmss.xlsx\""),
+                    description = "attachment; filename=\"Danh_sach_ghep_nhom_<HocKy>_<Mon|TatCa>_<Nganh|TatCa>_<yyyyMMdd_HHmmss>.xlsx\""),
             content = @Content(mediaType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     schema = @Schema(type = "string", format = "binary")))
-    @GetMapping({"/api/v1/reports/export", "/api/v1/reports/handover/export"})
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<byte[]> exportHandover(@RequestParam(required = false) String semester) {
-        String term = semester == null ? "" : semester.trim().replaceAll("[^A-Za-z0-9_-]", "");
-        String name = "Danh_sach_ghep_nhom_" + (term.isEmpty() ? "" : term + "_")
-                + FILE_STAMP.format(Instant.now()) + ".xlsx";
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(@PathVariable String semester,
+                                         @RequestParam(required = false) UUID subjectId,
+                                         @RequestParam(required = false) UUID majorId,
+                                         @AuthenticationPrincipal User currentUser) {
+        ExcelExportService.ExcelFile file = export.export(semester, subjectId, majorId, currentUser);
         return ResponseEntity.ok()
                 .contentType(XLSX)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(name).build().toString())
-                .body(handoverExportService.export(semester));
+                        ContentDisposition.attachment().filename(file.fileName()).build().toString())
+                .body(file.content());
+    }
+
+    @Operation(summary = "History of the semester's operations: who did what and when (Admin, Moderator)")
+    @GetMapping("/audit")
+    public Page<AuditEntry> audit(@PathVariable String semester, @ParameterObject Pageable pageable,
+                                  @AuthenticationPrincipal User currentUser) {
+        access.requireModerator(semester, currentUser);
+        return audit.list(semester, pageable).map(AuditEntry::from);
     }
 }

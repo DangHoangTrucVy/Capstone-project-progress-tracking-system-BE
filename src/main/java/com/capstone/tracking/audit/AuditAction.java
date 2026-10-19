@@ -1,11 +1,23 @@
 package com.capstone.tracking.audit;
 
-/** The kinds of state transitions blueprint.md §11 requires to be traceable. */
+/** The operations whose history must be kept: who did what and when (mục 11). */
 public enum AuditAction {
-    CREATE,
-    UPDATE,
-    CANCEL,
-    APPROVE,
-    REJECT,
-    SIGN
+    IMPORT_STUDENTS,
+    IMPORT_ELIGIBILITY,
+    IMPORT_LECTURERS,
+    SCOPE_OPENED,
+    SCOPE_LOCKED,
+    DEADLINE_CHANGED,
+    SCOPE_EXTENDED,
+    SCOPE_FINALIZED,
+    SCOPE_REOPENED,
+    MODERATOR_ASSIGNED,
+    MODERATOR_ADDED_MEMBER,
+    MODERATOR_MOVED_MEMBER,
+    MODERATOR_REMOVED_MEMBER,
+    MODERATOR_CREATED_GROUP,
+    GROUP_DISSOLVED,
+    LEAVE_REQUEST_DECIDED,
+    LEADER_TRANSFERRED_AFTER_FINALIZE,
+    ELIGIBILITY_CHANGED
 }

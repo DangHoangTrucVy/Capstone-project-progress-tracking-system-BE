@@ -1,14 +1,12 @@
 package com.capstone.tracking.user;
 
 /**
- * RBAC roles per blueprint.md §11 (Security, Privacy and Compliance).
+ * Account roles (requirement v2.8, mục 2). Moderator is not a role: it is a lecturer assigned to a semester
+ * ({@code semesters.moderator_id}); Leader is not a role either: it is a member flag of one group.
  * Spring Security expects the "ROLE_" prefix on the granted authority, added in {@link User#getAuthorities()}.
  */
 public enum Role {
     ADMIN,
-    INSTRUCTOR,
-    /** Hội đồng: approves topics, sits on the closed council (Review 3) and grades final defenses. */
-    COUNCIL,
-    GROUP_LEADER,
+    LECTURER,
     STUDENT
 }

@@ -6,8 +6,10 @@ spring:
     # V1000 sorts after every real migration; without this, the next real one (V5, V6, ...) would be
     # rejected on a dev DB that has already applied the seed.
     out-of-order: true
+    # The capstone-tracking seeds (V1000-V1003) were removed with that domain; a dev DB that applied them stays valid.
+    ignore-migration-patterns: "*:missing"
 
 app:
   auth:
-    # The seeded dev accounts (admin, hoidong, council01..05) use made-up emails, so they need password login.
+    # The seeded dev accounts use made-up emails, so they need password login.
     password-login-enabled: ${PASSWORD_LOGIN_ENABLED:true}

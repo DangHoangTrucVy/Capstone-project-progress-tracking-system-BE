@@ -4,14 +4,14 @@ import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
 import com.capstone.tracking.user.dto.UserCreateRequest;
 import com.capstone.tracking.user.dto.UserUpdateRequest;
+import java.util.Locale;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -23,46 +23,42 @@ public class UserService {
 
     @Transactional
     public User create(UserCreateRequest request) {
-        if (userRepository.existsByEmailIgnoreCase(request.email())) {
-            throw new ConflictException("A user with email " + request.email() + " already exists");
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException("A user with email " + email + " already exists");
         }
-        User user = User.builder()
-                .email(request.email().toLowerCase())
-                .fullName(request.fullName())
+        return userRepository.save(User.builder()
+                .email(email)
+                .fullName(request.fullName().trim())
                 .passwordHash(request.password() == null ? null : passwordEncoder.encode(request.password()))
                 .role(request.role())
-                .campus(request.campus())
+                .phone(request.phone())
                 .status(UserStatus.ACTIVE)
-                .build();
-        return userRepository.save(user);
+                .build());
     }
 
     public User getById(UUID id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> ResourceNotFoundException.of("User", id));
+        return userRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("User", id));
     }
 
-    public User getByEmail(String email) {
-        return userRepository.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> ResourceNotFoundException.of("User", email));
-    }
-
-    public Page<User> list(Role role, Pageable pageable) {
-        return role == null ? userRepository.findAll(pageable) : userRepository.findByRole(role, pageable);
+    public Page<User> list(Role role, String keyword, Pageable pageable) {
+        String q = keyword == null || keyword.isBlank() ? "%" : "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
+        return userRepository.search(role, q, pageable);
     }
 
     @Transactional
     public User update(UUID id, UserUpdateRequest request) {
         User user = getById(id);
-        user.setFullName(request.fullName());
-        user.setAvatarUrl(request.avatarUrl());
+        if (request.email() != null && !request.email().equalsIgnoreCase(user.getEmail())) {
+            String email = request.email().trim().toLowerCase(Locale.ROOT);
+            if (userRepository.existsByEmailIgnoreCase(email)) {
+                throw new ConflictException("A user with email " + email + " already exists");
+            }
+            user.setEmail(email);
+        }
+        user.setFullName(request.fullName().trim());
+        user.setPhone(request.phone());
         user.setStatus(request.status());
-        if (request.role() != null) {
-            user.setRole(request.role());
-        }
-        if (request.campus() != null) {
-            user.setCampus(request.campus());
-        }
-        return user; // managed entity: change tracked automatically within the transaction
+        return user;
     }
 }

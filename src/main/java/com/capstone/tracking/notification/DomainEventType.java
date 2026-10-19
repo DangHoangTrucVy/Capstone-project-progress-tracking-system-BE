@@ -1,41 +1,50 @@
 package com.capstone.tracking.notification;
 
-/** {@code emailed}: besides the in-app notification, the group is emailed (To the leader, CC members + supervisor). */
+/**
+ * Notification kinds (8.3). Every notification is shown on the web (bell) and, unless {@code emailed} is false,
+ * emailed to the address on the imported list.
+ */
 public enum DomainEventType {
-    DOCUMENT_SUBMITTED(false),
-    DOCUMENT_FEEDBACK(true),
-    BOOKING_CONFIRMED(false),
-    BOOKING_CANCELLED(false),
-    PROGRESS_REPORTED(false),
-    PROGRESS_FEEDBACK(false),
-    TOPIC_PROPOSAL_SUBMITTED(false),
-    TOPIC_FORWARDED_TO_COUNCIL(true),
-    TOPIC_APPROVED(true),
-    TOPIC_REJECTED(true),
-    PROPOSAL_ROUND_OPENED(true),
-    WARNING_FLAG_RAISED(true),
-    WARNING_FLAG_RESOLVED(false),
-    REVIEW_SCHEDULED(false),
-    REVIEW_RESULT(true),
-    DEFENSE_SCHEDULED(true),
-    DEFENSE_RESULT(true),
-    JOIN_APPLICATION_RECEIVED(false),
-    JOIN_APPLICATION_REJECTED(false),
-    JOIN_INVITE_RECEIVED(false),
-    JOIN_INVITE_DECLINED(false),
+    // ---- Apply / Invite (6.2)
+    APPLICATION_RECEIVED(true),
+    APPLICATION_ACCEPTED(true),
+    APPLICATION_REJECTED(true),
+    INVITE_RECEIVED(true),
+    INVITE_ACCEPTED(true),
+    INVITE_DECLINED(true),
+    // ---- members and Leader (6.4, 6.5)
     MEMBER_JOINED(false),
-    MEMBER_LEFT(false),
-    MEMBER_REMOVED(false),
-    LEAVE_REQUESTED(false),
-    LEAVE_DECIDED(false),
-    /** The Leader asks to leave: the Admins (and the supervisor) decide, not the group. */
-    LEADER_LEAVE_REQUESTED(false),
-    LEADER_CHANGED(false),
-    ROSTER_SUBMITTED(false),
-    ROSTER_REVIEWED(false),
-    ROSTER_CHANGE_REPORTED(false),
-    /** Personal (no group): the student's capstone eligibility flag was set or lifted (YC03). */
-    ELIGIBILITY_CHANGED(false);
+    MEMBER_LEFT(true),
+    MEMBER_KICKED(true),
+    LEAVE_REQUESTED(true),
+    LEAVE_DECIDED(true),
+    COMPLAINT_RECEIVED(true),
+    LEADER_TRANSFER_REQUESTED(true),
+    LEADER_TRANSFER_ANSWERED(true),
+    LEADER_CHANGED(true),
+    /** The system picked this student as the new Leader. */
+    BECAME_LEADER(true),
+    GROUP_DISSOLVED(true),
+    // ---- eligibility (5.2)
+    ELIGIBILITY_CHANGED(true),
+    REMOVED_INELIGIBLE(true),
+    // ---- Moderator coordination (7.1)
+    ADDED_BY_MODERATOR(true),
+    MOVED_BY_MODERATOR(true),
+    REMOVED_BY_MODERATOR(true),
+    // ---- scope phases and deadlines (3.4, 3.5)
+    SCOPE_OPENED(true),
+    SCOPE_LOCKED(true),
+    SCOPE_EXTENDED(true),
+    SCOPE_FINALIZED(true),
+    SCOPE_REOPENED(true),
+    DEADLINE_CHANGED(true),
+    // ---- to the Moderator
+    SCOPE_CANNOT_OPEN(true),
+    COORDINATION_NEEDED(true),
+    FINALIZED_SCOPE_IMPORT_BLOCKED(true),
+    LEADER_CHANGED_AFTER_FINALIZE(true),
+    MODERATOR_ASSIGNED(true);
 
     private final boolean emailed;
 

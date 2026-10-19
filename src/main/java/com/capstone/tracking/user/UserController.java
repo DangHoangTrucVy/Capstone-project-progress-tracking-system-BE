@@ -20,11 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.UUID;
 
-/**
- * FR-010: user management + RBAC (blueprint.md §6, §11).
- * Only Admin can create/edit accounts directly; every authenticated user can read their own profile
- * via /api/v1/auth/me. Admin owns account lookup, group provisioning and roster management.
- */
+/** Account management (mục 2): only the Admin. Students and lecturers normally come from the list imports. */
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -44,11 +40,13 @@ public class UserController {
                 .body(UserResponse.from(created));
     }
 
-    @Operation(summary = "List users (filter by role)")
+    @Operation(summary = "List accounts (filter by role, search email/name/student code)")
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public Page<UserResponse> list(@RequestParam(required = false) Role role, @ParameterObject Pageable pageable) {
-        return userService.list(role, pageable).map(UserResponse::from);
+    public Page<UserResponse> list(@RequestParam(required = false) Role role,
+                                   @RequestParam(required = false) String q,
+                                   @ParameterObject Pageable pageable) {
+        return userService.list(role, q, pageable).map(UserResponse::from);
     }
 
     @Operation(summary = "Get a user")
@@ -58,7 +56,7 @@ public class UserController {
         return UserResponse.from(userService.getById(id));
     }
 
-    @Operation(summary = "Update a user (role, campus, active flag...)")
+    @Operation(summary = "Update an account (name, email, phone, status)")
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public UserResponse update(@PathVariable UUID id, @Valid @RequestBody UserUpdateRequest request) {

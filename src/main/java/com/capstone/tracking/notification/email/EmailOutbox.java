@@ -35,7 +35,8 @@ public class EmailOutbox extends BaseEntity {
         FAILED
     }
 
-    @Column(nullable = false, unique = true)
+    /** One email per (event, recipient): {@code recipientsTo} holds that single address. */
+    @Column(nullable = false)
     private UUID eventId;
 
     @Column(name = "recipients_to", nullable = false, columnDefinition = "TEXT")

@@ -1,29 +1,28 @@
 package com.capstone.tracking.auth;
 
-import io.swagger.v3.oas.annotations.Operation;
 import com.capstone.tracking.auth.dto.GoogleLoginRequest;
 import com.capstone.tracking.auth.dto.LoginRequest;
 import com.capstone.tracking.auth.dto.LoginResponse;
-import com.capstone.tracking.auth.dto.RegisterRequest;
-import com.capstone.tracking.auth.dto.RegisterResponse;
-import com.capstone.tracking.user.Campus;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.dto.UserResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.Arrays;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.Arrays;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-@Tag(name = "Auth", description = "Registration, login, and current-session identity")
+@Tag(name = "Auth", description = "Sign-in (only accounts on the imported lists) and the current identity")
 public class AuthController {
 
     private final AuthService authService;
@@ -34,21 +33,13 @@ public class AuthController {
     /** clientId is what the FE passes to Google Identity Services; the button is hidden when it is null. */
     public record GoogleConfigResponse(boolean enabled, String clientId) {}
 
-    @Operation(summary = "Student sign-up with a personal email and student code (waits for Admin approval)")
-    @PostMapping("/register")
-    @ResponseStatus(HttpStatus.CREATED)
-    public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
-        return authService.register(request);
-    }
-
-    @Operation(summary = "Log in with email and password, returns a JWT")
+    @Operation(summary = "Log in with email and password (when enabled), returns a JWT")
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
 
-    /** Giai đoạn 1: Google Workspace sign-in for the chosen campus; the returned user.role picks the dashboard. */
-    @Operation(summary = "Log in with a Google Workspace ID token, returns a JWT")
+    @Operation(summary = "Log in with a Google ID token, returns a JWT; the account must be on an imported list")
     @PostMapping("/google")
     public LoginResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
         return authService.googleLogin(request);
@@ -62,14 +53,6 @@ public class AuthController {
         return new GoogleConfigResponse(clientId != null, clientId);
     }
 
-    /** Options for the campus picker on the sign-in page. */
-    @Operation(summary = "List campuses for the sign-in picker")
-    @GetMapping("/campuses")
-    public Campus[] campuses() {
-        return Campus.values();
-    }
-
-    /** Reads the identity Spring Security already resolved from the Bearer token via JwtAuthenticationFilter. */
     @Operation(summary = "Current signed-in user")
     @GetMapping("/me")
     public UserResponse me(@AuthenticationPrincipal User currentUser) {

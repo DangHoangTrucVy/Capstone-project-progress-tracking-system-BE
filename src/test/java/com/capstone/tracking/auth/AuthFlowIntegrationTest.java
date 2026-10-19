@@ -1,49 +1,60 @@
 package com.capstone.tracking.auth;
 
-import com.capstone.tracking.WorkflowTestSupport;
-import com.capstone.tracking.user.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.capstone.tracking.TestSupport;
+import com.capstone.tracking.roster.SemesterStudent;
+import com.capstone.tracking.semester.Semester;
+import com.capstone.tracking.user.Role;
+import com.capstone.tracking.user.User;
+import java.time.LocalDate;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import java.util.Map;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class AuthFlowIntegrationTest extends WorkflowTestSupport {
+/** Mục 9: only accounts on an imported list sign in. */
+class AuthFlowIntegrationTest extends TestSupport {
+
     @Autowired private PasswordEncoder encoder;
 
     @Test
-    void signUpNeedsAStudentCodeAndCampus() throws Exception {
-        postJson("/api/v1/auth/register", user("visitor", Role.STUDENT),
-                Map.of("email", "new@gmail.com", "fullName", "New", "password", "Password123"))
-                .andExpect(status().isBadRequest());
+    void lecturerSignsInWithPasswordButCannotManageAccounts() throws Exception {
+        User lecturer = withPassword(user("login-lecturer", Role.LECTURER));
+        login(lecturer).andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.user.role").value("LECTURER"));
+        getAs("/api/v1/users", lecturer).andExpect(status().isForbidden());
     }
 
     @Test
-    void provisionedStaffCanUseExplicitPasswordFallbackButStudentsCannot() throws Exception {
-        User instructor = user("login-staff", Role.INSTRUCTOR);
-        instructor.setPasswordHash(encoder.encode("Password123"));
-        userRepository.save(instructor);
-        var response = body(postJson("/api/v1/auth/login", instructor,
-                Map.of("email", instructor.getEmail(), "password", "Password123"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").isNotEmpty()));
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/auth/me")
-                .header("Authorization", "Bearer " + response.get("accessToken").asText()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("INSTRUCTOR"));
-        getAs("/api/v1/users", instructor).andExpect(status().isForbidden());
-        User student = user("login-student", Role.STUDENT);
-        student.setPasswordHash(encoder.encode("Password123"));
-        userRepository.save(student);
-        // YC02: students sign in too; being eligible for the capstone is a separate check.
-        var studentLogin = body(postJson("/api/v1/auth/login", student,
-                Map.of("email", student.getEmail(), "password", "Password123"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.user.role").value("STUDENT")));
-        getAs("/api/v1/auth/me", student).andExpect(status().isOk()).andExpect(jsonPath("$.eligible").value(true));
-        getAs("/api/v1/users", student).andExpect(status().isForbidden());
+    void aStudentSignsInOnlyWhenOnASemesterList() throws Exception {
+        User student = withPassword(student("login-student"));
+        login(student).andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("NOT_ON_LIST"));
+
+        Semester semester = semesterRepository.save(new Semester(freeSemesterCode(), "Login semester",
+                LocalDate.now(), LocalDate.now().plusDays(90)));
+        semesterStudentRepository.save(SemesterStudent.builder().semesterCode(semester.getCode()).user(student)
+                .major(major()).currentTerm(8).build());
+        login(student).andExpect(status().isOk()).andExpect(jsonPath("$.user.role").value("STUDENT"));
+        getAs("/api/v1/me/semesters", student).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].semesterCode").value(semester.getCode()))
+                .andExpect(jsonPath("$[0].readOnly").value(false));
     }
 
     @Test
     void protectedEndpointWithoutTokenReturns401() throws Exception {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/auth/me"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private User withPassword(User user) {
+        user.setPasswordHash(encoder.encode("Password123"));
+        return userRepository.save(user);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions login(User user) throws Exception {
+        return postJson("/api/v1/auth/login", user, Map.of("email", user.getEmail(), "password", "Password123"));
     }
 }

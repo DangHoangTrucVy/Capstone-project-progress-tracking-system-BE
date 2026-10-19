@@ -32,7 +32,7 @@ spring:
 
   servlet:
     multipart:
-      # Must stay >= app.storage.max-file-size; oversize requests are rejected here with 413 before reaching a controller.
+      # Imported list files (Excel/CSV); oversize requests are rejected here with 413 before reaching a controller.
       max-file-size: ${UPLOAD_MAX_FILE_SIZE:20MB}
       max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:25MB}
 
@@ -91,28 +91,18 @@ app:
       queue-name: ${SQS_QUEUE_NAME:capstone-domain-events}
       create-queue: ${SQS_CREATE_QUEUE:false}
       wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:10}
-  storage:
-    type: ${STORAGE_TYPE:local}
-    s3:
-      bucket: ${S3_BUCKET:capstone-documents}
-      create-bucket: ${S3_CREATE_BUCKET:false}
-    local-dir: ${STORAGE_LOCAL_DIR:./uploads}
-    max-file-size: ${UPLOAD_MAX_FILE_SIZE:20MB}
-    allowed-extensions: pdf,doc,docx,ppt,pptx,xls,xlsx,zip,rar,png,jpg,jpeg,txt,md
-  security:
-    allowed-email-domain: ${ALLOWED_EMAIL_DOMAIN:fpt.edu.vn}
-  # Google Workspace sign-in (POST /api/v1/auth/google): the OAuth client id(s) the FE's Google button uses.
+  # Google sign-in (POST /api/v1/auth/google): the OAuth client id(s) the FE's Google button uses.
   google:
     client-ids: ${GOOGLE_CLIENT_IDS:}
-  # Email notifications to the group (To leader, CC members + supervisor). Off = logged only.
+  # Email copies of the notifications, to the address on the imported list. Off = logged only.
   mail:
     enabled: ${MAIL_ENABLED:false}
-    from: ${MAIL_FROM:capstone-tracking@fpt.edu.vn}
+    from: ${MAIL_FROM:ghep-nhom@fpt.edu.vn}
     # How often the outbox dispatcher sends queued emails (and retries failed ones).
     dispatch-delay-ms: ${MAIL_DISPATCH_DELAY_MS:5000}
-  # Giai đoạn 6 "cuốn chiếu": how many final defenses may run at the same time.
-  defense:
-    max-parallel: ${DEFENSE_MAX_PARALLEL:5}
+  # How often scopes are opened / locked automatically and expired requests written down (3.4).
+  formation:
+    tick-ms: ${FORMATION_TICK_MS:30000}
 
 springdoc:
   swagger-ui:

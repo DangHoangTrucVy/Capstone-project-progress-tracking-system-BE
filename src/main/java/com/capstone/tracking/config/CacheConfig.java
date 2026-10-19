@@ -17,13 +17,9 @@ import java.time.Duration;
 @EnableCaching
 public class CacheConfig {
 
-    public static final String MILESTONES = "milestones";
-    public static final String SLOT_SEARCH = "slotSearch";
-    public static final String SLOT = "slot";
-
     /**
-     * transactionAware: puts/evicts run after the surrounding transaction commits, so a booking cannot evict the
-     * slot list and have another request re-cache the pre-booking numbers before the booking is visible.
+     * transactionAware: puts/evicts run after the surrounding transaction commits, so a change cannot be evicted and
+     * re-cached with the old value before it is visible.
      */
     @Bean
     public RedisCacheManagerBuilderCustomizer redisCacheCustomizer() {

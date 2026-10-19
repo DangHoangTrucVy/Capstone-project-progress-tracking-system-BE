@@ -78,31 +78,13 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- AWS (S3 document storage, SQS domain events). Floci emulates both locally and in CI. -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-            <exclusions>
-                <!-- Uses the JDK-based url-connection-client instead: the SDK's default Apache 5 client needs a newer
-                     httpclient5 than the one Spring Boot 3.3 manages. -->
-                <exclusion>
-                    <groupId>software.amazon.awssdk</groupId>
-                    <artifactId>apache-client</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>software.amazon.awssdk</groupId>
-                    <artifactId>apache5-client</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>software.amazon.awssdk</groupId>
-                    <artifactId>netty-nio-client</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
+        <!-- AWS SQS for domain events (app.messaging.type=sqs). Floci emulates it locally and in CI. -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>sqs</artifactId>
             <exclusions>
+                <!-- Uses the JDK-based url-connection-client instead: the SDK's default Apache 5 client needs a newer
+                     httpclient5 than the one Spring Boot 3.3 manages. -->
                 <exclusion>
                     <groupId>software.amazon.awssdk</groupId>
                     <artifactId>apache-client</artifactId>

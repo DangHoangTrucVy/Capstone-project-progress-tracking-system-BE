@@ -1,19 +1,22 @@
 package com.capstone.tracking.notification;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Something that happened to a group, published by services with Spring's ApplicationEventPublisher and delivered
- * after the transaction commits. It is also the SQS message body (JSON), so it only carries ids and short texts;
- * {@link NotificationHandler} looks the rest up when it runs.
+ * Something people must be told about (8.3), published by services with Spring's ApplicationEventPublisher and
+ * delivered after the transaction commits. The publisher decides the text and who receives it; it is also the SQS
+ * message body (JSON), so it only carries ids and short texts.
  *
- * @param label short human text for the notification, e.g. the document title or "tuần 3"
- * @param instructorId the instructor concerned when it is not the group's supervisor (a booked slot's owner)
- * @param details longer feedback shown with the notification and in the email (council feedback, flag reason...)
- * @param deadline the date the group must act by, when there is one (council review deadline, revision deadline...)
- * @param targetUserId one specific person concerned who is not necessarily a group member (an applicant, an invited
- *                     student, someone who was removed)
+ * @param groupId    the group concerned, for FE deep links (may be null)
+ * @param entityId   the request / scope / subject concerned (may be null)
+ * @param message    the notification text (Vietnamese, shown as is)
+ * @param details    a reason or note shown under the message and in the email
+ * @param deadline   the date to act by, when there is one
+ * @param recipients the users to notify; the actor is never notified of their own action
  */
 public record DomainEvent(
         UUID eventId,
@@ -22,25 +25,29 @@ public record DomainEvent(
         UUID groupId,
         UUID entityId,
         UUID actorId,
-        String label,
-        UUID instructorId,
+        String message,
         String details,
         Instant deadline,
-        UUID targetUserId
+        List<UUID> recipients
 ) {
-    public static DomainEvent of(DomainEventType type, UUID groupId, UUID entityId, UUID actorId, String label) {
-        return new DomainEvent(UUID.randomUUID(), type, Instant.now(), groupId, entityId, actorId, label, null, null, null, null);
+    public static DomainEvent of(DomainEventType type, String message, Collection<UUID> recipients) {
+        return new DomainEvent(UUID.randomUUID(), type, Instant.now(), null, null, null, message, null, null,
+                recipients.stream().filter(Objects::nonNull).distinct().toList());
     }
 
-    public DomainEvent withInstructor(UUID instructorId) {
-        return new DomainEvent(eventId, type, occurredAt, groupId, entityId, actorId, label, instructorId, details, deadline, targetUserId);
+    public static DomainEvent of(DomainEventType type, String message, UUID recipient) {
+        return of(type, message, recipient == null ? List.of() : List.of(recipient));
+    }
+
+    public DomainEvent about(UUID groupId, UUID entityId) {
+        return new DomainEvent(eventId, type, occurredAt, groupId, entityId, actorId, message, details, deadline, recipients);
+    }
+
+    public DomainEvent by(UUID actorId) {
+        return new DomainEvent(eventId, type, occurredAt, groupId, entityId, actorId, message, details, deadline, recipients);
     }
 
     public DomainEvent withDetails(String details, Instant deadline) {
-        return new DomainEvent(eventId, type, occurredAt, groupId, entityId, actorId, label, instructorId, details, deadline, targetUserId);
-    }
-
-    public DomainEvent withTarget(UUID targetUserId) {
-        return new DomainEvent(eventId, type, occurredAt, groupId, entityId, actorId, label, instructorId, details, deadline, targetUserId);
+        return new DomainEvent(eventId, type, occurredAt, groupId, entityId, actorId, message, details, deadline, recipients);
     }
 }
