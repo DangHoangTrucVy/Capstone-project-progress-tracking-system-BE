@@ -1,31 +1,37 @@
-# Capstone Project Progress Tracking System
-*(Student Schedule and Guidance Management System)*
+# Website ghép nhóm
+*(Team Formation Website)*
 
-Hệ thống hỗ trợ quản lý lịch đánh giá, theo dõi tiến độ và giám sát hướng dẫn đồ án/khóa luận tốt nghiệp giữa Giảng viên hướng dẫn (Supervisor) và các nhóm sinh viên.
-
----
-
-## Quy trình đang áp dụng
-
-Xem [hợp đồng backend và hướng dẫn tích hợp](docs/workflow-implementation.md): Admin cấp tài khoản/nhóm/Leader, Google Workspace mặc định, chỉ Leader thao tác thay nhóm, deadline duyệt đề tài, feedback bài nộp, lịch review theo tuần và thông báo có outbox. Các mô tả sprint bên dưới là lịch sử phát triển; tài liệu quy trình này mô tả quyền và API hiện hành.
-
-## 📌 Tài liệu dự án
-
-- 📄 [**Intent Specification (`intent.md`)**](intent.md): Bối cảnh bài toán, mô hình tham chiếu tương tự Calendly và kết quả kỳ vọng.
-- 📐 [**Software Development Blueprint (`blueprint.md`)**](blueprint.md): Bản vẽ kiến trúc & kỹ thuật chi tiết 15 mục (Requirements, Use Cases, User Stories, Data Model, API Contract, NFR, Traceability Matrix).
-- 🏗️ [**Các tầng kiến trúc (`docs/architecture-layers.md`)**](docs/architecture-layers.md): Docker, CI/CD, AWS (S3/SQS qua Floci), Redis — bật/tắt và cách chạy.
-- 🤖 [**BA Blueprint Agent Framework (`BA-Blueprint-Agent/`)**](BA-Blueprint-Agent/README.md): Bộ khung quản trị chất lượng (Quality Gates), 10 kỹ năng phân tích nghiệp vụ và quy trình đồng bộ GitHub Delivery.
+Website giúp sinh viên tự ghép nhóm theo môn học trong từng học kỳ, chỉ trong cùng ngành, và giúp Moderator điều phối,
+chốt danh sách và xuất file Excel bàn giao. Phiên bản đầu tiên làm môn **Capstone Project (đồ án tốt nghiệp)**; mô hình
+"môn" cho phép thêm môn khác sau mà không phải làm lại.
 
 ---
 
-## 🎯 Tính năng cốt lõi (Core Capabilities)
+## 📌 Tài liệu
 
-1. **Lịch kiểm tra & đánh giá (Assessment Scheduling):** Đặt lịch tự động, kiểm soát sức chứa (capacity), loại bỏ 100% xung đột lịch theo mô hình Calendly.
-2. **Quản lý hồ sơ nhóm & nộp Artifacts:** Quản lý tập trung thành viên, đề tài và các sản phẩm bàn giao theo từng mốc.
-3. **Ngân hàng câu hỏi & tài liệu đề tài:** Kho học liệu và câu hỏi phản biện phân loại theo chuyên đề do Admin quản lý.
-4. **Hỗ trợ trong buổi làm việc & Biên bản họp:** Ghi nhận yêu cầu mới phát sinh (New Requirements) và tự động sinh bản thảo Biên bản cuộc họp (Meeting Minutes) từ ghi chú.
-5. **Đánh giá đa chiều (3-Dimensional Evaluation):** Chấm điểm và nhận xét theo 3 tiêu chí: *Topic Fit*, *Product Quality*, và *Communication*.
-6. **Báo cáo & Thống kê tiến độ:** Dashboard theo dõi phiên họp, tỷ lệ tham gia và rủi ro chậm trễ theo tuần và theo học kỳ.
+- 📐 [**Thiết kế backend theo requirement v2.8**](docs/design/team-formation-v2.8.md): phân tích yêu cầu, mô hình nghiệp vụ,
+  giai đoạn của phạm vi ghép nhóm, danh sách API, database và các câu hỏi còn chờ.
+- 🗄️ [**ERD**](docs/erd.png) ([Mermaid](docs/erd.mmd), [SVG](docs/erd.svg)).
+- 🏗️ [**Các tầng kiến trúc**](docs/architecture-layers.md): Docker, CI/CD, SQS (Floci), Redis — bật/tắt và cách chạy.
+
+> Các tài liệu `blueprint.md`, `intent.md`, `docs/requirements/*`, `docs/sequence/*`, `docs/c4/*`,
+> `docs/feature-list-and-architecture.md`, `docs/workflow-implementation.md` mô tả phạm vi cũ (Capstone Project Progress
+> Tracking) và sẽ được vẽ lại sau khi nhóm duyệt requirement.
+
+---
+
+## 🎯 Chức năng
+
+1. **Học kỳ, môn, ngành:** Admin tạo học kỳ (SP26, SU26, FA26) và gán một Moderator; Moderator tạo môn cần ghép nhóm.
+   Mỗi ngành trong một môn là một *phạm vi ghép nhóm* có giai đoạn và deadline riêng.
+2. **Nhập danh sách:** danh sách sinh viên (MSSV, họ tên, email, SĐT, kỳ, ngành), file sinh viên không đủ điều kiện và
+   danh sách giảng viên; luôn có bước kiểm tra trước khi ghi, nhập lại không tạo trùng.
+3. **Ghép nhóm:** tạo nhóm (1–5 người), Apply / Invite, Leader duyệt, khóa nhóm, rời nhóm, chuyển Leader, tìm kiếm theo
+   kỹ năng, Like ứng viên, hồ sơ có chế độ riêng tư.
+4. **Deadline và điều phối:** tới deadline hệ thống hủy đơn chờ, giải tán nhóm dưới 3 người; Moderator xếp sinh viên lẻ,
+   chuyển, lập nhóm, xử lý khiếu nại, gia hạn.
+5. **Chốt danh sách, thống kê, xuất Excel bàn giao, lịch sử thao tác.**
+6. **Thông báo** trên web (chuông, thời gian thực) và qua email.
 
 ---
 
@@ -38,156 +44,72 @@ Xem [hợp đồng backend và hướng dẫn tích hợp](docs/workflow-impleme
 
 ## ⚙️ Backend Service (Spring Boot)
 
-Spring Boot backend cho **Student Schedule and Guidance Management System**
-(xem `blueprint.md` để biết đặc tả đầy đủ 15 mục). Đây là nền tảng cho toàn bộ
-kế hoạch triển khai 5 sprint (§12): mọi entity trong Data Model (§8) đã có
-trong code, Sprint 1 và Sprint 2 có đầy đủ service/controller, và Sprint 3–5
-đã có sẵn data layer để việc bổ sung business logic là cộng thêm chứ không
-phải refactor lại.
-
 ### Stack
 
 - Java 17, Spring Boot 3.3.4, Maven
-- Spring Web, Spring Data JPA, Spring Security (stateless JWT)
+- Spring Web, Spring Data JPA, Spring Security (stateless JWT, Google sign-in)
 - PostgreSQL + Flyway migrations
 - springdoc-openapi (Swagger UI)
-- Lombok
-- JUnit 5 + MockMvc + H2 (test profile)
-- AWS SDK v2 (S3, SQS) — [Floci](https://github.com/floci-io/floci) locally and in CI; Redis (cache, login rate limit); GitHub Actions CI
+- Apache POI (đọc file nhập, xuất Excel)
+- JUnit 5 + MockMvc + H2, embedded PostgreSQL 16 cho các test `*PostgresTest`
+- AWS SDK v2 (SQS) — [Floci](https://github.com/floci-io/floci) locally and in CI; Redis (login rate limit, notification fan-out); GitHub Actions CI
 
-### What's implemented
+### Vai trò
 
-| Sprint | Area | Endpoints | Status |
-|---|---|---|---|
-| 1 | Auth | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` | Registration disabled; Google Workspace login for provisioned staff/Leader; password fallback opt-in |
-| 1 | Users | `POST/GET /api/v1/users`, `GET/PUT /api/v1/users/{id}` | Full — Admin-only |
-| 1 | Topics | `POST/GET /api/v1/topics`, `GET/PUT /api/v1/topics/{id}` | Full — create/edit = Admin, read = any role |
-| 1 | Question Bank | `POST/GET /api/v1/topics/{topicId}/questions` | Full — matches API-006 |
-| 1 | Student Groups | `POST/GET /api/v1/groups`, `GET/PUT /api/v1/groups/{id}`, `POST/DELETE /api/v1/groups/{id}/members[/{memberId}]` | Full — group/roster changes = Admin |
-| 2 | Schedule Slots | `POST/GET /api/v1/slots`, `GET /api/v1/slots/{id}` | Full — matches API-001/API-002, no-overlap rule (§5 step 1) |
-| 2 | Bookings | `POST /api/v1/slots/{id}/book`, `DELETE /api/v1/bookings/{id}` | Full — matches API-003/API-004, pessimistic-lock capacity enforcement (NFR-002/R-001), late-cancellation window |
-| — | Audit Trail | *(internal — `AuditService`, no endpoint yet)* | Recorder built and wired into every Sprint 1–5 mutating service |
-| 3 | Artifact Submissions | `POST/GET /api/v1/groups/{groupId}/artifacts`, `GET /api/v1/artifacts/{id}`, `POST /api/v1/artifacts/{id}/accept` | Full — matches API-005 (supports link or multipart upload, local/S3 storage); resubmitting the same title auto-supersedes the previous version |
-| 4 | Meetings & Minutes | `POST /api/v1/bookings/{bookingId}/meetings`, `GET/PUT.../start`/`.../end /api/v1/meetings/{id}`, `POST/GET /api/v1/meetings/{id}/requirements`, `PUT /api/v1/requirements/{id}`, `POST /api/v1/meetings/{id}/minutes/generate`, `PUT .../minutes/sign`, `GET .../minutes` | Full — matches API-007/008/009; minutes generation is a deterministic template, not a real AI call; sign-off is the same endpoint for both Leader (submit) and Instructor (approve/reject) |
-| 5 | Evaluation & Reporting | `POST/GET /api/v1/groups/{groupId}/evaluations`, `GET /api/v1/evaluations/{id}`, `GET /api/v1/reports/summary` | Full — matches API-010/API-011; evaluations are created already Published (one-click "Save and Publish" per UC-004); reports summary scoped to Admin (no "Dept Head" role exists) |
+| Vai trò | Là gì |
+|---|---|
+| `ADMIN` | Quản trị: học kỳ, nhập danh sách, tài khoản, gán Moderator; làm được mọi việc của Moderator |
+| `LECTURER` | Giảng viên có trong danh sách đã nhập; là **Moderator** của học kỳ được Admin gán |
+| `STUDENT` | Sinh viên có tên trong danh sách của ít nhất một học kỳ; **Leader** là cờ của một thành viên trong nhóm |
 
-#### Capstone workflow (Giai đoạn 1–6)
-
-| Giai đoạn | Endpoints | Rules |
-|---|---|---|
-| 1 Đăng nhập | `GET /api/v1/auth/campuses`, `POST /api/v1/auth/google` `{idToken, campus}` | Google Workspace ID token (set `GOOGLE_CLIENT_IDS`); role comes from the account Admin provisioned for the email (unknown email → denied; Admin provisions accounts); campus pinned on first sign-in |
-| 2 Đề tài | `POST/GET /api/v1/groups/{id}/topic-proposals`, `GET /api/v1/topic-proposals`, `POST /api/v1/topic-proposals/{id}/forward`, `POST /api/v1/topic-proposals/{id}/decision`, `POST/GET /api/v1/proposal-rounds`, `PUT /api/v1/proposal-rounds/{id}/close` | Leader submits 10 topics → supervisor forwards 1 → COUNCIL approves (becomes the group's Topic) or rejects with feedback. Council deadline 14 days (round 1) / 10 days (rounds 2–4). Max 4 rounds; rounds 2–4 need an Admin-opened window |
-| 3 Đặt lịch | existing slot/booking endpoints | 1 slot = 1 group; only the group's leader books; ≥ 24h ahead; ≤ 1 slot/day; the previous meeting must be ended (booking → ATTENDED) before booking again |
-| 4 Tiến độ | `POST/GET /api/v1/groups/{id}/warning-flags`, `PUT /api/v1/warning-flags/{id}/resolve`, `GET /api/v1/groups/{id}/overview` | Supervisor flags a late group or an inactive member; Overview returns badges, the milestone progress bar, meetings, reviews, defenses |
-| 5 Review | `POST /api/v1/reviews`, `POST /api/v1/reviews/clone`, `GET /api/v1/reviews[?round=]`, `GET /api/v1/reviews/mine`, `GET /api/v1/groups/{id}/reviews`, `POST /api/v1/reviews/{id}/result`, `POST /api/v1/reviews/{id}/revision-complete` | Review 2 cloned from Review 1 (`offsetDays`). Review 3 = 3 lecturers incl. 1 chair; the chair sorts the group: `READY_FOR_DEFENSE_1` / `REVISE_BEFORE_DEFENSE_1` / `DEFER_TO_DEFENSE_2` |
-| 6 Bảo vệ | `POST /api/v1/defenses`, `POST /api/v1/defenses/rolling`, `GET /api/v1/defenses[?attempt=]`, `GET /api/v1/defenses/mine`, `GET /api/v1/groups/{id}/defenses`, `POST /api/v1/defenses/{id}/result` | Eligibility from Review 3; rolling schedule (one room + committee, groups back to back); no room/lecturer double-booking; ≤ `DEFENSE_MAX_PARALLEL` at once; fail attempt 2 → group `FAILED` |
-| Thông báo | `GET /api/v1/notifications/stream?access_token=` (SSE) + existing notification endpoints | Real-time across instances via Redis pub/sub when `REDIS_ENABLED=true` (single instance: in-memory). Approvals, rejections, flags, review/defense results are also emailed — To leader, CC members + supervisor — through the `email_outbox` table: queued in the notification's transaction, sent by a background dispatcher every `MAIL_DISPATCH_DELAY_MS`, retried with backoff (5 attempts, then `FAILED` with `last_error`). `MAIL_ENABLED=true` + SMTP settings to really send; otherwise logged |
-
-RBAC roles: `ADMIN`, `INSTRUCTOR`, `COUNCIL`, `GROUP_LEADER`, `STUDENT`, enforced with
-`@PreAuthorize` per blueprint.md §11. All 5 sprints now have full service/controller
-layers, each following `BookingService`'s shape (validate → mutate →
-`auditService.record(...)` inside the same `@Transactional`).
+Quyền theo học kỳ và theo nhóm được kiểm tra ở server (`Access`, `GroupCore.requireLeader`, `StudentGate`).
 
 ### Run it in IntelliJ IDEA
 
 1. **Open the project**: `File → Open...` and select this folder (the one with `pom.xml`).
-   IntelliJ detects it as a Maven project and downloads dependencies automatically —
-   watch the Maven tool window on the right for progress.
-2. **Start PostgreSQL**: the easiest path is Docker —
-   ```bash
-   docker compose up -d
-   ```
-   This starts Postgres on `localhost:5432` with the database/user/password already
-   baked in (see `docker-compose.yml`). No Docker? Install PostgreSQL locally and
-   create a database/user matching `.env.example`, or point `DB_URL` at any Postgres
-   instance you already have.
-3. **Set environment variables** for the run configuration: copy `.env.example` to `.env`
-   as a reference, then in IntelliJ go to the auto-generated `CapstoneTrackingBackendApplication`
-   run configuration → **Modify options → Environment variables** and paste the values
-   (or install the *EnvFile* plugin and point it at `.env` directly).
-   The app runs with sane defaults even if you set nothing, **except** you must have
-   Postgres reachable at the default URL.
-4. **Run**: click the green ▶ next to `CapstoneTrackingBackendApplication.main()`, or
-   `mvn spring-boot:run` from a terminal.
-5. **Verify**: open http://localhost:8080/swagger-ui.html — you should see all endpoints
-   grouped by tag (Auth, Users, Topics, Question Bank, Student Groups, Schedule Slots, Bookings,
-   Artifact Submissions, Meetings, Requirement Logs, Meeting Minutes, Evaluations, Reports).
+2. **Start PostgreSQL**: `docker compose up -d` starts Postgres on `localhost:5432` with the database/user/password
+   already baked in (see `docker-compose.yml`). No Docker? Point `DB_URL` at any Postgres you have.
+3. **Set environment variables**: copy `.env.example` to `.env` as a reference and paste the values into the
+   `CapstoneTrackingBackendApplication` run configuration. Defaults work as long as Postgres is reachable.
+4. **Run** `CapstoneTrackingBackendApplication.main()` (or `mvn spring-boot:run`). With `SPRING_PROFILES_ACTIVE=dev`
+   the dev seed (`db/seed/V2000`) adds sample data.
+5. **Verify**: open http://localhost:8080/swagger-ui.html.
 
-On first boot, Flyway runs, in order:
-- `V1__init_schema.sql` — Sprint 1 tables (users, topics, student_groups, group_members, question_bank_items)
-- `V2__seed_admin.sql` — one Admin account
-- `V3__sprint2_5_schema.sql` — every remaining table in the Data Model (schedule_slots, bookings,
-  meeting_sessions, requirement_logs, meeting_minutes, evaluation_records, artifact_submissions,
-  system_audit_trail)
+Flyway applies `V1`–`V17` (history) then `V18__team_formation_schema.sql`, which drops the former capstone-tracking
+tables, keeps the user accounts and creates the team formation schema.
 
-For local/bootstrap access, explicitly set `PASSWORD_LOGIN_ENABLED=true` before using the seeded admin:
+Accounts (password `Admin@123`, needs `PASSWORD_LOGIN_ENABLED=true`):
 
-```
-email:    admin@fpt.edu.vn
-password: Admin@123
-```
+| Email | Vai trò |
+|---|---|
+| `admin@fpt.edu.vn` | Admin |
+| `lecturer01@fpt.edu.vn` | Moderator of FA26 (dev seed) |
+| `se180001@fpt.edu.vn` | Student, Leader of Team Alpha in FA26 / CAP / SE (dev seed) |
 
-**Change or remove this seed account before any shared/deployed environment.**
+**Change or remove these accounts before any shared/deployed environment.**
 
 ### Quick smoke test (curl)
 
 ```bash
-# 1. Log in as admin
+# Log in as the dev Moderator and look at FA26
 TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@fpt.edu.vn","password":"Admin@123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])")
+  -d '{"email":"lecturer01@fpt.edu.vn","password":"Admin@123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])")
 
-# 2. Create a topic as admin
-curl -s -X POST http://localhost:8080/api/v1/topics \
-  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-  -d '{"topicCode":"T001","title":"Smart Attendance System","category":"IoT"}'
-
-# 3. As that same admin (standing in for an Instructor here), publish a slot
-curl -s -X POST http://localhost:8080/api/v1/slots \
-  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-  -d '{"startTime":"2026-10-01T08:00:00Z","endTime":"2026-10-01T08:30:00Z","durationMinutes":30,"capacity":1,"locationType":"ONLINE","meetingUrl":"https://meet.example.com/x"}'
+curl -s http://localhost:8080/api/v1/semesters -H "Authorization: Bearer $TOKEN"
+curl -s http://localhost:8080/api/v1/semesters/FA26/subjects -H "Authorization: Bearer $TOKEN"
+curl -s -o list.xlsx "http://localhost:8080/api/v1/semesters/FA26/export" -H "Authorization: Bearer $TOKEN"
 ```
 
-Booking itself needs a `GROUP_LEADER` token — see `BookingFlowIntegrationTest` for a
-full worked example (create instructor, group, leader, slot, then book/cancel).
-
 ### Running tests
-
-`PostgresMigrationTest` and the `*PostgresTest` classes start a real PostgreSQL 16 in-process (zonky embedded-postgres, no Docker needed), apply every Flyway migration + the dev seed, validate the entities against it and re-run the workflow flows on it.
 
 ```bash
 mvn test
 ```
 
-Tests run against an in-memory H2 database (`application-test.yml`, `spring.profiles.active=test`),
-so they don't need Postgres running.
+Most tests run on in-memory H2. `PostgresMigrationTest` and the `*PostgresTest` classes start a real PostgreSQL 16
+in-process (no Docker), apply every migration + the dev seed, validate the entities and re-run the flows on it;
+`ConcurrentJoinPostgresTest` checks that simultaneous joins never exceed 5 members or put a student in two groups.
+`InfrastructureIntegrationTest` needs Floci and Redis (`INFRA_TESTS=true`).
 
-- `AuthFlowIntegrationTest` — register → login → access-protected-endpoint → RBAC-rejection, end to end.
-- `BookingFlowIntegrationTest` — the three rules that actually matter for NFR-002/R-001: a slot's
-  last seat can't be double-booked (409), a group can't hold two active bookings (400), and a
-  booking can't be cancelled inside the 2-hour window (400). This is a correctness test, not a load
-  test — NFR-002 also calls for a k6/JMeter run at ≥50 concurrent requests before Sprint 2 ships.
-
-### Design notes / where the blueprint mapped to code
-
-- **NFR-002 / R-001 (no over-booking under concurrency)**: `ScheduleSlotRepository.findByIdForUpdate`
-  takes a `SELECT ... FOR UPDATE` row lock, held for the rest of `BookingService.book()`'s transaction.
-  Two requests racing for the same slot's last seat now serialize at that line instead of both reading
-  "capacity available" and both writing a Confirmed booking. `StudentGroupService.addMember`'s
-  "one leader per group" check follows the same check-then-act-inside-`@Transactional` shape, but
-  without a row lock — fine there because a losing request just gets a 409 to retry, not a phantom
-  double-booking of a physically limited resource.
-- **NFR-006 (auditability)**: `SystemAuditTrail` + `AuditService` are built and wired into
-  `BookingService.book()`/`cancel()` (`AuditAction.CREATE`/`CANCEL`). `AuditService.record(...)` requires
-  an existing transaction (`Propagation.MANDATORY`) so the audit row and the state change it documents
-  always commit or roll back together. Extend the same one-line call into the Sprint 4/5 services
-  (`MeetingMinute` approval, `EvaluationRecord` scoring) as they're built.
-- **RBAC**: controller role checks plus service ownership checks. Student accounts are roster records; only the Leader signs in for the group. See the current workflow contract above.
-- **Connection pool**: capped deliberately small in `application.yml` (`maximum-pool-size: 15`) —
-  NFR-002's 50-concurrent-groups scenario is a burst of short row-locked transactions, not 50 held-open
-  connections; a bigger pool just moves the queuing from the pool to Postgres's own lock manager.
-  Re-tune once you have a real k6 run to look at.
-- **Google SSO (A-005)**: implemented through Google ID token verification and provisioned accounts. Set `GOOGLE_CLIENT_IDS`; password login defaults off (`PASSWORD_LOGIN_ENABLED=true` is an explicit local/bootstrap fallback).
-- **EvaluationRecord is Restricted Confidential (§11)**: the entity itself has a javadoc reminder never
-  to return it directly from a controller — build a DTO for it the way `UserResponse`/`TopicResponse`
-  already do, before wiring up Sprint 5's endpoints.
+> On JDK 21+ newer than Mockito's Byte Buddy supports, add `-DargLine=-Dnet.bytebuddy.experimental=true`.
