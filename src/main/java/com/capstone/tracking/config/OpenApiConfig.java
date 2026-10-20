@@ -48,12 +48,12 @@ public class OpenApiConfig {
         TAGS.put("Semesters", "Semester list, common timeline, archiving and Moderator assignment (3.1, 3.6)");
         TAGS.put("Majors", "Students' majors; groups are formed within one major (3.3)");
         TAGS.put("Imports", "Student list, ineligibility file and lecturer list: preview, then confirm (4.1, 4.2)");
-        TAGS.put("Subjects & scopes", "Subjects needing groups and their formation scopes: phases, deadlines, "
+        TAGS.put("Subjects & scopes", "Capstone configuration and major scopes: phases, deadlines, "
                 + "extension, finalizing, reopening (3.2-3.5, 7.2)");
         TAGS.put("Student list", "List management by semester, subject and major; eligibility (4.3, 5)");
         TAGS.put("Groups", "Creating a group, the Leader's settings, lock, kick, leaving, search (6, 8.2)");
         TAGS.put("Requests", "Apply / Invite, Likes, leave requests and complaints, Leader transfer (6.2, 6.4, 8.2)");
-        TAGS.put("Moderation", "The Moderator arranges groups after the deadline (7.1)");
+        TAGS.put("Moderation", "The Moderator arranges all groups until finalization, including locked groups (7.1)");
         TAGS.put("Statistics & export", "Statistics, the handover Excel file and the history (7.3, 10, 11)");
         TAGS.put("Profile", "My profile, private mode and my semesters");
         TAGS.put("Notifications", "My in-app notifications and the real-time stream");
@@ -61,11 +61,11 @@ public class OpenApiConfig {
     }
 
     private static final String DESCRIPTION = """
-            Backend API for tracking capstone project progress: group formation, topics, meetings, \
-            weekly progress, documents, reviews and defenses.
+            Backend API for the Capstone Team Formation Website (requirements v2.9): \
+            same-major groups, semester rosters, moderation, finalization and Excel handover.
 
             **How to call protected endpoints**
-            1. `POST /api/v1/auth/login` (section **Auth**) with your email and password.
+            1. `POST /api/v1/auth/google` (section **Auth**) with a verified Google ID token from an imported email.
             2. Copy `accessToken` from the response.
             3. Click **Authorize** (top right), paste the token (without `Bearer `) and confirm.
 
@@ -177,8 +177,8 @@ public class OpenApiConfig {
                 addError(op, "401");
                 addError(op, "403");
             } else if (path.equals("/api/v1/auth/login") || path.equals("/api/v1/auth/google")) {
-                addError(op, "401", "Wrong email/password (INVALID_CREDENTIALS) or Google sign-in rejected "
-                        + "(GOOGLE_SIGN_IN_FAILED)");
+                addError(op, "401", "Google sign-in rejected (GOOGLE_SIGN_IN_FAILED)");
+                addError(op, "403", "Email is not on an imported list (NOT_ON_LIST) or the account is inactive");
             }
             if (path.contains("{")) {
                 addError(op, "404");

@@ -43,6 +43,7 @@ public class EligibilityService {
     private final Access access;
     private final Notifier notifier;
     private final AuditService audit;
+    private final com.capstone.tracking.common.Locks locks;
 
     public record Change(UUID enrollmentId, Eligibility eligibility, String reason) {}
 
@@ -70,6 +71,13 @@ public class EligibilityService {
     public int apply(List<Change> changes, User actor) {
         Instant now = Instant.now();
         Map<UUID, StudentGroup> touched = new LinkedHashMap<>();
+        List<Enrollment> selected = changes.stream().map(c -> enrollments.findById(c.enrollmentId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Enrollment", c.enrollmentId()))).toList();
+        selected.stream().map(e -> e.getScope().getId()).distinct().sorted()
+                .forEach(id -> rules.requireNotFinalized(locks.read(com.capstone.tracking.subject.FormationScope.class, id)));
+        selected.stream().map(Enrollment::getId).distinct().sorted().forEach(core::lockEnrollment);
+        members.findActiveByEnrollments(selected.stream().map(Enrollment::getId).toList()).stream()
+                .map(m -> m.getGroup().getId()).distinct().sorted().forEach(core::lock);
         int changed = 0;
         for (Change change : changes) {
             Enrollment e = core.lockEnrollment(change.enrollmentId());

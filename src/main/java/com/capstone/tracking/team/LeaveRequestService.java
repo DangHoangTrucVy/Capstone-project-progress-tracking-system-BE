@@ -44,6 +44,7 @@ public class LeaveRequestService {
     private final Notifier notifier;
     private final AuditService audit;
     private final Locks locks;
+    private final com.capstone.tracking.roster.StudentGate gate;
 
     @Transactional
     public LeaveRequest leaderDecide(UUID requestId, boolean approve, String note, User leader) {
@@ -53,6 +54,7 @@ public class LeaveRequestService {
         LeaveRequest request = lock(requestId);
         StudentGroup group = core.lock(request.getGroup().getId());
         core.requireLeader(group, leader.getId());
+        gate.requireCanAct(scope.getSubject().getId(), leader);
         if (request.getStatus() != Status.PENDING_LEADER) {
             throw closed(request);
         }
@@ -81,6 +83,9 @@ public class LeaveRequestService {
     /** A member whose request the Leader refused complains to the Moderator (6.4). */
     @Transactional
     public LeaveRequest escalate(UUID requestId, String reason, User user) {
+        LeaveRequest snapshot = find(requestId);
+        lockScopeShared(snapshot.getGroup().getScope().getId());
+        gate.requireCanAct(snapshot.getEnrollment());
         LeaveRequest request = lock(requestId);
         if (!request.getUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("This is not your request");
@@ -111,6 +116,10 @@ public class LeaveRequestService {
 
     @Transactional
     public LeaveRequest withdraw(UUID requestId, User user) {
+        LeaveRequest snapshot = find(requestId);
+        lockScopeShared(snapshot.getGroup().getScope().getId());
+        gate.requireCanAct(snapshot.getEnrollment());
+        rules.requireNotFinalized(snapshot.getGroup().getScope());
         LeaveRequest request = lock(requestId);
         if (!request.getUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("This is not your request");
@@ -127,6 +136,7 @@ public class LeaveRequestService {
     @Transactional
     public LeaveRequest moderatorDecide(UUID requestId, boolean approve, String note, User actor) {
         LeaveRequest snapshot = find(requestId);
+        lockScopeShared(snapshot.getGroup().getScope().getId());
         access.requireModerator(snapshot.getGroup().getScope().semesterCode(), actor);
         core.lockEnrollment(snapshot.getEnrollment().getId());
         LeaveRequest request = lock(requestId);

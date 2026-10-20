@@ -8,8 +8,3 @@ spring:
     out-of-order: true
     # The capstone-tracking seeds (V1000-V1003) were removed with that domain; a dev DB that applied them stays valid.
     ignore-migration-patterns: "*:missing"
-
-app:
-  auth:
-    # The seeded dev accounts use made-up emails, so they need password login.
-    password-login-enabled: ${PASSWORD_LOGIN_ENABLED:true}

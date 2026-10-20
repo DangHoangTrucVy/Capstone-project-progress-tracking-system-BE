@@ -22,7 +22,8 @@ public class Access {
     }
 
     public boolean isModerator(Semester semester, User user) {
-        return isAdmin(user) || (user != null && user.getId().equals(semester.getModeratorId()));
+        return isAdmin(user) || (user != null && user.getRole() == Role.LECTURER
+                && user.isLecturerImported() && user.getId().equals(semester.getModeratorId()));
     }
 
     public boolean isModerator(String semesterCode, User user) {

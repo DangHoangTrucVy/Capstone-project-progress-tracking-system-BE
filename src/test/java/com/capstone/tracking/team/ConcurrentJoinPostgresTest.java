@@ -25,6 +25,18 @@ import org.junit.jupiter.api.Test;
 class ConcurrentJoinPostgresTest extends TestSupport {
 
     @Test
+    void studentsCreatingGroupsAtOnceReceiveDifferentCodes() throws Exception {
+        World w = world(2, 0);
+        List<Integer> codes = race(
+                () -> postJson("/api/v1/subjects/" + w.subjectId() + "/groups", w.students().get(0), Map.of("name", "First"))
+                        .andReturn().getResponse().getStatus(),
+                () -> postJson("/api/v1/subjects/" + w.subjectId() + "/groups", w.students().get(1), Map.of("name", "Second"))
+                        .andReturn().getResponse().getStatus());
+        assertThat(codes).containsExactlyInAnyOrder(201, 201);
+        assertThat(groupRepository.findActiveByScope(w.scope().getId())).hasSize(2);
+    }
+
+    @Test
     void twoAcceptsForTheLastSeatLetOnlyOneStudentIn() throws Exception {
         World w = world(7, 0);
         List<User> s = w.students();

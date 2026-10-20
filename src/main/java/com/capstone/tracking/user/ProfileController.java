@@ -24,6 +24,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProfileController {
 
     private final UserRepository userRepository;
+    private final com.capstone.tracking.roster.EnrollmentRepository enrollments;
+    private final com.capstone.tracking.roster.SemesterStudentRepository semesterStudents;
+    private final com.capstone.tracking.common.Locks locks;
 
     public record ProfileRequest(@Size(max = 20) String phone,
                                  @Size(max = 1000) String skills,
@@ -42,6 +45,20 @@ public class ProfileController {
     @Transactional
     public UserResponse update(@AuthenticationPrincipal User currentUser, @Valid @RequestBody ProfileRequest request) {
         User user = userRepository.findById(currentUser.getId()).orElseThrow();
+        var semesters = semesterStudents.findByUserNewestFirst(user.getId());
+        var currentEnrollments = semesters.isEmpty() ? java.util.List.<com.capstone.tracking.roster.Enrollment>of()
+                : enrollments.findBySemesterStudentId(semesters.get(0).getId());
+        currentEnrollments.stream().map(e -> e.getScope().getId()).distinct().sorted()
+                .forEach(id -> locks.read(com.capstone.tracking.subject.FormationScope.class, id));
+        if (currentEnrollments.stream().anyMatch(e -> e.getScope().getPhase()
+                == com.capstone.tracking.subject.ScopePhase.FINALIZED)) {
+            throw new com.capstone.tracking.common.exception.ConflictException("Reopen the finalized list before editing profiles");
+        }
+        if (!semesters.isEmpty() && enrollments.findBySemesterStudentId(semesters.get(0).getId()).stream()
+                .anyMatch(com.capstone.tracking.roster.Enrollment::isIneligible)) {
+            throw new com.capstone.tracking.common.exception.ApiException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "NOT_ELIGIBLE", "Ineligible students may only view their profile");
+        }
         user.setPhone(trim(request.phone()));
         user.setSkills(trim(request.skills()));
         user.setStrengths(trim(request.strengths()));

@@ -51,10 +51,11 @@ class OpenApiDocsIntegrationTest extends TestSupport {
         assertThat(list.has("401")).isTrue();
         assertThat(list.has("404")).isFalse();
         assertThat(list.has("409")).isFalse();
-        JsonNode login = paths.get("/api/v1/auth/login").get("post").get("responses");
+        assertThat(paths.has("/api/v1/auth/login")).isFalse();
+        JsonNode login = paths.get("/api/v1/auth/google").get("post").get("responses");
         assertThat(login.has("400")).isTrue();
         assertThat(login.has("401")).isTrue();
-        assertThat(login.has("403")).isFalse();
+        assertThat(login.has("403")).isTrue();
     }
 
     @Test

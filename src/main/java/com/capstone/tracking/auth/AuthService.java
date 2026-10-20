@@ -15,11 +15,8 @@ import com.capstone.tracking.user.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,33 +31,14 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final SemesterStudentRepository semesterStudents;
-    private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
-    private final LoginAttemptLimiter loginAttemptLimiter;
     private final GoogleTokenVerifier googleTokenVerifier;
 
     @Value("${app.jwt.access-token-exp-minutes}")
     private long accessTokenExpMinutes;
 
-    @Value("${app.auth.password-login-enabled:false}")
-    private boolean passwordLoginEnabled;
-
     public LoginResponse login(LoginRequest request) {
-        if (!passwordLoginEnabled) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "GOOGLE_LOGIN_REQUIRED", "Sign in with your Google account");
-        }
-        String email = request.email().trim().toLowerCase();
-        loginAttemptLimiter.checkAllowed(email);
-        try {
-            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, request.password()));
-        } catch (BadCredentialsException e) {
-            loginAttemptLimiter.recordFailure(email);
-            throw e;
-        }
-        loginAttemptLimiter.reset(email);
-        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow(() -> new BadCredentialsException("Bad credentials"));
-        requireOnList(user);
-        return issueTokens(user);
+        throw new ApiException(HttpStatus.FORBIDDEN, "GOOGLE_LOGIN_REQUIRED", "Sign in with your Google account");
     }
 
     @Transactional
@@ -84,6 +62,9 @@ public class AuthService {
 
     /** A student account exists because of an import, but it must be on some semester's list to sign in. */
     private void requireOnList(User user) {
+        if (user.getRole() == Role.LECTURER && !user.isLecturerImported()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "NOT_ON_LIST", "You are not on the imported lecturer list");
+        }
         if (user.getRole() == Role.STUDENT && !semesterStudents.existsByUserId(user.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "NOT_ON_LIST", "You are not on any semester's student list");
         }

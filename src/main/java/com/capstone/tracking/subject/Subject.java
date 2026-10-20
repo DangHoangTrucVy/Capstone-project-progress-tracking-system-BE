@@ -24,6 +24,10 @@ import lombok.Setter;
 @Builder
 public class Subject extends BaseEntity {
 
+    public static final String CAPSTONE_CODE = "CAP";
+    public static final String CAPSTONE_NAME = "Capstone Project";
+    public static final int DEFAULT_TARGET_TERM = 8;
+
     public static final int DEFAULT_MIN_GROUP_SIZE = 3;
     public static final int DEFAULT_MAX_GROUP_SIZE = 5;
     public static final int DEFAULT_REQUEST_TTL_HOURS = 48;

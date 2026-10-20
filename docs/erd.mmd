@@ -1,5 +1,5 @@
-%% ERD - Website ghép nhóm (Team Formation Website), requirement v2.8
-%% Generated from src/main/resources/db/migration V1-V18 (PostgreSQL). Every table except semesters and the
+%% ERD - Website ghép nhóm (Team Formation Website), requirement v2.9 (20/10/2026)
+%% Generated from src/main/resources/db/migration V1-V19 (PostgreSQL). Every table except semesters and the
 %% infrastructure tables also has created_at / updated_at, left out for readability. Actor columns (*_by) reference
 %% USERS; only business relationships are drawn as lines, the others are marked "FK users".
 %% Infrastructure tables with no relationships: email_outbox, domain_event_outbox.
@@ -8,11 +8,11 @@ erDiagram
     SEMESTERS ||--o{ SEMESTER_STUDENTS : "student list"
     USERS ||--o{ SEMESTER_STUDENTS : "user_id"
     MAJORS ||--o{ SEMESTER_STUDENTS : "major_id"
-    SEMESTERS ||--o{ SUBJECTS : "semester_code"
+    SEMESTERS ||--o| SUBJECTS : "one Capstone per semester"
     SUBJECTS ||--o{ FORMATION_SCOPES : "one per major"
     MAJORS ||--o{ FORMATION_SCOPES : "major_id"
     FORMATION_SCOPES ||--o{ ENROLLMENTS : "scope_id"
-    SEMESTER_STUDENTS ||--o{ ENROLLMENTS : "one per subject"
+    SEMESTER_STUDENTS ||--o| ENROLLMENTS : "Capstone enrollment"
     FORMATION_SCOPES ||--o{ STUDENT_GROUPS : "scope_id"
     STUDENT_GROUPS ||--o{ GROUP_MEMBERS : "group_id"
     ENROLLMENTS ||--o{ GROUP_MEMBERS : "at most 1 open"
@@ -31,8 +31,9 @@ erDiagram
         uuid id PK
         varchar email UK
         varchar full_name
-        varchar password_hash
+        varchar password_hash "legacy nullable - Google sign-in only"
         varchar role "ADMIN|LECTURER|STUDENT"
+        boolean lecturer_imported "required for Moderator"
         varchar status "ACTIVE|SUSPENDED|INACTIVE"
         varchar student_code UK
         varchar phone
@@ -66,9 +67,9 @@ erDiagram
     }
     SUBJECTS {
         uuid id PK
-        varchar semester_code FK "UK(semester_code, code)"
-        varchar code
-        varchar name
+        varchar semester_code FK,UK "one per semester"
+        varchar code "CAP only"
+        varchar name "Capstone Project only"
         int target_term
         int min_group_size "3"
         int max_group_size "5"

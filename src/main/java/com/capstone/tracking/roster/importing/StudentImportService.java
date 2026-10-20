@@ -65,6 +65,8 @@ public class StudentImportService {
     private final Access access;
     private final AuditService audit;
     private final ObjectMapper objectMapper;
+    private final com.capstone.tracking.semester.SemesterRepository semesters;
+    private final com.capstone.tracking.common.Locks locks;
 
     private record Row(Line line, String code, String name, String email, String phone, int term, String majorKey,
                        Major major, User user, SemesterStudent existing) {}
@@ -72,7 +74,11 @@ public class StudentImportService {
     @Transactional
     public ImportReport process(String semesterCode, String fileName, byte[] data, boolean commit, User actor) {
         access.requireAdmin(actor);
+        semesters.lockByCode(semesterCode).orElseThrow(() ->
+                com.capstone.tracking.common.exception.ResourceNotFoundException.of("Semester", semesterCode));
         Semester semester = access.requireModerator(semesterCode, actor);
+        scopes.findBySemester(semesterCode).stream().map(com.capstone.tracking.subject.FormationScope::getId).sorted()
+                .forEach(id -> locks.write(com.capstone.tracking.subject.FormationScope.class, id));
         if (semester.getArchivedAt() != null) {
             throw new ApiException(HttpStatus.CONFLICT, "SEMESTER_ARCHIVED", "The semester is archived");
         }
@@ -90,7 +96,12 @@ public class StudentImportService {
         }
 
         Map<String, Integer> codeCount = new HashMap<>();
+        Map<String, Integer> emailCount = new HashMap<>();
         for (Line line : table.lines()) {
+            String email = lower(line.get(SpreadsheetReader.EMAIL));
+            if (email != null) {
+                emailCount.merge(email, 1, Integer::sum);
+            }
             String code = line.get(SpreadsheetReader.CODE);
             if (code != null) {
                 codeCount.merge(code.toUpperCase(Locale.ROOT), 1, Integer::sum);
@@ -117,6 +128,8 @@ public class StudentImportService {
                 error = "Trùng mã số trong file";
             } else if (!EMAIL.matcher(email).matches()) {
                 error = "Sai định dạng email";
+            } else if (emailCount.getOrDefault(email, 0) > 1) {
+                error = "Trùng email trong file";
             } else if (phone != null && !PHONE.matcher(phone).matches()) {
                 error = "Sai định dạng số điện thoại";
             } else if (termText == null) {
@@ -131,9 +144,6 @@ public class StudentImportService {
                 continue;
             }
             Major major = majors.findByCodeIgnoreCase(majorText).or(() -> majors.findByNameIgnoreCase(majorText)).orElse(null);
-            if (major == null) {
-                newMajors.putIfAbsent(SpreadsheetReader.fold(majorText), majorText);
-            }
             User byCode = users.findByStudentCodeIgnoreCase(code).orElse(null);
             User byEmail = users.findByEmailIgnoreCase(email).orElse(null);
             if (byEmail != null && byEmail.getRole() != Role.STUDENT) {
@@ -152,10 +162,18 @@ public class StudentImportService {
             User user = byCode != null ? byCode : byEmail;
             SemesterStudent existing = user == null ? null
                     : semesterStudents.findBySemesterCodeAndUserId(semesterCode, user.getId()).orElse(null);
+            if (existing != null && enrollments.findBySemesterStudentId(existing.getId()).stream()
+                    .anyMatch(e -> e.getScope().getPhase() == ScopePhase.FINALIZED)) {
+                errors.add(new RowError(line.rowNumber(), code, "Danh sách đã chốt: phải mở lại trước khi cập nhật"));
+                continue;
+            }
             String locked = structuralLock(semesterSubjects, existing, term, major);
             if (locked != null) {
                 errors.add(new RowError(line.rowNumber(), code, locked));
                 continue;
+            }
+            if (major == null) {
+                newMajors.putIfAbsent(SpreadsheetReader.fold(majorText), majorText);
             }
             valid.add(new Row(line, code, name, email, phone, term, SpreadsheetReader.fold(majorText), major, user, existing));
         }
@@ -231,7 +249,7 @@ public class StudentImportService {
      */
     private String structuralLock(List<Subject> semesterSubjects, SemesterStudent existing, int term, Major major) {
         if (existing == null) {
-            if (major != null && opened(semesterSubjects, term, major)) {
+            if (semesterSubjects.stream().anyMatch(s -> scopes.existsBySubjectIdAndPhaseNot(s.getId(), ScopePhase.PREPARING))) {
                 return "Phạm vi ghép nhóm đã mở: không thêm sinh viên mới";
             }
             return null;
@@ -285,7 +303,10 @@ public class StudentImportService {
         if (text == null) {
             return null;
         }
-        String digits = text.replaceAll("[^0-9]", "");
+        String digits = SpreadsheetReader.fold(text).replaceFirst("^(ky( hoc)?|term)\\s*", "");
+        if (!digits.matches("[0-9]{1,2}")) {
+            return null;
+        }
         if (digits.isEmpty() || digits.length() > 2) {
             return null;
         }

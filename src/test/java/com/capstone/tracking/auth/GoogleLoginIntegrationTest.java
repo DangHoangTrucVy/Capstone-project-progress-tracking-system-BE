@@ -67,6 +67,15 @@ class GoogleLoginIntegrationTest extends TestSupport {
                 .andExpect(jsonPath("$.message").value("Invalid Google ID token"));
     }
 
+    @Test
+    void aLecturerRoleWithoutAnImportedListEntryCannotSignIn() throws Exception {
+        User lecturer = user("unimported-google", Role.LECTURER);
+        lecturer.setLecturerImported(false);
+        userRepository.save(lecturer);
+        googleSays(lecturer.getEmail());
+        login().andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("NOT_ON_LIST"));
+    }
+
     private void googleSays(String email) {
         when(googleTokenVerifier.verify(anyString())).thenReturn(new GoogleIdentity(email, "Người dùng", null, null));
     }

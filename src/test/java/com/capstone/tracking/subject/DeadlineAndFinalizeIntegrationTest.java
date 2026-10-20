@@ -167,12 +167,12 @@ class DeadlineAndFinalizeIntegrationTest extends TestSupport {
                         .header("Authorization", bearer(w.moderator())))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", Matchers.containsString(
-                        "Danh_sach_ghep_nhom_" + w.code() + "_CAP_TatCa_")))
+                        "Danh_sach_ghep_nhom_" + w.code() + "_TatCa_")))
                 .andReturn().getResponse().getContentAsByteArray();
         try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(file))) {
             Sheet groups = wb.getSheet("Danh sách nhóm");
             Sheet without = wb.getSheet("Chưa có nhóm");
-            assertThat(cell(groups.getRow(4))).contains("Chưa chốt");
+            assertThat(sheetText(groups)).contains("Chưa chốt");
             int groupRows = dataRows(groups);
             int withoutRows = dataRows(without);
             assertThat(groupRows).isEqualTo(4); // A has 3 members, B has 1

@@ -76,12 +76,11 @@ class SemesterAndImportIntegrationTest extends TestSupport {
         User other = user("not-moderator", Role.LECTURER);
         postJson("/api/v1/semesters/" + w.code() + "/subjects", other,
                 Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isForbidden());
-        // Students only see subjects of their term: a term-7 subject has no scope here.
-        String exe = body(postJson("/api/v1/semesters/" + w.code() + "/subjects", w.moderator(),
-                Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isCreated()))
-                .get("id").asText();
-        getAs("/api/v1/subjects/" + exe, w.moderator()).andExpect(jsonPath("$.scopes.length()").value(0));
-        deleteAs("/api/v1/subjects/" + exe, w.moderator()).andExpect(status().isNoContent());
+        // v2.9: no other subject or second Capstone configuration can be created.
+        postJson("/api/v1/semesters/" + w.code() + "/subjects", w.moderator(),
+                Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isBadRequest());
+        postJson("/api/v1/semesters/" + w.code() + "/subjects", w.moderator(),
+                Map.of("code", "CAP", "name", "Capstone Project", "targetTerm", 8)).andExpect(status().isConflict());
         // A subject whose scopes opened cannot be deleted.
         deleteAs("/api/v1/subjects/" + w.subjectId(), w.moderator()).andExpect(status().isConflict());
     }
@@ -89,13 +88,15 @@ class SemesterAndImportIntegrationTest extends TestSupport {
     @Test
     void aScopeWithoutModeratorOrDeadlineDoesNotOpen() throws Exception {
         World w = world(1, 0);
-        // A second subject in a semester whose deadline already passed stays PREPARING.
+        // A scope that never opened cannot lock itself when the deadline has already passed.
         Semester s = semesterRepository.findById(w.code()).orElseThrow();
         s.setDefaultDeadline(Instant.now().minusSeconds(60));
         semesterRepository.save(s);
-        String id = body(postJson("/api/v1/semesters/" + w.code() + "/subjects", w.moderator(),
-                Map.of("code", "CAP2", "name", "Capstone 2", "targetTerm", 8)).andExpect(status().isCreated())).get("id").asText();
-        UUID scopeId = scopeRepository.findBySubjectIdAndMajorId(UUID.fromString(id), w.major().getId()).orElseThrow().getId();
+        UUID scopeId = w.scope().getId();
+        var preparing = scopeRepository.findById(scopeId).orElseThrow();
+        preparing.setPhase(ScopePhase.PREPARING);
+        preparing.setOpenedAt(null);
+        scopeRepository.save(preparing);
         scopeService.tick(scopeId);
         assertThat(scopeRepository.findById(scopeId).orElseThrow().getPhase()).isEqualTo(ScopePhase.PREPARING);
         assertThat(scopeRepository.findById(scopeId).orElseThrow().getOpenBlockedNotifiedAt()).isNotNull();

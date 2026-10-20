@@ -31,9 +31,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The Moderator's coordination after the deadline (7.1): put students without a group into groups below the maximum
+ * The Moderator's coordination until finalization (7.1): put students without a group into groups below the maximum
  * size (locked groups too), move students between groups, take a student out, create a group and appoint its Leader
- * without Apply or Invite, and dissolve groups. Only while the scope is locked by its deadline; every change is
+ * without Apply or Invite, and dissolve groups, including Leader-locked groups before the deadline; every change is
  * recorded and the people affected are told.
  */
 @Service
@@ -50,6 +50,7 @@ public class ModerationService {
     private final Notifier notifier;
     private final AuditService audit;
     private final Locks locks;
+    private final LeaderTransferRepository transfers;
 
     public record CreateGroupRequest(String name, UUID leaderUserId, List<UUID> memberUserIds) {}
 
@@ -146,6 +147,8 @@ public class ModerationService {
     @Transactional
     public StudentGroup createGroup(UUID scopeId, CreateGroupRequest request, User actor) {
         FormationScope scope = scopes.findById(scopeId).orElseThrow(() -> ResourceNotFoundException.of("Scope", scopeId));
+        access.requireModerator(scope.semesterCode(), actor);
+        scope = locks.write(FormationScope.class, scopeId);
         requireCoordinating(scope, actor);
         if (request.name() == null || request.name().isBlank() || request.name().trim().length() > 100) {
             throw new BadRequestException("The group name is required (at most 100 characters)");
@@ -189,6 +192,72 @@ public class ModerationService {
         return group;
     }
 
+    /** Moderator appoints a current member directly, without the student transfer consent flow (7.1). */
+    @Transactional
+    public StudentGroup appointLeader(UUID groupId, UUID userId, User actor) {
+        StudentGroup group = core.get(groupId);
+        FormationScope scope = requireCoordinating(group.getScope(), actor);
+        group = core.lock(groupId);
+        List<GroupMember> active = core.activeMembers(groupId);
+        GroupMember next = active.stream().filter(m -> m.getUser().getId().equals(userId)).findFirst()
+                .orElseThrow(() -> new BadRequestException("The Leader must be a current member of this group"));
+        if (next.isLeader()) {
+            return group;
+        }
+        active.stream().filter(GroupMember::isLeader).forEach(m -> {
+            m.setLeader(false);
+            core.saveMember(m);
+        });
+        next.setLeader(true);
+        core.saveMember(next);
+        transfers.cancelPendingOfGroup(groupId, Instant.now());
+        audit.record("StudentGroup", groupId, AuditAction.MODERATOR_APPOINTED_LEADER, actor, scope.semesterCode(),
+                Map.of("leader", userId.toString()));
+        notifier.publish(DomainEvent.of(DomainEventType.LEADER_CHANGED,
+                "Moderator đã chỉ định " + next.getUser().getFullName() + " làm Leader nhóm " + group.getName(),
+                active.stream().map(m -> m.getUser().getId()).toList()).about(groupId, null).by(actor.getId()));
+        return group;
+    }
+
+    /** Atomic merge: lock every enrollment first, then both groups in stable order, check capacity again. */
+    @Transactional
+    public StudentGroup merge(UUID targetId, UUID sourceId, User actor) {
+        if (sourceId == null || targetId.equals(sourceId)) {
+            throw new BadRequestException("Choose a different source group");
+        }
+        StudentGroup target = core.get(targetId);
+        FormationScope scope = requireCoordinating(target.getScope(), actor);
+        StudentGroup source = core.get(sourceId);
+        if (!source.getScope().getId().equals(scope.getId())) {
+            throw new BadRequestException("Groups must belong to the same semester and major");
+        }
+        List<GroupMember> moving = core.activeMembers(sourceId);
+        moving.stream().map(m -> m.getEnrollment().getId()).sorted().forEach(core::lockEnrollment);
+        List.of(targetId, sourceId).stream().sorted().forEach(core::lock);
+        // Re-read under locks: concurrent leaves/joins may have changed the source since the first read.
+        List<GroupMember> current = core.activeMembers(sourceId);
+        if (!moving.stream().map(GroupMember::getId).collect(java.util.stream.Collectors.toSet())
+                .equals(current.stream().map(GroupMember::getId).collect(java.util.stream.Collectors.toSet()))) {
+            throw new ApiException(HttpStatus.CONFLICT, "GROUP_CHANGED", "Group membership changed; retry the merge");
+        }
+        if (core.size(targetId) + current.size() > scope.getSubject().getMaxGroupSize()) {
+            throw new ApiException(HttpStatus.CONFLICT, "GROUP_FULL", "The merged group would exceed 5 members");
+        }
+        Instant now = Instant.now();
+        for (GroupMember member : current) {
+            core.remove(member, GroupMember.LeftReason.MOVED, null, now, false);
+            core.enroll(target, member.getEnrollment(), false, now);
+        }
+        core.dissolve(source, StudentGroup.DissolveReason.MODERATOR, actor.getId(), now);
+        audit.record("StudentGroup", targetId, AuditAction.MODERATOR_MERGED_GROUPS, actor, scope.semesterCode(),
+                Map.of("source", sourceId.toString(), "target", targetId.toString()));
+        notifier.publish(DomainEvent.of(DomainEventType.MOVED_BY_MODERATOR,
+                "Moderator đã gộp nhóm " + source.getName() + " vào nhóm " + target.getName(),
+                core.activeMembers(targetId).stream().map(m -> m.getUser().getId()).toList())
+                .about(targetId, null).by(actor.getId()));
+        return target;
+    }
+
     /** Dissolves the given groups at once (e.g. every group below 3 members, from the filtered list) (7.1). */
     @Transactional
     public int dissolve(List<UUID> groupIds, String reason, User actor) {
@@ -218,7 +287,7 @@ public class ModerationService {
     private FormationScope requireCoordinating(FormationScope scope, User actor) {
         access.requireModerator(scope.semesterCode(), actor);
         FormationScope current = locks.read(FormationScope.class, scope.getId());
-        rules.requireLocked(current);
+        rules.requireNotFinalized(current);
         return current;
     }
 

@@ -49,8 +49,11 @@ public class SubjectService {
             throw new BadRequestException("The target term must be between 1 and 12");
         }
         String code = request.code().trim().toUpperCase(Locale.ROOT);
-        if (subjects.existsBySemesterCodeAndCodeIgnoreCase(semesterCode, code)) {
-            throw new ConflictException("Subject " + code + " already exists in " + semesterCode);
+        if (!Subject.CAPSTONE_CODE.equals(code) || !Subject.CAPSTONE_NAME.equals(request.name().trim())) {
+            throw new BadRequestException("Only Capstone Project (CAP) is supported");
+        }
+        if (subjects.countBySemesterCode(semesterCode) > 0) {
+            throw new ConflictException("Capstone is already configured for " + semesterCode);
         }
         Subject subject = subjects.saveAndFlush(Subject.builder()
                 .semesterCode(semesterCode)
@@ -68,14 +71,27 @@ public class SubjectService {
     public Subject update(UUID subjectId, SubjectRequest request, User actor) {
         Subject subject = get(subjectId);
         access.requireModerator(subject.getSemesterCode(), actor);
-        if (request.name() != null && !request.name().isBlank()) {
-            subject.setName(request.name().trim());
+        if ((request.code() != null && !Subject.CAPSTONE_CODE.equals(request.code().trim().toUpperCase(Locale.ROOT)))
+                || (request.name() != null && !Subject.CAPSTONE_NAME.equals(request.name().trim()))) {
+            throw new BadRequestException("Only Capstone Project (CAP) is supported");
         }
         if (request.requestTtlHours() != null) {
             subject.setRequestTtlHours(ttl(request.requestTtlHours(), subject.getRequestTtlHours()));
         }
         if (request.targetTerm() != null && request.targetTerm() != subject.getTargetTerm()) {
-            throw new BadRequestException("The target term cannot change; delete the subject and create it again");
+            if (request.targetTerm() < 1 || request.targetTerm() > 12) {
+                throw new BadRequestException("The target term must be between 1 and 12");
+            }
+            if (scopes.existsBySubjectIdAndPhaseNot(subjectId, ScopePhase.PREPARING)) {
+                throw new ConflictException("The Capstone term cannot change after formation has opened");
+            }
+            if (!groups.findActiveBySubject(subjectId).isEmpty()) {
+                throw new ConflictException("The Capstone term cannot change while groups exist");
+            }
+            enrollments.deleteAll(enrollments.findBySubjectId(subjectId));
+            enrollments.flush();
+            subject.setTargetTerm(request.targetTerm());
+            sync.syncSubject(subject);
         }
         return subject;
     }
@@ -85,15 +101,7 @@ public class SubjectService {
     public void delete(UUID subjectId, User actor) {
         Subject subject = get(subjectId);
         access.requireModerator(subject.getSemesterCode(), actor);
-        if (scopes.existsBySubjectIdAndPhaseNot(subjectId, ScopePhase.PREPARING)) {
-            throw new ApiException(HttpStatus.CONFLICT, "SUBJECT_IN_USE",
-                    "Group formation has started for this subject; it can no longer be deleted");
-        }
-        enrollments.deleteAll(enrollments.findBySubjectId(subjectId));
-        enrollments.flush();
-        scopes.deleteAll(scopes.findBySubjectIdOrderByMajor_CodeAsc(subjectId));
-        scopes.flush();
-        subjects.delete(subject);
+        throw new ConflictException("Capstone is the semester's required formation configuration and cannot be deleted");
     }
 
     public Subject get(UUID subjectId) {

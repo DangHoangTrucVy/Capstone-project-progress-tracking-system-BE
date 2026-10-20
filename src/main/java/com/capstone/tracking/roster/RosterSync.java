@@ -24,6 +24,7 @@ public class RosterSync {
     private final FormationScopeRepository scopes;
     private final EnrollmentRepository enrollments;
     private final SemesterStudentRepository semesterStudents;
+    private final com.capstone.tracking.subject.ScopeService scopeService;
 
     public FormationScope scopeFor(Subject subject, Major major) {
         return scopes.findBySubjectIdAndMajorId(subject.getId(), major.getId())
@@ -36,6 +37,7 @@ public class RosterSync {
                 subject.getTargetTerm())) {
             ensure(subject, ss);
         }
+        scopeService.activatePreparing(subject.getSemesterCode());
     }
 
     /**
@@ -59,6 +61,7 @@ public class RosterSync {
                 ensure(subject, ss);
             }
         }
+        scopeService.activatePreparing(ss.getSemesterCode());
     }
 
     private void ensure(Subject subject, SemesterStudent ss) {

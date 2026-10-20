@@ -81,7 +81,7 @@ public abstract class TestSupport {
 
     protected User user(String name, Role role) {
         return userRepository.save(User.builder().email(name + "-" + suffix + "@fpt.edu.vn").fullName(name + " " + suffix)
-                .passwordHash("x").role(role).status(UserStatus.ACTIVE).build());
+                .passwordHash("x").role(role).lecturerImported(role == Role.LECTURER).status(UserStatus.ACTIVE).build());
     }
 
     protected User student(String name) {

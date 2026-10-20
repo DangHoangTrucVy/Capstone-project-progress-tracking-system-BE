@@ -66,7 +66,7 @@ public class ReportController {
             description = "Returns the .xlsx file itself, not JSON; errors are JSON.")
     @ApiResponse(responseCode = "200", description = "The Excel file",
             headers = @Header(name = "Content-Disposition",
-                    description = "attachment; filename=\"Danh_sach_ghep_nhom_<HocKy>_<Mon|TatCa>_<Nganh|TatCa>_<yyyyMMdd_HHmmss>.xlsx\""),
+                    description = "attachment; filename=\"Danh_sach_ghep_nhom_<HocKy>_<Nganh|TatCa>_<yyyyMMdd_HHmmss>.xlsx\""),
             content = @Content(mediaType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     schema = @Schema(type = "string", format = "binary")))
     @GetMapping("/export")

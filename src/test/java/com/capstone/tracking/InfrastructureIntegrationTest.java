@@ -50,6 +50,7 @@ class InfrastructureIntegrationTest extends TestSupport {
 
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private StringRedisTemplate redis;
+    @Autowired private com.capstone.tracking.auth.LoginAttemptLimiter loginLimiter;
     @SpyBean private NotificationStreamRegistry streams;
 
     @Test
@@ -72,9 +73,7 @@ class InfrastructureIntegrationTest extends TestSupport {
     @Test
     void failedLoginsAreCountedInRedis() throws Exception {
         User lecturer = user("infra-lecturer", com.capstone.tracking.user.Role.LECTURER);
-        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + lecturer.getEmail() + "\",\"password\":\"wrong\"}"))
-                .andExpect(status().isUnauthorized());
+        loginLimiter.recordFailure(lecturer.getEmail());
         assertThat(redis.opsForValue().get("login:fail:" + lecturer.getEmail())).isEqualTo("1");
         assertThat(redis.getExpire("login:fail:" + lecturer.getEmail())).isPositive();
     }

@@ -56,6 +56,7 @@ public class RosterService {
     private final GroupViews views;
     private final RosterSync sync;
     private final Access access;
+    private final com.capstone.tracking.common.Locks locks;
 
     public record StudentRow(UUID enrollmentId, UUID semesterStudentId, UUID userId, String studentCode,
                              String fullName, String email, String phone, String majorCode, String majorName,
@@ -103,6 +104,12 @@ public class RosterService {
         SemesterStudent ss = semesterStudents.findById(semesterStudentId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Student", semesterStudentId));
         access.requireModerator(ss.getSemesterCode(), viewer);
+        scopes.findBySemester(ss.getSemesterCode()).stream().map(com.capstone.tracking.subject.FormationScope::getId).sorted()
+                .forEach(id -> locks.write(com.capstone.tracking.subject.FormationScope.class, id));
+        if (enrollments.findBySemesterStudentId(ss.getId()).stream()
+                .anyMatch(e -> e.getScope().getPhase() == ScopePhase.FINALIZED)) {
+            throw new ApiException(HttpStatus.CONFLICT, "SCOPE_FINALIZED", "Reopen the finalized list before editing students");
+        }
         User user = ss.getUser();
         if (update.fullName() != null && !update.fullName().isBlank()) {
             user.setFullName(update.fullName().trim());

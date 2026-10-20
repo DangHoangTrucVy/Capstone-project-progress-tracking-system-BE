@@ -44,9 +44,9 @@ public class ExcelExportService {
     public static final String GROUPS_SHEET = "Danh sách nhóm";
     public static final String NO_GROUP_SHEET = "Chưa có nhóm";
 
-    private static final String[] GROUP_HEADERS = {"Học kỳ", "Môn", "Ngành", "Mã nhóm", "Tên nhóm", "Sĩ số",
+    private static final String[] GROUP_HEADERS = {"Học kỳ", "Ngành", "Mã nhóm", "Tên nhóm", "Sĩ số",
             "Trạng thái nhóm", "Mã số", "Họ tên", "Email", "Số điện thoại", "Vai trò"};
-    private static final String[] NO_GROUP_HEADERS = {"Học kỳ", "Môn", "Ngành", "Mã số", "Họ tên", "Email",
+    private static final String[] NO_GROUP_HEADERS = {"Học kỳ", "Ngành", "Mã số", "Họ tên", "Email",
             "Số điện thoại", "Điều kiện", "Lý do chưa có nhóm", "Ghi chú điều phối"};
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").withZone(VnTime.ZONE);
 
@@ -88,7 +88,6 @@ public class ExcelExportService {
                     Row row = sheet.createRow(r++);
                     int c = 0;
                     text(row, c++, data.semester().getCode(), styles);
-                    text(row, c++, s.scope().getSubject().getName(), styles);
                     text(row, c++, s.scope().getMajor().getName(), styles);
                     text(row, c++, g.group().getCode(), styles);
                     text(row, c++, g.group().getName(), styles);
@@ -118,7 +117,6 @@ public class ExcelExportService {
                 Row row = sheet.createRow(r++);
                 int c = 0;
                 text(row, c++, data.semester().getCode(), styles);
-                text(row, c++, s.scope().getSubject().getName(), styles);
                 text(row, c++, s.scope().getMajor().getName(), styles);
                 text(row, c++, e.getUser().getStudentCode(), styles);
                 text(row, c++, e.getUser().getFullName(), styles);
@@ -137,7 +135,6 @@ public class ExcelExportService {
     private List<String> headerLines(Snapshot.Data data) {
         List<String> lines = new ArrayList<>();
         lines.add("Học kỳ: " + data.semester().getCode() + " (" + data.semester().getName() + ")");
-        lines.add("Môn: " + (data.subject() == null ? "Tất cả" : data.subject().getCode() + " - " + data.subject().getName()));
         lines.add("Ngành: " + (data.majorId() == null ? "Tất cả"
                 : data.scopes().isEmpty() ? "" : data.scopes().get(0).scope().getMajor().getName()));
         lines.add("Thời điểm xuất: " + VnTime.format(data.takenAt()));
@@ -162,10 +159,9 @@ public class ExcelExportService {
     }
 
     private static String fileName(Snapshot.Data data) {
-        String subject = data.subject() == null ? "TatCa" : safe(data.subject().getCode());
         String major = data.majorId() == null || data.scopes().isEmpty() ? "TatCa"
                 : safe(data.scopes().get(0).scope().getMajor().getCode());
-        return "Danh_sach_ghep_nhom_" + data.semester().getCode() + "_" + subject + "_" + major + "_"
+        return "Danh_sach_ghep_nhom_" + data.semester().getCode() + "_" + major + "_"
                 + FILE_STAMP.format(data.takenAt()) + ".xlsx";
     }
 

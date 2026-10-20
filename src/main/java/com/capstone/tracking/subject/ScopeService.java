@@ -103,6 +103,9 @@ public class ScopeService {
         notifyStudents(scope, DomainEventType.DEADLINE_CHANGED,
                 "Deadline ghép nhóm môn " + scope.getSubject().getName() + " (ngành " + scope.getMajor().getName()
                         + ") đổi thành " + VnTime.format(effective), effective, actor);
+        if (scope.getPhase() == ScopePhase.PREPARING) {
+            tryOpen(scope, now);
+        }
         return scope;
     }
 
@@ -224,6 +227,8 @@ public class ScopeService {
         scope.setPhase(ScopePhase.FINALIZED);
         scope.setFinalizedAt(now);
         scope.setFinalizedBy(actor.getId());
+        scope.setLastChangeAfterFinalize(null);
+        scope.setLastChangeAfterFinalizeAt(null);
         audit.record("FormationScope", scope.getId(), AuditAction.SCOPE_FINALIZED, actor, scope.semesterCode(),
                 details("finalizedStudents", handedOver.size(), "warnings", check.warnings()));
         notifyStudents(scope, DomainEventType.SCOPE_FINALIZED,
@@ -274,6 +279,19 @@ public class ScopeService {
             Instant deadline = rules.deadline(scope);
             if (deadline != null && !now.isBefore(deadline)) {
                 lockAtDeadline(scope, now);
+            }
+        }
+    }
+
+    /** Open as soon as the last prerequisite is supplied, without waiting for the periodic scheduler (3.4). */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void activatePreparing(String semesterCode) {
+        for (FormationScope scope : scopes.findBySemester(semesterCode)) {
+            if (scope.getPhase() == ScopePhase.PREPARING) {
+                FormationScope current = lock(scope.getId());
+                if (current.getPhase() == ScopePhase.PREPARING) {
+                    tryOpen(current, Instant.now());
+                }
             }
         }
     }

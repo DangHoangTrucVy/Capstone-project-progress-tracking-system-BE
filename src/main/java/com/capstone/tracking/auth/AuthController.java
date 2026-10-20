@@ -33,7 +33,7 @@ public class AuthController {
     /** clientId is what the FE passes to Google Identity Services; the button is hidden when it is null. */
     public record GoogleConfigResponse(boolean enabled, String clientId) {}
 
-    @Operation(summary = "Log in with email and password (when enabled), returns a JWT")
+    @io.swagger.v3.oas.annotations.Hidden
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);

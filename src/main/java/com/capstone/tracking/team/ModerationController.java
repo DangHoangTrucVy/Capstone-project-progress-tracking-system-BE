@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@Tag(name = "Moderation", description = "The Moderator arranges groups after the deadline (7.1)")
+@Tag(name = "Moderation", description = "The Moderator arranges any group until finalization, including locked groups (7.1)")
 @SecurityRequirement(name = "bearerAuth")
 public class ModerationController {
 
@@ -35,6 +35,22 @@ public class ModerationController {
     public record RemoveBody(UUID userId, String reason) {}
 
     public record DissolveBody(List<UUID> groupIds, String reason) {}
+
+    public record MergeBody(UUID sourceGroupId) {}
+
+    @Operation(summary = "Merge another group into this group, including locked groups (maximum 5)")
+    @PostMapping("/groups/{groupId}/moderation/merge")
+    public GroupResponse merge(@PathVariable UUID groupId, @RequestBody MergeBody body,
+                               @AuthenticationPrincipal User currentUser) {
+        return views.view(moderation.merge(groupId, body.sourceGroupId(), currentUser), currentUser);
+    }
+
+    @Operation(summary = "Appoint a current member as Leader directly (Moderator)")
+    @PostMapping("/groups/{groupId}/moderation/leader")
+    public GroupResponse appoint(@PathVariable UUID groupId, @RequestBody StudentBody body,
+                                 @AuthenticationPrincipal User currentUser) {
+        return views.view(moderation.appointLeader(groupId, body.userId(), currentUser), currentUser);
+    }
 
     @Operation(summary = "Put a student without a group into this group (locked groups too, up to 5)")
     @PostMapping("/groups/{groupId}/moderation/add")

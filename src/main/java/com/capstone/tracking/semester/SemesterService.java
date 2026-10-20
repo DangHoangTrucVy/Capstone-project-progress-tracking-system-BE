@@ -43,6 +43,7 @@ public class SemesterService {
     private final SemesterRepository semesters;
     private final SemesterStudentRepository semesterStudents;
     private final SubjectRepository subjects;
+    private final com.capstone.tracking.subject.SubjectService subjectService;
     private final StudentGroupRepository groups;
     private final UserRepository users;
     private final ScopeService scopes;
@@ -79,7 +80,12 @@ public class SemesterService {
             semester.setDefaultDeadline(request.defaultDeadline());
         }
         requireTimeline(semester);
-        return semesters.save(semester);
+        semester = semesters.saveAndFlush(semester);
+        subjectService.create(code, new com.capstone.tracking.subject.SubjectService.SubjectRequest(
+                com.capstone.tracking.subject.Subject.CAPSTONE_CODE,
+                com.capstone.tracking.subject.Subject.CAPSTONE_NAME,
+                com.capstone.tracking.subject.Subject.DEFAULT_TARGET_TERM, null), actor);
+        return semester;
     }
 
     /**
@@ -117,6 +123,7 @@ public class SemesterService {
             scopes.commonDeadlineChanged(semester, before, actor);
         }
         requireTimeline(semester);
+        scopes.activatePreparing(code);
         return semester;
     }
 
@@ -133,10 +140,12 @@ public class SemesterService {
     public void delete(String code, User actor) {
         access.requireAdmin(actor);
         Semester semester = lock(code);
-        if (semesterStudents.countBySemesterCode(code) > 0 || subjects.countBySemesterCode(code) > 0) {
+        if (semesterStudents.countBySemesterCode(code) > 0 || groups.countActiveBySemester(code) > 0) {
             throw new ApiException(HttpStatus.CONFLICT, "SEMESTER_IN_USE",
                     "This semester has students or subjects; archive it instead");
         }
+        subjects.deleteAll(subjects.findBySemesterCodeOrderByCodeAsc(code));
+        subjects.flush();
         semesters.delete(semester);
     }
 
@@ -148,7 +157,8 @@ public class SemesterService {
         UUID before = semester.getModeratorId();
         if (lecturerId != null) {
             User lecturer = users.findById(lecturerId).orElseThrow(() -> ResourceNotFoundException.of("User", lecturerId));
-            if (lecturer.getRole() != Role.LECTURER || lecturer.getStatus() != UserStatus.ACTIVE) {
+            if (lecturer.getRole() != Role.LECTURER || lecturer.getStatus() != UserStatus.ACTIVE
+                    || !lecturer.isLecturerImported()) {
                 throw new BadRequestException("The Moderator must be an active lecturer from the imported lecturer list");
             }
         }
@@ -159,6 +169,7 @@ public class SemesterService {
             notifier.publish(DomainEvent.of(DomainEventType.MODERATOR_ASSIGNED,
                     "Bạn được phân công làm Moderator học kỳ " + code, lecturerId).by(actor.getId()));
         }
+        scopes.activatePreparing(code);
         return semester;
     }
 

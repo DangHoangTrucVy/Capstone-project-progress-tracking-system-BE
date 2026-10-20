@@ -44,6 +44,7 @@ public class LeaderTransferService {
     private final Notifier notifier;
     private final AuditService audit;
     private final Locks locks;
+    private final com.capstone.tracking.roster.StudentGate gate;
 
     public record TransferResponse(UUID id, UUID groupId, String groupCode, String groupName, UUID fromUserId,
                                    String fromName, UUID toUserId, String toName, boolean leaveAfter,
@@ -58,7 +59,10 @@ public class LeaderTransferService {
 
     @Transactional
     public LeaderTransfer propose(UUID groupId, UUID toUserId, boolean leaveAfter, User leader) {
-        StudentGroup group = core.lock(groupId);
+        StudentGroup group = core.get(groupId);
+        locks.read(FormationScope.class, group.getScope().getId());
+        gate.requireCanAct(group.getScope().getSubject().getId(), leader);
+        group = core.lock(groupId);
         GroupMember from = core.requireLeader(group, leader.getId());
         FormationScope scope = group.getScope();
         if (scope.getPhase() == ScopePhase.PREPARING) {
@@ -89,6 +93,7 @@ public class LeaderTransferService {
     public LeaderTransfer answer(UUID transferId, boolean accept, User user) {
         LeaderTransfer snapshot = find(transferId);
         FormationScope scope = locks.read(FormationScope.class, snapshot.getGroup().getScope().getId());
+        gate.requireCanAct(scope.getSubject().getId(), user);
         GroupMember fromSnapshot = core.activeMembers(snapshot.getGroup().getId()).stream()
                 .filter(m -> m.getUser().getId().equals(snapshot.getFromUser().getId())).findFirst().orElse(null);
         if (accept && snapshot.isLeaveAfter() && fromSnapshot != null) {
@@ -155,6 +160,9 @@ public class LeaderTransferService {
 
     @Transactional
     public LeaderTransfer cancel(UUID transferId, User user) {
+        LeaderTransfer snapshot = find(transferId);
+        locks.read(FormationScope.class, snapshot.getGroup().getScope().getId());
+        gate.requireCanAct(snapshot.getGroup().getScope().getSubject().getId(), user);
         LeaderTransfer transfer = locks.write(LeaderTransfer.class, transferId);
         if (!transfer.getFromUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("Only the Leader who proposed it can cancel this transfer");

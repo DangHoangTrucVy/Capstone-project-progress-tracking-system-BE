@@ -130,6 +130,9 @@ public class GroupCore {
      * holds; every other open Apply/Invite of the student in this subject is then cancelled (6.2).
      */
     public GroupMember enroll(StudentGroup group, Enrollment enrollment, boolean leader, Instant now) {
+        if (enrollment.isIneligible()) {
+            throw new ApiException(HttpStatus.CONFLICT, "NOT_ELIGIBLE", "The student is not eligible for Capstone");
+        }
         if (!enrollment.getScope().getId().equals(group.getScope().getId())) {
             throw new ApiException(HttpStatus.CONFLICT, "OTHER_MAJOR",
                     "A group only takes students of its own major and subject");

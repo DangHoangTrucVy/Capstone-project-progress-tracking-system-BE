@@ -50,7 +50,7 @@ public class GroupService {
     @Transactional
     public StudentGroup create(UUID subjectId, GroupRequest request, User user) {
         Enrollment enrollment = gate.requireCanAct(subjectId, user);
-        FormationScope scope = lockScopeShared(enrollment.getScope().getId());
+        FormationScope scope = locks.write(FormationScope.class, enrollment.getScope().getId());
         rules.requireOpen(scope);
         enrollment = core.lockEnrollment(enrollment.getId());
         String name = name(request);
@@ -73,7 +73,10 @@ public class GroupService {
     /** The Leader renames the group or changes the skills it is looking for; not once the list is finalized. */
     @Transactional
     public StudentGroup update(UUID groupId, GroupRequest request, User user) {
-        StudentGroup group = core.lock(groupId);
+        StudentGroup group = core.get(groupId);
+        lockScopeShared(group.getScope().getId());
+        gate.requireCanAct(group.getScope().getSubject().getId(), user);
+        group = core.lock(groupId);
         core.requireLeader(group, user.getId());
         rules.requireNotFinalized(group.getScope());
         if (request.name() != null) {
@@ -88,6 +91,7 @@ public class GroupService {
     public StudentGroup setLocked(UUID groupId, boolean locked, User user) {
         StudentGroup group = core.get(groupId);
         lockScopeShared(group.getScope().getId());
+        gate.requireCanAct(group.getScope().getSubject().getId(), user);
         group = core.lock(groupId);
         core.requireLeader(group, user.getId());
         rules.requireOpen(group.getScope());
@@ -100,6 +104,7 @@ public class GroupService {
     public void kick(UUID groupId, UUID memberUserId, User user) {
         StudentGroup group = core.get(groupId);
         lockScopeShared(group.getScope().getId());
+        gate.requireCanAct(group.getScope().getSubject().getId(), user);
         GroupMember target = core.activeMembers(groupId).stream()
                 .filter(m -> m.getUser().getId().equals(memberUserId)).findFirst()
                 .orElseThrow(() -> ResourceNotFoundException.of("Member", memberUserId));

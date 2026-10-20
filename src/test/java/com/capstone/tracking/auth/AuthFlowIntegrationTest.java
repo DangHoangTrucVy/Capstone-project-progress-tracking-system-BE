@@ -20,24 +20,23 @@ class AuthFlowIntegrationTest extends TestSupport {
     @Autowired private PasswordEncoder encoder;
 
     @Test
-    void lecturerSignsInWithPasswordButCannotManageAccounts() throws Exception {
+    void lecturerCannotUsePasswordEvenWhenTheLegacyFlagIsEnabled() throws Exception {
         User lecturer = withPassword(user("login-lecturer", Role.LECTURER));
-        login(lecturer).andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.user.role").value("LECTURER"));
+        login(lecturer).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("GOOGLE_LOGIN_REQUIRED"));
         getAs("/api/v1/users", lecturer).andExpect(status().isForbidden());
     }
 
     @Test
     void aStudentSignsInOnlyWhenOnASemesterList() throws Exception {
         User student = withPassword(student("login-student"));
-        login(student).andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("NOT_ON_LIST"));
+        login(student).andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("GOOGLE_LOGIN_REQUIRED"));
 
         Semester semester = semesterRepository.save(new Semester(freeSemesterCode(), "Login semester",
                 LocalDate.now(), LocalDate.now().plusDays(90)));
         semesterStudentRepository.save(SemesterStudent.builder().semesterCode(semester.getCode()).user(student)
                 .major(major()).currentTerm(8).build());
-        login(student).andExpect(status().isOk()).andExpect(jsonPath("$.user.role").value("STUDENT"));
+        login(student).andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("GOOGLE_LOGIN_REQUIRED"));
         getAs("/api/v1/me/semesters", student).andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].semesterCode").value(semester.getCode()))
                 .andExpect(jsonPath("$[0].readOnly").value(false));

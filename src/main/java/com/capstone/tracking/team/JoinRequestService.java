@@ -101,13 +101,14 @@ public class JoinRequestService {
         StudentGroup group = core.get(groupId);
         FormationScope scope = lockScopeShared(group.getScope().getId());
         rules.requireOpen(scope);
-        group = core.lock(groupId);
-        core.requireLeader(group, user.getId());
         gate.requireCanAct(group.getScope().getSubject().getId(), user);
         User target = resolve(studentUserId, studentCode);
         Enrollment enrollment = enrollments.findBySubjectIdAndUserId(scope.getSubject().getId(), target.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "NOT_ENROLLED",
                         "This student is not on the list of this subject"));
+        enrollment = core.lockEnrollment(enrollment.getId());
+        group = core.lock(groupId);
+        core.requireLeader(group, user.getId());
         requireSameScope(enrollment, group);
         gate.requireEligible(enrollment);
         requireNoGroup(enrollment, "This student already belongs to a group");
@@ -141,6 +142,7 @@ public class JoinRequestService {
         StudentGroup group = core.lock(request.getGroup().getId());
         if (request.getType() == Type.APPLY) {
             core.requireLeader(group, user.getId());
+            gate.requireCanAct(scope.getSubject().getId(), user);
         } else if (!request.getStudent().getId().equals(user.getId())) {
             throw new AccessDeniedException("This invitation is not addressed to you");
         }
@@ -171,6 +173,10 @@ public class JoinRequestService {
     /** The Leader turns an Apply down (with a reason for the applicant), or the student declines an Invite. */
     @Transactional
     public JoinRequest reject(UUID requestId, String reason, User user) {
+        JoinRequest snapshot = find(requestId);
+        FormationScope scope = lockScopeShared(snapshot.getGroup().getScope().getId());
+        rules.requireOpen(scope);
+        gate.requireCanAct(scope.getSubject().getId(), user);
         JoinRequest request = lock(requestId);
         StudentGroup group = request.getGroup();
         if (request.getType() == Type.APPLY) {
@@ -198,6 +204,10 @@ public class JoinRequestService {
     /** The sender takes the request back before it is answered: the applicant an Apply, the Leader an Invite. */
     @Transactional
     public JoinRequest withdraw(UUID requestId, User user) {
+        JoinRequest snapshot = find(requestId);
+        FormationScope scope = lockScopeShared(snapshot.getGroup().getScope().getId());
+        rules.requireOpen(scope);
+        gate.requireCanAct(scope.getSubject().getId(), user);
         JoinRequest request = lock(requestId);
         if (request.getType() == Type.APPLY) {
             if (!request.getStudent().getId().equals(user.getId())) {
@@ -217,6 +227,9 @@ public class JoinRequestService {
     @Transactional
     public long like(UUID requestId, boolean liked, User user) {
         JoinRequest request = find(requestId);
+        FormationScope scope = lockScopeShared(request.getGroup().getScope().getId());
+        rules.requireOpen(scope);
+        gate.requireCanAct(scope.getSubject().getId(), user);
         if (request.getType() != Type.APPLY) {
             throw new BadRequestException("Only applications can be liked");
         }
@@ -269,7 +282,8 @@ public class JoinRequestService {
         boolean self = r.getStudent().getId().equals(viewer.getId());
         boolean member = !self && core.isMember(r.getGroup().getId(), viewer.getId());
         // 8.1: the group sees the applicant's whole profile while the request is pending, then that right ends.
-        boolean full = self || staff || (member && status == Status.PENDING);
+        boolean teammate = member && core.isMember(r.getGroup().getId(), r.getStudent().getId());
+        boolean full = self || staff || teammate || (member && r.getType() == Type.APPLY && status == Status.PENDING);
         Long likeCount = null;
         Boolean likedByMe = null;
         if (r.getType() == Type.APPLY && (member || staff)) {

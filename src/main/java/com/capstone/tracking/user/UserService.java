@@ -9,7 +9,6 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,10 +18,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final com.capstone.tracking.roster.EnrollmentRepository enrollments;
+    private final com.capstone.tracking.common.Locks locks;
 
     @Transactional
     public User create(UserCreateRequest request) {
+        if (request.role() != Role.ADMIN) {
+            throw new com.capstone.tracking.common.exception.BadRequestException(
+                    "Student and lecturer accounts must come from their imported lists");
+        }
+        if (request.password() != null) {
+            throw new com.capstone.tracking.common.exception.BadRequestException("Only Google sign-in is supported");
+        }
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new ConflictException("A user with email " + email + " already exists");
@@ -30,7 +37,6 @@ public class UserService {
         return userRepository.save(User.builder()
                 .email(email)
                 .fullName(request.fullName().trim())
-                .passwordHash(request.password() == null ? null : passwordEncoder.encode(request.password()))
                 .role(request.role())
                 .phone(request.phone())
                 .status(UserStatus.ACTIVE)
@@ -49,12 +55,24 @@ public class UserService {
     @Transactional
     public User update(UUID id, UserUpdateRequest request) {
         User user = getById(id);
+        enrollments.findByUserId(id).stream().map(e -> e.getScope().getId()).distinct().sorted()
+                .forEach(scopeId -> locks.read(com.capstone.tracking.subject.FormationScope.class, scopeId));
+        boolean contactChange = !request.fullName().trim().equals(user.getFullName())
+                || (request.email() != null && !request.email().trim().equalsIgnoreCase(user.getEmail()))
+                || !java.util.Objects.equals(request.phone(), user.getPhone());
+        if (contactChange && enrollments.findByUserId(id).stream()
+                .anyMatch(e -> e.getScope().getPhase() == com.capstone.tracking.subject.ScopePhase.FINALIZED)) {
+            throw new com.capstone.tracking.common.exception.ConflictException("Reopen finalized lists before editing student contact details");
+        }
         if (request.email() != null && !request.email().equalsIgnoreCase(user.getEmail())) {
             String email = request.email().trim().toLowerCase(Locale.ROOT);
             if (userRepository.existsByEmailIgnoreCase(email)) {
                 throw new ConflictException("A user with email " + email + " already exists");
             }
             user.setEmail(email);
+            if (user.getRole() == Role.LECTURER) {
+                user.setLecturerImported(false);
+            }
         }
         user.setFullName(request.fullName().trim());
         user.setPhone(request.phone());

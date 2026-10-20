@@ -51,7 +51,7 @@ public class SubjectController {
         return subjects.list(semester);
     }
 
-    @Operation(summary = "Create a subject (Moderator); a scope is created per major of the students in its term")
+    @Operation(summary = "Initialize Capstone for a legacy semester without configuration (Moderator); no other subjects allowed")
     @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping("/semesters/{semester}/subjects")
     public ResponseEntity<SubjectResponse> create(@PathVariable String semester,
@@ -68,14 +68,14 @@ public class SubjectController {
         return subjects.toResponse(subjects.get(subjectId));
     }
 
-    @Operation(summary = "Rename a subject or change its request lifetime (Moderator)")
+    @Operation(summary = "Configure the Capstone term before formation opens, or change the request lifetime (Moderator)")
     @PutMapping("/subjects/{subjectId}")
     public SubjectResponse update(@PathVariable UUID subjectId, @RequestBody SubjectService.SubjectRequest request,
                                   @AuthenticationPrincipal User currentUser) {
         return subjects.toResponse(subjects.update(subjectId, request, currentUser));
     }
 
-    @Operation(summary = "Delete a subject whose scopes have not opened yet (Moderator)")
+    @io.swagger.v3.oas.annotations.Hidden
     @DeleteMapping("/subjects/{subjectId}")
     public ResponseEntity<Void> delete(@PathVariable UUID subjectId, @AuthenticationPrincipal User currentUser) {
         subjects.delete(subjectId, currentUser);

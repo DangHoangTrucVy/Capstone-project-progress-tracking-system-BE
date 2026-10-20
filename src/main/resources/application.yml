@@ -68,8 +68,6 @@ server:
     include-message: always
 
 app:
-  auth:
-    password-login-enabled: ${PASSWORD_LOGIN_ENABLED:false}
   jwt:
     secret: ${JWT_SECRET:change-this-dev-only-secret-key-please-override-in-prod-min-32-bytes}
     access-token-exp-minutes: ${JWT_ACCESS_EXP_MIN:60}
