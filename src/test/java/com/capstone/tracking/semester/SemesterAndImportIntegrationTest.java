@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 class SemesterAndImportIntegrationTest extends TestSupport {
 
     @Test
-    void theAdminCreatesASemesterAndItsStatusFollowsTheDates() throws Exception {
+    void theAdminCreatesASemesterWithoutStatusAndAssignsModerator() throws Exception {
         User admin = user("sem-admin", Role.ADMIN);
         User lecturer = user("sem-lecturer", Role.LECTURER);
         String code = freeSemesterCode();
@@ -35,7 +35,7 @@ class SemesterAndImportIntegrationTest extends TestSupport {
         postJson("/api/v1/semesters", lecturer, body).andExpect(status().isForbidden());
         postJson("/api/v1/semesters", admin, body).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value(code))
-                .andExpect(jsonPath("$.status").value("ONGOING"))
+                .andExpect(jsonPath("$.status").doesNotExist())
                 .andExpect(jsonPath("$.studentCount").value(0));
         postJson("/api/v1/semesters", admin, body).andExpect(status().isConflict());
 
@@ -53,11 +53,6 @@ class SemesterAndImportIntegrationTest extends TestSupport {
                 .andExpect(status().isOk());
         putJson("/api/v1/semesters/" + code, lecturer, Map.of("name", "Renamed")).andExpect(status().isForbidden());
 
-        postJson("/api/v1/semesters/" + code + "/archive", admin, Map.of()).andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ARCHIVED"));
-        String list = body(getAs("/api/v1/semesters", admin)).toString();
-        assertThat(list).doesNotContain("\"code\":\"" + code + "\"");
-        assertThat(body(getAs("/api/v1/semesters?status=ARCHIVED", admin)).toString()).contains("\"code\":\"" + code + "\"");
         // Empty, so it may be deleted.
         deleteAs("/api/v1/semesters/" + code, admin).andExpect(status().isNoContent());
     }
@@ -142,7 +137,7 @@ class SemesterAndImportIntegrationTest extends TestSupport {
         assertThat(again.get("updatedRows").asInt()).isEqualTo(1);
         assertThat(semesterStudentRepository.countBySemesterCode(code)).isEqualTo(2);
         assertThat(userRepository.findByStudentCodeIgnoreCase(a).orElseThrow().getPhone()).isEqualTo("0911111111");
-        getAs("/api/v1/semesters/" + code + "/imports", admin).andExpect(jsonPath("$.length()").value(2));
+        getAs("/api/v1/semesters/" + code + "/imports", admin).andExpect(status().isNotFound());
 
         // A missing required column fails the whole file.
         upload(url, admin, "bad.csv", "MSSV,Họ tên,Email\nX,Y,z@fpt.edu.vn\n").andExpect(status().isBadRequest());
@@ -181,15 +176,13 @@ class SemesterAndImportIntegrationTest extends TestSupport {
     }
 
     @Test
-    void lecturersAreImportedAndCannotShareAStudentsEmail() throws Exception {
-        User admin = user("lect-admin", Role.ADMIN);
-        User student = student("lect-student");
-        String csv = "Họ tên,Email\nGiảng Viên Một,gv1-" + suffix + "@fpt.edu.vn\nTrùng,"
-                + student.getEmail() + "\n";
-        JsonNode report = body(upload("/api/v1/imports/lecturers", admin, "gv.csv", csv).andExpect(status().isOk()));
-        assertThat(report.get("newRows").asInt()).isEqualTo(1);
-        assertThat(report.get("errors").toString()).contains("Email đã thuộc tài khoản sinh viên");
-        assertThat(userRepository.findByEmailIgnoreCase("gv1-" + suffix + "@fpt.edu.vn").orElseThrow().getRole())
-                .isEqualTo(Role.LECTURER);
+    void adminCreatesModeratorAndCannotReuseAStudentEmail() throws Exception {
+        User admin = user("account-admin", Role.ADMIN);
+        User student = student("account-student");
+        postJson("/api/v1/users/moderators", admin, Map.of("email", "moderator-" + suffix + "@gmail.com",
+                "fullName", "Moderator", "password", "Password123")).andExpect(status().isCreated());
+        postJson("/api/v1/users/moderators", admin, Map.of("email", student.getEmail(),
+                "fullName", "Duplicate", "password", "Password123")).andExpect(status().isConflict());
     }
+
 }

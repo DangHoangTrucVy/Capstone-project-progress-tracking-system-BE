@@ -50,8 +50,6 @@ public class Semester {
     /** The lecturer coordinating the whole semester; null = the Admin does it. */
     private UUID moderatorId;
 
-    private Instant archivedAt;
-
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -67,15 +65,5 @@ public class Semester {
         this.endDate = endDate;
     }
 
-    /** Upcoming / Ongoing / Completed follow the dates (Vietnam time); Archived is set by the Admin. */
-    public SemesterStatus status(Instant now) {
-        if (archivedAt != null) {
-            return SemesterStatus.ARCHIVED;
-        }
-        LocalDate today = now.atZone(VnTime.ZONE).toLocalDate();
-        if (today.isBefore(startDate)) {
-            return SemesterStatus.UPCOMING;
-        }
-        return today.isAfter(endDate) ? SemesterStatus.COMPLETED : SemesterStatus.ONGOING;
-    }
+
 }

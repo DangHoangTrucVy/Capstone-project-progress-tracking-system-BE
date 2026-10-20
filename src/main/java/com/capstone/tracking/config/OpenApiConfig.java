@@ -44,17 +44,17 @@ public class OpenApiConfig {
     private static final Map<String, String> TAGS = new LinkedHashMap<>();
 
     static {
-        TAGS.put("Auth", "Sign in and get a JWT. Start here. Only accounts on the imported lists may sign in.");
-        TAGS.put("Semesters", "Semester list, common timeline, archiving and Moderator assignment (3.1, 3.6)");
+        TAGS.put("Auth", "Sign in and get a JWT. Start here. Students: Google and imported roster. Admin/Moderator: email and password.");
+        TAGS.put("Semesters", "Semester list, common timeline and Moderator assignment (3.1, 3.6)");
         TAGS.put("Majors", "Students' majors; groups are formed within one major (3.3)");
-        TAGS.put("Imports", "Student list, ineligibility file and lecturer list: preview, then confirm (4.1, 4.2)");
+        TAGS.put("Imports", "Student list with optional eligibility, and eligibility updates: preview, then confirm (4.1, 4.2)");
         TAGS.put("Subjects & scopes", "Capstone configuration and major scopes: phases, deadlines, "
                 + "extension, finalizing, reopening (3.2-3.5, 7.2)");
         TAGS.put("Student list", "List management by semester, subject and major; eligibility (4.3, 5)");
         TAGS.put("Groups", "Creating a group, the Leader's settings, lock, kick, leaving, search (6, 8.2)");
         TAGS.put("Requests", "Apply / Invite, Likes, leave requests and complaints, Leader transfer (6.2, 6.4, 8.2)");
-        TAGS.put("Moderation", "The Moderator arranges all groups until finalization, including locked groups (7.1)");
-        TAGS.put("Statistics & export", "Statistics, the handover Excel file and the history (7.3, 10, 11)");
+        TAGS.put("Moderation", "The assigned Moderator arranges all groups in every phase, including after finalization, including locked groups (7.1)");
+        TAGS.put("Statistics & export", "Statistics, the handover Excel file (7.3, 10)");
         TAGS.put("Profile", "My profile, private mode and my semesters");
         TAGS.put("Notifications", "My in-app notifications and the real-time stream");
         TAGS.put("Users", "Account management (Admin)");
@@ -65,7 +65,8 @@ public class OpenApiConfig {
             same-major groups, semester rosters, moderation, finalization and Excel handover.
 
             **How to call protected endpoints**
-            1. `POST /api/v1/auth/google` (section **Auth**) with a verified Google ID token from an imported email.
+            1. Students: `POST /api/v1/auth/google` with a Google ID token matching the imported roster.
+               Admin/Moderator: `POST /api/v1/auth/login` with email and password.
             2. Copy `accessToken` from the response.
             3. Click **Authorize** (top right), paste the token (without `Bearer `) and confirm.
 

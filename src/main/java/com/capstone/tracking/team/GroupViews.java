@@ -52,7 +52,7 @@ public class GroupViews {
         return new GroupResponse(g.getId(), g.getCode(), g.getName(), g.getWantedSkills(), scope.getId(),
                 scope.getSubject().getId(), scope.getSubject().getCode(), scope.semesterCode(), scope.getMajor().getCode(),
                 scope.getMajor().getName(), scope.getPhase(), active.size(), scope.getSubject().getMinGroupSize(), max,
-                core.state(g, active.size(), now), active.size() >= max, g.isLocked(), g.getDissolvedReason(),
+                core.state(g, active.size(), now), active.size() >= max, g.isLocked(), g.isFinalized(), g.getFinalizedAt(), g.getDissolvedReason(),
                 g.getDissolvedAt(), leader == null ? null : leader.getUser().getId(),
                 leader == null ? null : leader.getUser().getFullName(), list, g.getCreatedAt());
     }

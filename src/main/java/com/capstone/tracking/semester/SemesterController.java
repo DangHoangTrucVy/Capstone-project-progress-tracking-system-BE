@@ -26,23 +26,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/semesters")
 @RequiredArgsConstructor
-@Tag(name = "Semesters", description = "Semester list, common timeline, archiving and Moderator assignment (3.1, 3.6)")
+@Tag(name = "Semesters", description = "Semester list, common timeline and assigned Moderator")
 @SecurityRequirement(name = "bearerAuth")
 public class SemesterController {
 
     private final SemesterService service;
 
-    public record ModeratorRequest(UUID lecturerId) {}
+    public record ModeratorRequest(@com.fasterxml.jackson.annotation.JsonAlias("lecturerId") UUID moderatorId) {}
 
-    @Operation(summary = "List semesters (status filter; archived only when asked; sort by code, startDate, status, "
-            + "studentCount or groupCount)")
+    @Operation(summary = "List semesters; search code/name, filter by my assignment, sort by code/startDate/studentCount/groupCount")
     @GetMapping
-    public List<SemesterResponse> list(@RequestParam(required = false) SemesterStatus status,
+    public List<SemesterResponse> list(@RequestParam(required = false) String q,
                                        @RequestParam(defaultValue = "false") boolean moderatedByMe,
                                        @RequestParam(defaultValue = "startDate") String sort,
                                        @RequestParam(defaultValue = "desc") String direction,
                                        @AuthenticationPrincipal User currentUser) {
-        return service.list(status, moderatedByMe, currentUser, sort, "desc".equalsIgnoreCase(direction));
+        return service.list(q, moderatedByMe, currentUser, sort, "desc".equalsIgnoreCase(direction));
     }
 
     @Operation(summary = "Create a semester (Admin)")
@@ -55,10 +54,10 @@ public class SemesterController {
                 .body(service.toResponse(created));
     }
 
-    @Operation(summary = "Get a semester and its status")
+    @Operation(summary = "Get a semester")
     @GetMapping("/{semester}")
-    public SemesterResponse get(@PathVariable String semester) {
-        return service.toResponse(service.get(semester));
+    public SemesterResponse get(@PathVariable String semester, @AuthenticationPrincipal User currentUser) {
+        return service.details(semester, currentUser);
     }
 
     @Operation(summary = "Update a semester: Admin edits everything, the Moderator the opening date and common deadline")
@@ -66,18 +65,6 @@ public class SemesterController {
     public SemesterResponse update(@PathVariable String semester, @RequestBody SemesterRequest request,
                                    @AuthenticationPrincipal User currentUser) {
         return service.toResponse(service.update(semester, request, currentUser));
-    }
-
-    @Operation(summary = "Archive a semester: hidden from the active list, still viewable (Admin)")
-    @PostMapping("/{semester}/archive")
-    public SemesterResponse archive(@PathVariable String semester, @AuthenticationPrincipal User currentUser) {
-        return service.toResponse(service.setArchived(semester, true, currentUser));
-    }
-
-    @Operation(summary = "Restore an archived semester (Admin)")
-    @PostMapping("/{semester}/unarchive")
-    public SemesterResponse unarchive(@PathVariable String semester, @AuthenticationPrincipal User currentUser) {
-        return service.toResponse(service.setArchived(semester, false, currentUser));
     }
 
     @Operation(summary = "Delete an empty semester (no students, no subjects) (Admin)")
@@ -91,6 +78,6 @@ public class SemesterController {
     @PutMapping("/{semester}/moderator")
     public SemesterResponse assignModerator(@PathVariable String semester, @RequestBody ModeratorRequest request,
                                             @AuthenticationPrincipal User currentUser) {
-        return service.toResponse(service.assignModerator(semester, request.lecturerId(), currentUser));
+        return service.toResponse(service.assignModerator(semester, request.moderatorId(), currentUser));
     }
 }

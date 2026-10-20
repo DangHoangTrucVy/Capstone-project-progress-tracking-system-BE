@@ -24,8 +24,6 @@ public record ScopeResponse(
         Instant previousFinalizedAt,
         Instant reopenedAt,
         String reopenReason,
-        String lastChangeAfterFinalize,
-        Instant lastChangeAfterFinalizeAt,
         long studentCount,
         long groupCount
 ) {
@@ -33,7 +31,6 @@ public record ScopeResponse(
         return new ScopeResponse(s.getId(), s.getSubject().getId(), s.getSubject().getCode(), s.getSubject().getName(),
                 s.semesterCode(), s.getMajor().getId(), s.getMajor().getCode(), s.getMajor().getName(), s.getPhase(),
                 deadline, s.getDeadlineOverride() != null, s.getOpenedAt(), s.getLockedAt(), s.getFinalizedAt(),
-                s.getPreviousFinalizedAt(), s.getReopenedAt(), s.getReopenReason(), s.getLastChangeAfterFinalize(),
-                s.getLastChangeAfterFinalizeAt(), students, groups);
+                s.getPreviousFinalizedAt(), s.getReopenedAt(), s.getReopenReason(), students, groups);
     }
 }

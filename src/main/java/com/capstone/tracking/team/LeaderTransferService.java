@@ -139,8 +139,6 @@ public class LeaderTransferService {
             FormationScope locked = scopes.findById(scope.getId()).orElseThrow();
             String change = "Chuyển Leader nhóm " + group.getCode() + " từ " + from.getUser().getFullName() + " sang "
                     + user.getFullName() + " lúc " + VnTime.format(now);
-            locked.setLastChangeAfterFinalize(change);
-            locked.setLastChangeAfterFinalizeAt(now);
             audit.record("StudentGroup", group.getId(), AuditAction.LEADER_TRANSFERRED_AFTER_FINALIZE, user,
                     scope.semesterCode(), Map.of("from", from.getUser().getId().toString(), "to", user.getId().toString()));
             notifier.publish(DomainEvent.of(DomainEventType.LEADER_CHANGED_AFTER_FINALIZE, change,

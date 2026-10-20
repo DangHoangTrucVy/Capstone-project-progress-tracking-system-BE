@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@Tag(name = "Moderation", description = "The Moderator arranges any group until finalization, including locked groups (7.1)")
+@Tag(name = "Moderation", description = "The assigned Moderator arranges groups in every phase, including finalized groups (7.1)")
 @SecurityRequirement(name = "bearerAuth")
 public class ModerationController {
 

@@ -20,10 +20,10 @@ class AuthFlowIntegrationTest extends TestSupport {
     @Autowired private PasswordEncoder encoder;
 
     @Test
-    void lecturerCannotUsePasswordEvenWhenTheLegacyFlagIsEnabled() throws Exception {
+    void moderatorUsesPasswordAndCannotManageAccounts() throws Exception {
         User lecturer = withPassword(user("login-lecturer", Role.LECTURER));
-        login(lecturer).andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.errorCode").value("GOOGLE_LOGIN_REQUIRED"));
+        login(lecturer).andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role").value("LECTURER"));
         getAs("/api/v1/users", lecturer).andExpect(status().isForbidden());
     }
 

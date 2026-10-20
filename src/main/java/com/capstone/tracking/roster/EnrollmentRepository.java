@@ -51,7 +51,5 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, UUID> {
             order by e.user.studentCode""")
     List<Enrollment> findWithoutGroup(@Param("scopeId") UUID scopeId);
 
-    @Modifying
-    @Query("update Enrollment e set e.finalized = false where e.scope.id = :scopeId")
-    int clearFinalized(@Param("scopeId") UUID scopeId);
+
 }

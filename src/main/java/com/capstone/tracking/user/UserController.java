@@ -30,7 +30,33 @@ public class UserController {
 
     private final UserService userService;
 
-    @Operation(summary = "Create a user account")
+    public record ModeratorCreateRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Email String email,
+            @jakarta.validation.constraints.NotBlank String fullName,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 8, max = 72) String password,
+            @jakarta.validation.constraints.Size(max = 20) String phone) {}
+
+    public record PasswordRequest(@jakarta.validation.constraints.NotBlank
+            @jakarta.validation.constraints.Size(min = 8, max = 72) String password) {}
+
+    @Operation(summary = "Set or reset a Moderator password (Admin); never assigns a password to a student")
+    @PutMapping("/{id}/password")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> moderatorPassword(@PathVariable UUID id, @Valid @RequestBody PasswordRequest request) {
+        userService.setModeratorPassword(id, request.password());
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Create a Moderator account with email and password (Admin); no lecturer import needed")
+    @ApiResponse(responseCode = "201", description = "Created")
+    @PostMapping("/moderators")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UserResponse> createModerator(@Valid @RequestBody ModeratorCreateRequest request) {
+        User created = userService.create(new UserCreateRequest(request.email(), request.fullName(), request.password(),
+                Role.LECTURER, request.phone()));
+        return ResponseEntity.created(URI.create("/api/v1/users/" + created.getId())).body(UserResponse.from(created));
+    }
+
+    @Operation(summary = "Create a Moderator account (role LECTURER); Admin creation on the web is forbidden")
     @ApiResponse(responseCode = "201", description = "Created")
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")

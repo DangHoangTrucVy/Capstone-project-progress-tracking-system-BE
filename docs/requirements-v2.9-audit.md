@@ -1,5 +1,8 @@
 # Đối chiếu backend với yêu cầu Website ghép nhóm v2.9
 
+> Báo cáo lịch sử theo tài liệu nhận ngày 20/10. Tài liệu gửi lại ngày 21/10 thay đổi quy tắc đăng nhập,
+> quyền sau chốt và trạng thái. Xem [báo cáo hiện hành](requirements-review-20261021.md) trước khi sử dụng API.
+
 Ngày đối chiếu: 20/10/2026. Nguồn: [nguyên văn tài liệu được cung cấp](requirements/team-formation-v2.9.txt).
 
 ## Kết luận và phạm vi

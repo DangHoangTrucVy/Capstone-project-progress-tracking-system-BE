@@ -227,6 +227,8 @@ public class GroupCore {
         requests.cancelPendingOfGroup(group.getId(), JoinRequest.CancelReason.GROUP_DISSOLVED, now);
         leaveRequests.closeOpenOfGroup(group.getId(), now);
         transfers.cancelPendingOfGroup(group.getId(), now);
+        group.setFinalized(false);
+        group.setFinalizedAt(null);
         group.setDissolvedAt(now);
         group.setDissolvedReason(reason);
         groups.saveAndFlush(group);

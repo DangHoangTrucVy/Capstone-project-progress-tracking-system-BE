@@ -212,16 +212,12 @@ public class ScopeService {
         List<StudentGroup> active = groups.findActiveByScope(scope.getId());
         Map<UUID, Long> sizes = sizes(active);
         java.util.Set<UUID> handedOver = new java.util.HashSet<>();
-        for (GroupMember m : members.findActiveIn(active.stream().map(StudentGroup::getId).toList())) {
-            long size = sizes.getOrDefault(m.getGroup().getId(), 0L);
-            if (size >= min && size <= max) {
-                handedOver.add(m.getEnrollment().getId());
-            }
-        }
-        for (Enrollment e : enrollments.findByScopeId(scope.getId())) {
-            boolean finalized = handedOver.contains(e.getId()) && e.getEligibility() != Eligibility.INELIGIBLE;
-            e.setFinalized(finalized);
-            e.setFinalizedAt(finalized ? now : null);
+        for (StudentGroup group : active) {
+            long size = sizes.getOrDefault(group.getId(), 0L);
+            boolean finalized = size >= min && size <= max;
+            group.setFinalized(finalized);
+            group.setFinalizedAt(finalized ? now : null);
+            if (finalized) handedOver.add(group.getId());
         }
         transfers.cancelPendingOfScope(scope.getId(), now);
         scope.setPhase(ScopePhase.FINALIZED);
@@ -230,7 +226,7 @@ public class ScopeService {
         scope.setLastChangeAfterFinalize(null);
         scope.setLastChangeAfterFinalizeAt(null);
         audit.record("FormationScope", scope.getId(), AuditAction.SCOPE_FINALIZED, actor, scope.semesterCode(),
-                details("finalizedStudents", handedOver.size(), "warnings", check.warnings()));
+                details("finalizedGroups", handedOver.size(), "warnings", check.warnings()));
         notifyStudents(scope, DomainEventType.SCOPE_FINALIZED,
                 "Danh sách nhóm môn " + scope.getSubject().getName() + " (ngành " + scope.getMajor().getName()
                         + ") đã được chốt", null, actor);
@@ -249,7 +245,10 @@ public class ScopeService {
             throw new BadRequestException("A reason is required to reopen the list");
         }
         Instant now = Instant.now();
-        enrollments.clearFinalized(scope.getId());
+        for (StudentGroup group : groups.findActiveByScope(scope.getId())) {
+            group.setFinalized(false);
+            group.setFinalizedAt(null);
+        }
         scope.setPreviousFinalizedAt(scope.getFinalizedAt());
         scope.setFinalizedAt(null);
         scope.setFinalizedBy(null);

@@ -62,9 +62,9 @@ public class RosterController {
         return roster.groups(subjectId, majorId, state, maxSize, q, currentUser);
     }
 
-    @Operation(summary = "Edit a student's details; major and term only before formation starts (Admin, Moderator)")
+    @Operation(summary = "Edit student contact details in every phase (Admin, assigned Moderator); major and term cannot change")
     @PutMapping("/semester-students/{semesterStudentId}")
-    public StudentRow update(@PathVariable UUID semesterStudentId, @RequestBody StudentUpdate update,
+    public StudentRow update(@PathVariable UUID semesterStudentId, @Valid @RequestBody StudentUpdate update,
                              @AuthenticationPrincipal User currentUser) {
         return roster.update(semesterStudentId, update, currentUser);
     }

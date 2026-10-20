@@ -2,20 +2,22 @@
 *(Team Formation Website)*
 
 Website giúp sinh viên ghép nhóm **Capstone Project (đồ án tốt nghiệp)** trong từng học kỳ, chỉ trong cùng ngành.
-Moderator điều phối mọi nhóm, kể cả nhóm khóa, cho tới khi chốt danh sách và xuất Excel bàn giao.
-Chỉ đăng nhập bằng Google với email trong danh sách đã nhập; không hỗ trợ mật khẩu.
+Moderator điều phối mọi nhóm trong học kỳ được gán, kể cả nhóm khóa và sau chốt danh sách.
+Sinh viên dùng Google theo danh sách nhập; Admin/Moderator dùng email và mật khẩu.
 
 ---
 
 ## 📌 Tài liệu
 
-- [**Đối chiếu yêu cầu v2.9 và các sửa đổi**](docs/requirements-v2.9-audit.md).
+- [**Báo cáo hiện hành: đối chiếu, API mới và phần chưa hoàn thành (21/10/2026)**](docs/requirements-review-20261021.md).
+- [Yêu cầu hiện hành được gửi lại ngày 21/10/2026](docs/requirements/team-formation-v2.9-revised-20261021.txt).
+- [Đối chiếu cũ theo tài liệu nhận ngày 20/10](docs/requirements-v2.9-audit.md) — chỉ tham khảo lịch sử.
 - [**Yêu cầu v2.9 được cung cấp ngày 20/10/2026**](docs/requirements/team-formation-v2.9.txt).
 - [Thiết kế v2.8 để tham khảo lịch sử](docs/design/team-formation-v2.8.md); các quy tắc v2.9 được ưu tiên.
 - 🗄️ [**ERD**](docs/erd.png) ([Mermaid](docs/erd.mmd), [SVG](docs/erd.svg)).
 - 🏗️ [**Các tầng kiến trúc**](docs/architecture-layers.md): Docker, CI/CD, SQS (Floci), Redis — bật/tắt và cách chạy.
 
-> Các tài liệu `blueprint.md`, `intent.md`, `docs/requirements/*`, `docs/sequence/*`, `docs/c4/*`,
+> Các tài liệu `blueprint.md`, `intent.md`, các bản requirement trước 21/10, `docs/sequence/*`, `docs/c4/*`,
 > `docs/feature-list-and-architecture.md`, `docs/workflow-implementation.md` mô tả phạm vi cũ (Capstone Project Progress
 > Tracking) và sẽ được vẽ lại sau khi nhóm duyệt requirement.
 
@@ -24,16 +26,17 @@ Chỉ đăng nhập bằng Google với email trong danh sách đã nhập; khô
 ## 🎯 Chức năng
 
 1. **Học kỳ và ngành:** Admin tạo học kỳ (SP26, SU26, FA26); hệ thống tự tạo cấu hình Capstone, mặc định kỳ học 8.
-   Moderator được gán từ danh sách giảng viên đã nhập, cấu hình kỳ học trước khi mở ghép nhóm và thời hạn chờ đơn.
+   Admin tạo tài khoản Moderator rồi phân công học kỳ; Moderator thiết lập timeline và thời hạn chờ đơn.
+   Kỳ nhập cố định là 8, chuẩn bị cho Capstone kỳ 9; không có đổi ngành.
    Mỗi ngành có một *phạm vi ghép nhóm* với giai đoạn và deadline riêng.
-2. **Nhập danh sách:** danh sách sinh viên (MSSV, họ tên, email, SĐT, kỳ, ngành), file sinh viên không đủ điều kiện và
-   danh sách giảng viên; luôn có bước kiểm tra trước khi ghi, nhập lại không tạo trùng.
+2. **Nhập danh sách:** danh sách sinh viên (MSSV, họ tên, email, kỳ 8, ngành; SĐT tùy chọn), điều kiện tham gia
+   và tỷ lệ tín chỉ nếu có; luôn có bước kiểm tra trước khi ghi, nhập lại không tạo trùng.
 3. **Ghép nhóm:** tạo nhóm (1–5 người), Apply / Invite, Leader duyệt, khóa nhóm, rời nhóm, chuyển Leader, tìm kiếm theo
    kỹ năng, Like ứng viên, hồ sơ có chế độ riêng tư.
 4. **Deadline và điều phối:** tới deadline hệ thống hủy đơn chờ, giải tán nhóm dưới 3 người; Moderator xếp sinh viên lẻ,
    thêm, đưa ra, chuyển, gộp, giải tán, lập nhóm, chỉ định Leader, xử lý khiếu nại, gia hạn.
-   Moderator có quyền điều phối cả trước deadline, kể cả nhóm Leader khóa; sau chốt phải mở lại trước.
-5. **Chốt danh sách, thống kê, xuất Excel bàn giao, lịch sử thao tác.**
+   Moderator có quyền điều phối cả trước deadline, kể cả nhóm Leader khóa; sau chốt vẫn được điều phối và cập nhật điều kiện, không cần mở lại.
+5. **Chốt trạng thái nhóm, thống kê, xuất Excel bàn giao.** Lịch sử thao tác để làm sau.
 6. **Thông báo** trên web (chuông, thời gian thực) và qua email.
 
 ---
@@ -62,7 +65,7 @@ Chỉ đăng nhập bằng Google với email trong danh sách đã nhập; khô
 | Vai trò | Là gì |
 |---|---|
 | `ADMIN` | Quản trị: học kỳ, nhập danh sách, tài khoản, gán Moderator; làm được mọi việc của Moderator |
-| `LECTURER` | Giảng viên có trong danh sách đã nhập; là **Moderator** của học kỳ được Admin gán |
+| `LECTURER` | **Moderator**, tài khoản do Admin tạo; chỉ có quyền trong học kỳ được gán |
 | `STUDENT` | Sinh viên có tên trong danh sách của ít nhất một học kỳ; **Leader** là cờ của một thành viên trong nhóm |
 
 Quyền theo học kỳ và theo nhóm được kiểm tra ở server (`Access`, `GroupCore.requireLeader`, `StudentGate`).
@@ -80,11 +83,13 @@ Quyền theo học kỳ và theo nhóm được kiểm tra ở server (`Access`,
 
 Flyway applies `V1`–`V17` (history) then `V18__team_formation_schema.sql`, which drops the former capstone-tracking
 tables, keeps the user accounts and creates the team formation schema.
-`V19__requirements_v29.sql` enforces the v2.9 rules and records lecturer import provenance;
-the dev profile also loads `V2001__v29_dev_configuration.sql` after the existing sample seed.
+`V19` giữ thay đổi của tài liệu cũ; `V20__revised_v29_group_finalization.sql` chuyển cờ chốt sang nhóm,
+bỏ sử dụng trạng thái học kỳ/nguồn giảng viên và xóa mật khẩu sinh viên cũ. Seed `V2002` cũng xóa mật khẩu
+sinh viên mẫu sau seed lịch sử; các migration đã tồn tại không bị chỉnh sửa.
 
-Tài khoản mẫu chỉ để tham khảo dữ liệu. Để đăng nhập, cấu hình `GOOGLE_CLIENT_IDS` và nhập email Google thực tế
-vào danh sách sinh viên/giảng viên; tài khoản Admin được quản lý riêng. Mọi môi trường đều chỉ dùng Google.
+Trong dữ liệu dev, Admin và Moderator đăng nhập bằng mật khẩu `Admin@123`. Sinh viên chỉ dùng Google:
+cấu hình `GOOGLE_CLIENT_IDS` và nhập/sửa email Google thực tế trong danh sách sinh viên.
+Admin được tạo sẵn trong DB; không tạo thêm Admin qua API.
 
 | Email | Vai trò |
 |---|---|
@@ -92,19 +97,19 @@ vào danh sách sinh viên/giảng viên; tài khoản Admin được quản lý
 | `lecturer01@fpt.edu.vn` | Moderator of FA26 (dev seed) |
 | `se180001@fpt.edu.vn` | Student, Leader of Team Alpha in FA26 / CAP / SE (dev seed) |
 
-Sau khi nâng cấp từ bản cũ, Admin cần nhập lại danh sách giảng viên để xác nhận nguồn tài khoản trước khi
-giảng viên đăng nhập hoặc được gán Moderator. Dữ liệu dev được đánh dấu riêng trong seed V2001.
+Không nhập danh sách giảng viên. Admin tạo Moderator qua `POST /api/v1/users/moderators`;
+`PUT /api/v1/users/{id}/password` đặt/đổi mật khẩu Moderator, gồm tài khoản giảng viên cũ chưa có mật khẩu.
 
 ### Quick smoke test (curl)
 
 ```bash
-# Obtain a Google ID token for an imported email, then look at FA26
-TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/google \
+# Sign in as the dev Admin and look at FA26
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"idToken":"<GOOGLE_ID_TOKEN>"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])")
+  -d '{"email":"admin@fpt.edu.vn","password":"Admin@123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])")
 
 curl -s http://localhost:8080/api/v1/semesters -H "Authorization: Bearer $TOKEN"
-curl -s http://localhost:8080/api/v1/semesters/FA26/subjects -H "Authorization: Bearer $TOKEN"
+curl -s http://localhost:8080/api/v1/semesters/FA26/scopes -H "Authorization: Bearer $TOKEN"
 curl -s -o list.xlsx "http://localhost:8080/api/v1/semesters/FA26/export" -H "Authorization: Bearer $TOKEN"
 ```
 

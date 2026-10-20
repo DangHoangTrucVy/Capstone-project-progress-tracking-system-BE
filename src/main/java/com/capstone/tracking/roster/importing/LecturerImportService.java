@@ -105,7 +105,7 @@ public class LecturerImportService {
             User user = users.findByEmailIgnoreCase(row[0]).orElseGet(() -> User.builder()
                     .email(row[0]).role(Role.LECTURER).status(UserStatus.ACTIVE).build());
             user.setFullName(row[1]);
-            user.setLecturerImported(true);
+
             users.save(user);
         }
         ImportBatch batch = batches.save(ImportBatch.builder()

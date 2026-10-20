@@ -52,12 +52,41 @@ public class ExcelExportService {
 
     private final Snapshot snapshot;
     private final ScopeRules rules;
+    private final com.capstone.tracking.notification.Notifier notifier;
 
     public record ExcelFile(String fileName, byte[] content) {}
 
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public record SmallGroup(UUID id, String code, String name, String majorCode, int size, boolean finalized) {}
+    public record ExportCheck(boolean canExport, java.time.Instant takenAt, List<SmallGroup> groupsUnderMinimum,
+                              List<String> warnings) {}
+
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
+    public ExportCheck check(String semesterCode, UUID subjectId, UUID majorId, User viewer) {
+        return checkAndNotify(snapshot.take(semesterCode, subjectId, majorId, viewer, rules::deadline), viewer);
+    }
+
+    private ExportCheck checkAndNotify(Snapshot.Data data, User viewer) {
+        List<SmallGroup> small = data.scopes().stream().flatMap(s -> s.groups().stream()
+                .filter(g -> g.members().size() < s.scope().getSubject().getMinGroupSize())
+                .map(g -> new SmallGroup(g.group().getId(), g.group().getCode(), g.group().getName(),
+                        s.scope().getMajor().getCode(), g.members().size(), g.group().isFinalized()))).toList();
+        List<String> warnings = small.isEmpty() ? List.of()
+                : List.of(small.size() + " nhóm dưới 3 người; vẫn có thể xuất Excel");
+        if (!small.isEmpty()) {
+            notifier.publish(com.capstone.tracking.notification.DomainEvent.of(
+                    com.capstone.tracking.notification.DomainEventType.EXPORT_SMALL_GROUPS,
+                    "Chuẩn bị xuất Excel học kỳ " + data.semester().getCode() + ": " + warnings.get(0),
+                    notifier.coordinators(data.semester().getCode())).by(viewer.getId())
+                    .withDetails(small.stream().map(g -> g.code() + " (" + g.size() + ")")
+                            .collect(java.util.stream.Collectors.joining(", ")), null));
+        }
+        return new ExportCheck(true, data.takenAt(), small, warnings);
+    }
+
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public ExcelFile export(String semesterCode, UUID subjectId, UUID majorId, User viewer) {
         Snapshot.Data data = snapshot.take(semesterCode, subjectId, majorId, viewer, rules::deadline);
+        checkAndNotify(data, viewer);
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles styles = new Styles(wb);
             List<String> header = headerLines(data);
@@ -151,9 +180,6 @@ public class ExcelExportService {
                 ? "Đã chốt lúc " + VnTime.format(scope.getFinalizedAt()) : "Chưa chốt");
         if (scope.getFinalizedAt() == null && scope.getReopenedAt() != null) {
             state.append("; Đã mở lại lúc ").append(VnTime.format(scope.getReopenedAt()));
-        }
-        if (scope.getFinalizedAt() != null && scope.getLastChangeAfterFinalize() != null) {
-            state.append("; Thay đổi gần nhất sau chốt: ").append(scope.getLastChangeAfterFinalize());
         }
         return state.toString();
     }

@@ -28,8 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * A student's eligibility in a subject (5.1, 5.2): from the training department's file, or changed by the Moderator
  * with a reason. Flagging a student ineligible takes them out of their group of that subject, cancels their open
- * requests, hands the Leader role on (6.5) and dissolves a group left empty; it applies after the deadline too, but
- * a finalized list must be reopened first. Lifting the flag does not give the old group back.
+ * requests, hands the Leader role on (6.5) and dissolves a group left empty. It applies in every phase, including
+ * after finalization without reopening. Lifting the flag does not restore the old group.
  */
 @Service
 @RequiredArgsConstructor
@@ -74,14 +74,14 @@ public class EligibilityService {
         List<Enrollment> selected = changes.stream().map(c -> enrollments.findById(c.enrollmentId())
                 .orElseThrow(() -> ResourceNotFoundException.of("Enrollment", c.enrollmentId()))).toList();
         selected.stream().map(e -> e.getScope().getId()).distinct().sorted()
-                .forEach(id -> rules.requireNotFinalized(locks.read(com.capstone.tracking.subject.FormationScope.class, id)));
+                .forEach(id -> locks.read(com.capstone.tracking.subject.FormationScope.class, id));
         selected.stream().map(Enrollment::getId).distinct().sorted().forEach(core::lockEnrollment);
         members.findActiveByEnrollments(selected.stream().map(Enrollment::getId).toList()).stream()
                 .map(m -> m.getGroup().getId()).distinct().sorted().forEach(core::lock);
         int changed = 0;
         for (Change change : changes) {
             Enrollment e = core.lockEnrollment(change.enrollmentId());
-            rules.requireNotFinalized(e.getScope());
+            access.requireModerator(e.getScope().semesterCode(), actor);
             Eligibility before = e.getEligibility();
             String reason = change.reason() == null || change.reason().isBlank() ? null : change.reason().trim();
             if (before == change.eligibility() && java.util.Objects.equals(reason, e.getEligibilityReason())) {

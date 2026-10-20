@@ -26,7 +26,7 @@ public class StatisticsService {
     private final ScopeRules rules;
 
     public record Counts(long totalStudents, long withGroup, long withoutGroup, long ineligible,
-                         java.util.SortedMap<Integer, Long> groupsBySize, long totalGroups, long openGroups, long fullGroups, long lockedGroups,
+                         java.util.SortedMap<Integer, Long> groupsBySize, long totalGroups, long openGroups, long fullGroups, long lockedGroups, long finalizedGroups,
                          long groupsUnderMinimum, long openComplaints, long pendingApplies, long pendingInvites) {}
 
     public record ScopeStats(UUID scopeId, String subjectCode, String majorCode, String majorName, ScopePhase phase,
@@ -61,10 +61,12 @@ public class StatisticsService {
         long full = 0;
         long locked = 0;
         long small = 0;
+        long finalized = 0;
         int min = s.scope().getSubject().getMinGroupSize();
         for (Snapshot.GroupData g : s.groups()) {
             int size = g.members().size();
             bySize.merge(size, 1L, Long::sum);
+            if (g.group().isFinalized()) finalized++;
             if (g.full()) {
                 full++;
             }
@@ -78,12 +80,12 @@ public class StatisticsService {
                 small++;
             }
         }
-        return new Counts(total, withGroup, total - withGroup, ineligible, bySize, s.groups().size(), open, full, locked,
+        return new Counts(total, withGroup, total - withGroup, ineligible, bySize, s.groups().size(), open, full, locked, finalized,
                 small, s.openComplaints(), s.pendingApplies(), s.pendingInvites());
     }
 
     private static Counts empty() {
-        return new Counts(0, 0, 0, 0, new java.util.TreeMap<>(), 0, 0, 0, 0, 0, 0, 0, 0);
+        return new Counts(0, 0, 0, 0, new java.util.TreeMap<>(), 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     private static Counts add(Counts a, Counts b) {
@@ -92,7 +94,7 @@ public class StatisticsService {
         return new Counts(a.totalStudents() + b.totalStudents(), a.withGroup() + b.withGroup(),
                 a.withoutGroup() + b.withoutGroup(), a.ineligible() + b.ineligible(), sizes,
                 a.totalGroups() + b.totalGroups(), a.openGroups() + b.openGroups(), a.fullGroups() + b.fullGroups(),
-                a.lockedGroups() + b.lockedGroups(), a.groupsUnderMinimum() + b.groupsUnderMinimum(),
+                a.lockedGroups() + b.lockedGroups(), a.finalizedGroups() + b.finalizedGroups(), a.groupsUnderMinimum() + b.groupsUnderMinimum(),
                 a.openComplaints() + b.openComplaints(), a.pendingApplies() + b.pendingApplies(),
                 a.pendingInvites() + b.pendingInvites());
     }

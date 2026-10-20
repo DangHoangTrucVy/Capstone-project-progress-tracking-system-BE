@@ -30,6 +30,8 @@ public record GroupResponse(
         GroupState state,
         boolean full,
         boolean locked,
+        boolean finalized,
+        Instant finalizedAt,
         StudentGroup.DissolveReason dissolvedReason,
         Instant dissolvedAt,
         UUID leaderId,

@@ -45,7 +45,7 @@ class GoogleLoginIntegrationTest extends TestSupport {
     }
 
     @Test
-    void listedStudentAndImportedLecturerSignIn() throws Exception {
+    void listedStudentUsesGoogleButModeratorMustUsePassword() throws Exception {
         User student = student("gg-student");
         Semester semester = semesterRepository.save(new Semester(freeSemesterCode(), "Google semester",
                 LocalDate.now(), LocalDate.now().plusDays(90)));
@@ -56,7 +56,7 @@ class GoogleLoginIntegrationTest extends TestSupport {
 
         User lecturer = user("gg-lecturer", Role.LECTURER);
         googleSays(lecturer.getEmail());
-        login().andExpect(status().isOk()).andExpect(jsonPath("$.user.role").value("LECTURER"));
+        login().andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("PASSWORD_LOGIN_REQUIRED"));
     }
 
     @Test
@@ -68,16 +68,25 @@ class GoogleLoginIntegrationTest extends TestSupport {
     }
 
     @Test
-    void aLecturerRoleWithoutAnImportedListEntryCannotSignIn() throws Exception {
+    void moderatorCannotBypassPasswordLoginWithGoogle() throws Exception {
         User lecturer = user("unimported-google", Role.LECTURER);
-        lecturer.setLecturerImported(false);
         userRepository.save(lecturer);
         googleSays(lecturer.getEmail());
-        login().andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("NOT_ON_LIST"));
+        login().andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("PASSWORD_LOGIN_REQUIRED"));
     }
 
     private void googleSays(String email) {
         when(googleTokenVerifier.verify(anyString())).thenReturn(new GoogleIdentity(email, "Người dùng", null, null));
+    }
+
+    @Test
+    void aListedFptAccountStillCannotUseStudentGoogleSignIn() throws Exception {
+        var w = world(1, 0);
+        User student = w.students().get(0);
+        student.setEmail("legacy-" + suffix + "@fpt.edu.vn");
+        userRepository.save(student);
+        googleSays(student.getEmail());
+        login().andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("STUDENT_GOOGLE_EMAIL_REQUIRED"));
     }
 
     private ResultActions login() throws Exception {

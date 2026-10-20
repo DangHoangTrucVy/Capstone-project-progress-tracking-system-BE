@@ -98,9 +98,7 @@ public class Snapshot {
     private String stateLabel(StudentGroup g, int size, int max, Instant now) {
         boolean full = size >= max;
         boolean locked = core.state(g, size, now) == com.capstone.tracking.team.GroupState.LOCKED;
-        if (full && locked) {
-            return "Đủ, Khóa";
-        }
-        return full ? "Đủ" : locked ? "Khóa" : "Mở";
+        String label = full && locked ? "Đủ, Khóa" : full ? "Đủ" : locked ? "Khóa" : "Mở";
+        return g.isFinalized() ? label + ", Đã chốt" : label;
     }
 }

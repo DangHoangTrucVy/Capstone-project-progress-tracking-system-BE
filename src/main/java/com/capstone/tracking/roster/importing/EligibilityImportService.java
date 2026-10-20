@@ -112,9 +112,6 @@ public class EligibilityImportService {
             for (Enrollment e : targets) {
                 if (e.getEligibility() == value && Objects.equals(reason, e.getEligibilityReason())) {
                     unchanged++;
-                } else if (e.getScope().getPhase() == ScopePhase.FINALIZED) {
-                    blocked.add(new RowError(line.rowNumber(), code, "Môn " + e.getScope().getSubject().getCode()
-                            + " (ngành " + e.getScope().getMajor().getCode() + ") đã chốt danh sách"));
                 } else {
                     changes.add(new EligibilityService.Change(e.getId(), value, reason));
                 }

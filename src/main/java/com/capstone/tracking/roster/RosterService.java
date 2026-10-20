@@ -61,10 +61,14 @@ public class RosterService {
     public record StudentRow(UUID enrollmentId, UUID semesterStudentId, UUID userId, String studentCode,
                              String fullName, String email, String phone, String majorCode, String majorName,
                              int currentTerm, Eligibility eligibility, String eligibilityReason, boolean hasGroup,
-                             UUID groupId, String groupCode, String groupName, boolean leader, boolean finalized,
+                             UUID groupId, String groupCode, String groupName, boolean leader,
                              NoGroupReason noGroupReason) {}
 
-    public record StudentUpdate(String fullName, String email, String phone, UUID majorId, Integer currentTerm) {}
+    public record StudentUpdate(@jakarta.validation.constraints.Size(max = 255) String fullName,
+                                @jakarta.validation.constraints.Email String email,
+                                @jakarta.validation.constraints.Size(max = 20) String phone,
+                                @io.swagger.v3.oas.annotations.media.Schema(hidden = true) UUID majorId,
+                                @io.swagger.v3.oas.annotations.media.Schema(hidden = true) Integer currentTerm) {}
 
     public Page<StudentRow> students(UUID subjectId, UUID majorId, Boolean hasGroup, Eligibility eligibility, String q,
                                      Pageable pageable, User viewer) {
@@ -106,10 +110,6 @@ public class RosterService {
         access.requireModerator(ss.getSemesterCode(), viewer);
         scopes.findBySemester(ss.getSemesterCode()).stream().map(com.capstone.tracking.subject.FormationScope::getId).sorted()
                 .forEach(id -> locks.write(com.capstone.tracking.subject.FormationScope.class, id));
-        if (enrollments.findBySemesterStudentId(ss.getId()).stream()
-                .anyMatch(e -> e.getScope().getPhase() == ScopePhase.FINALIZED)) {
-            throw new ApiException(HttpStatus.CONFLICT, "SCOPE_FINALIZED", "Reopen the finalized list before editing students");
-        }
         User user = ss.getUser();
         if (update.fullName() != null && !update.fullName().isBlank()) {
             user.setFullName(update.fullName().trim());
@@ -128,31 +128,13 @@ public class RosterService {
         boolean majorChange = update.majorId() != null && !update.majorId().equals(ss.getMajor().getId());
         boolean termChange = update.currentTerm() != null && update.currentTerm() != ss.getCurrentTerm();
         if (majorChange || termChange) {
-            boolean started = enrollments.findBySemesterStudentId(ss.getId()).stream()
-                    .anyMatch(e -> e.getScope().getPhase() != ScopePhase.PREPARING);
-            Major major = majorChange ? majors.findById(update.majorId())
-                    .orElseThrow(() -> ResourceNotFoundException.of("Major", update.majorId())) : ss.getMajor();
-            int term = termChange ? update.currentTerm() : ss.getCurrentTerm();
-            if (term < 1 || term > 12) {
-                throw new BadRequestException("The term must be between 1 and 12");
-            }
-            boolean targetStarted = subjects.findBySemesterCodeOrderByCodeAsc(ss.getSemesterCode()).stream()
-                    .filter(s -> s.getTargetTerm() == term)
-                    .map(s -> scopes.findBySubjectIdAndMajorId(s.getId(), major.getId()).orElse(null))
-                    .anyMatch(s -> s != null && s.getPhase() != ScopePhase.PREPARING);
-            if (started || targetStarted) {
-                throw new ApiException(HttpStatus.CONFLICT, "SCOPE_STARTED",
-                        "Group formation has started: the major and term can no longer change");
-            }
-            ss.setMajor(major);
-            ss.setCurrentTerm(term);
-            sync.syncStudent(ss);
+            throw new BadRequestException("The major cannot change; the imported formation term must be 8");
         }
         return enrollments.findBySemesterStudentId(ss.getId()).stream().findFirst()
                 .map(e -> row(e, core.membershipOf(e.getId())))
                 .orElse(new StudentRow(null, ss.getId(), user.getId(), user.getStudentCode(), user.getFullName(),
                         user.getEmail(), user.getPhone(), ss.getMajor().getCode(), ss.getMajor().getName(),
-                        ss.getCurrentTerm(), null, null, false, null, null, null, false, false, null));
+                        ss.getCurrentTerm(), null, null, false, null, null, null, false, null));
     }
 
     private StudentRow row(Enrollment e, GroupMember m) {
@@ -162,7 +144,7 @@ public class RosterService {
         return new StudentRow(e.getId(), ss.getId(), u.getId(), u.getStudentCode(), u.getFullName(), u.getEmail(),
                 u.getPhone(), ss.getMajor().getCode(), ss.getMajor().getName(), ss.getCurrentTerm(), e.getEligibility(),
                 e.getEligibilityReason(), g != null, g == null ? null : g.getId(), g == null ? null : g.getCode(),
-                g == null ? null : g.getName(), m != null && m.isLeader(), e.isFinalized(),
+                g == null ? null : g.getName(), m != null && m.isLeader(),
                 g == null ? (e.isIneligible() ? NoGroupReason.INELIGIBLE : e.getNoGroupReason()) : null);
     }
 

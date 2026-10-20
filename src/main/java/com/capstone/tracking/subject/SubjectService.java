@@ -45,8 +45,8 @@ public class SubjectService {
         if (request.name() == null || request.name().isBlank()) {
             throw new BadRequestException("The subject name is required");
         }
-        if (request.targetTerm() == null || request.targetTerm() < 1 || request.targetTerm() > 12) {
-            throw new BadRequestException("The target term must be between 1 and 12");
+        if (request.targetTerm() == null || request.targetTerm() != 8) {
+            throw new BadRequestException("Capstone formation is only for students currently in term 8");
         }
         String code = request.code().trim().toUpperCase(Locale.ROOT);
         if (!Subject.CAPSTONE_CODE.equals(code) || !Subject.CAPSTONE_NAME.equals(request.name().trim())) {
@@ -78,6 +78,9 @@ public class SubjectService {
         if (request.requestTtlHours() != null) {
             subject.setRequestTtlHours(ttl(request.requestTtlHours(), subject.getRequestTtlHours()));
         }
+        if (request.targetTerm() != null && request.targetTerm() != 8) {
+            throw new BadRequestException("Capstone formation is only for students currently in term 8");
+        }
         if (request.targetTerm() != null && request.targetTerm() != subject.getTargetTerm()) {
             if (request.targetTerm() < 1 || request.targetTerm() > 12) {
                 throw new BadRequestException("The target term must be between 1 and 12");
@@ -108,8 +111,33 @@ public class SubjectService {
         return subjects.findById(subjectId).orElseThrow(() -> ResourceNotFoundException.of("Subject", subjectId));
     }
 
-    public List<SubjectResponse> list(String semesterCode) {
-        return subjects.findBySemesterCodeOrderByCodeAsc(semesterCode).stream().map(this::toResponse).toList();
+    public List<SubjectResponse> list(String semesterCode, User viewer) {
+        if (access.isModerator(semesterCode, viewer)) {
+            return subjects.findBySemesterCodeOrderByCodeAsc(semesterCode).stream().map(this::toResponse).toList();
+        }
+        if (viewer.getRole() != com.capstone.tracking.user.Role.STUDENT) {
+            throw new org.springframework.security.access.AccessDeniedException("This semester is not assigned to you");
+        }
+        return subjects.findBySemesterCodeOrderByCodeAsc(semesterCode).stream()
+                .filter(s -> enrollments.findBySubjectIdAndUserId(s.getId(), viewer.getId()).isPresent())
+                .map(s -> view(s.getId(), viewer)).toList();
+    }
+
+    public SubjectResponse view(UUID subjectId, User viewer) {
+        Subject subject = get(subjectId);
+        if (access.isModerator(subject.getSemesterCode(), viewer)) return toResponse(subject);
+        if (viewer.getRole() != com.capstone.tracking.user.Role.STUDENT) {
+            throw new org.springframework.security.access.AccessDeniedException("This semester is not assigned to you");
+        }
+        var enrollment = enrollments.findBySubjectIdAndUserId(subjectId, viewer.getId())
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("You are not enrolled"));
+        return SubjectResponse.from(subject, List.of(toResponse(enrollment.getScope())));
+    }
+
+    public ScopeResponse viewScope(FormationScope scope, User viewer) {
+        SubjectResponse permitted = view(scope.getSubject().getId(), viewer);
+        return permitted.scopes().stream().filter(s -> s.id().equals(scope.getId())).findFirst()
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("This is another major's scope"));
     }
 
     public SubjectResponse toResponse(Subject subject) {

@@ -11,7 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class GoogleOnlyModeIntegrationTest extends TestSupport {
     @Test
     void passwordLoginCannotBypassGoogleOnlyMode() throws Exception {
-        var admin = user("google-only-admin", Role.ADMIN);
+        var admin = user("google-only-admin", Role.STUDENT);
         postJson("/api/v1/auth/login", admin, Map.of("email", admin.getEmail(), "password", "Password123"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("GOOGLE_LOGIN_REQUIRED"));
     }

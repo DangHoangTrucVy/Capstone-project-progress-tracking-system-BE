@@ -42,6 +42,7 @@ public enum DomainEventType {
     // ---- to the Moderator
     SCOPE_CANNOT_OPEN(true),
     COORDINATION_NEEDED(true),
+    EXPORT_SMALL_GROUPS(true),
     FINALIZED_SCOPE_IMPORT_BLOCKED(true),
     LEADER_CHANGED_AFTER_FINALIZE(true),
     MODERATOR_ASSIGNED(true);

@@ -20,15 +20,17 @@ public class UserService {
     private final UserRepository userRepository;
     private final com.capstone.tracking.roster.EnrollmentRepository enrollments;
     private final com.capstone.tracking.common.Locks locks;
+    private final org.springframework.security.crypto.password.PasswordEncoder encoder;
 
     @Transactional
     public User create(UserCreateRequest request) {
-        if (request.role() != Role.ADMIN) {
+        if (request.role() != Role.LECTURER) {
             throw new com.capstone.tracking.common.exception.BadRequestException(
-                    "Student and lecturer accounts must come from their imported lists");
+                    "Only Moderator accounts can be created; Admin is provisioned in the database and students are imported");
         }
-        if (request.password() != null) {
-            throw new com.capstone.tracking.common.exception.BadRequestException("Only Google sign-in is supported");
+        if (request.password() == null || request.password().isBlank() || request.password().length() < 8
+                || request.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
+            throw new com.capstone.tracking.common.exception.BadRequestException("Moderator password must have at least 8 characters and at most 72 UTF-8 bytes");
         }
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmailIgnoreCase(email)) {
@@ -38,6 +40,7 @@ public class UserService {
                 .email(email)
                 .fullName(request.fullName().trim())
                 .role(request.role())
+                .passwordHash(encoder.encode(request.password()))
                 .phone(request.phone())
                 .status(UserStatus.ACTIVE)
                 .build());
@@ -45,6 +48,20 @@ public class UserService {
 
     public User getById(UUID id) {
         return userRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("User", id));
+    }
+
+    /** Allows an Admin to set a password for a former imported lecturer when migrating to Moderator accounts. */
+    @Transactional
+    public void setModeratorPassword(UUID id, String password) {
+        User user = getById(id);
+        if (user.getRole() != Role.LECTURER) {
+            throw new com.capstone.tracking.common.exception.BadRequestException("Only Moderator passwords are managed here");
+        }
+        if (password == null || password.length() < 8
+                || password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
+            throw new com.capstone.tracking.common.exception.BadRequestException("Password must have at least 8 characters and at most 72 UTF-8 bytes");
+        }
+        user.setPasswordHash(encoder.encode(password));
     }
 
     public Page<User> list(Role role, String keyword, Pageable pageable) {
@@ -57,22 +74,12 @@ public class UserService {
         User user = getById(id);
         enrollments.findByUserId(id).stream().map(e -> e.getScope().getId()).distinct().sorted()
                 .forEach(scopeId -> locks.read(com.capstone.tracking.subject.FormationScope.class, scopeId));
-        boolean contactChange = !request.fullName().trim().equals(user.getFullName())
-                || (request.email() != null && !request.email().trim().equalsIgnoreCase(user.getEmail()))
-                || !java.util.Objects.equals(request.phone(), user.getPhone());
-        if (contactChange && enrollments.findByUserId(id).stream()
-                .anyMatch(e -> e.getScope().getPhase() == com.capstone.tracking.subject.ScopePhase.FINALIZED)) {
-            throw new com.capstone.tracking.common.exception.ConflictException("Reopen finalized lists before editing student contact details");
-        }
         if (request.email() != null && !request.email().equalsIgnoreCase(user.getEmail())) {
             String email = request.email().trim().toLowerCase(Locale.ROOT);
             if (userRepository.existsByEmailIgnoreCase(email)) {
                 throw new ConflictException("A user with email " + email + " already exists");
             }
             user.setEmail(email);
-            if (user.getRole() == Role.LECTURER) {
-                user.setLecturerImported(false);
-            }
         }
         user.setFullName(request.fullName().trim());
         user.setPhone(request.phone());

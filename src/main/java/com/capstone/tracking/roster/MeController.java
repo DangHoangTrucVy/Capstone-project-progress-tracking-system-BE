@@ -1,7 +1,6 @@
 package com.capstone.tracking.roster;
 
 import com.capstone.tracking.semester.SemesterRepository;
-import com.capstone.tracking.semester.SemesterStatus;
 import com.capstone.tracking.subject.FormationScope;
 import com.capstone.tracking.subject.ScopePhase;
 import com.capstone.tracking.subject.ScopeRules;
@@ -40,13 +39,13 @@ public class MeController {
     private final GroupCore core;
     private final ScopeRules rules;
 
-    public record MyGroup(UUID id, String code, String name, int size, GroupState state, boolean leader) {}
+    public record MyGroup(UUID id, String code, String name, int size, GroupState state, boolean leader, boolean finalized, Instant finalizedAt) {}
 
     public record MySubject(UUID subjectId, String code, String name, UUID scopeId, ScopePhase phase, Instant deadline,
-                            boolean canAct, Eligibility eligibility, String eligibilityReason, boolean finalized,
+                            boolean canAct, Eligibility eligibility, String eligibilityReason,
                             NoGroupReason noGroupReason, MyGroup group) {}
 
-    public record MySemester(String semesterCode, String semesterName, SemesterStatus status, String majorCode,
+    public record MySemester(String semesterCode, String semesterName, String majorCode,
                              String majorName, int currentTerm, boolean readOnly, List<MySubject> subjects) {}
 
     @Operation(summary = "My semesters and subjects, newest semester first (students)")
@@ -65,13 +64,13 @@ public class MeController {
                 GroupMember m = core.membershipOf(e.getId());
                 MyGroup group = m == null ? null : new MyGroup(m.getGroup().getId(), m.getGroup().getCode(),
                         m.getGroup().getName(), (int) core.size(m.getGroup().getId()),
-                        core.state(m.getGroup(), core.size(m.getGroup().getId()), now), m.isLeader());
+                        core.state(m.getGroup(), core.size(m.getGroup().getId()), now), m.isLeader(), m.getGroup().isFinalized(), m.getGroup().getFinalizedAt());
                 subjects.add(new MySubject(e.getSubjectId(), scope.getSubject().getCode(), scope.getSubject().getName(),
                         scope.getId(), scope.getPhase(), rules.deadline(scope),
                         !readOnly && !e.isIneligible() && rules.isOpen(scope, now), e.getEligibility(),
-                        e.getEligibilityReason(), e.isFinalized(), m == null ? e.getNoGroupReason() : null, group));
+                        e.getEligibilityReason(), m == null ? e.getNoGroupReason() : null, group));
             }
-            result.add(new MySemester(ss.getSemesterCode(), semester.getName(), semester.status(now),
+            result.add(new MySemester(ss.getSemesterCode(), semester.getName(),
                     ss.getMajor().getCode(), ss.getMajor().getName(), ss.getCurrentTerm(), readOnly, subjects));
             first = false;
         }

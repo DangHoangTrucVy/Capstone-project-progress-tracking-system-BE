@@ -8,7 +8,7 @@ import java.util.UUID;
  * rows, each rejected row with its reason. {@code committed} false: nothing was written (preview).
  *
  * @param newMajors       majors the file names that do not exist yet (created on confirm)
- * @param blockedFinalized ineligibility rows of a finalized scope: not written, the Moderator decides whether to reopen
+ * @param blockedFinalized legacy compatibility field; always empty under the revised rules (updates work after finalization)
  */
 public record ImportReport(
         boolean committed,

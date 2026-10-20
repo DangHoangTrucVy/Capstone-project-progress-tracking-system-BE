@@ -1,5 +1,6 @@
-%% ERD - Website ghép nhóm (Team Formation Website), requirement v2.9 (20/10/2026)
-%% Generated from src/main/resources/db/migration V1-V19 (PostgreSQL). Every table except semesters and the
+%% ERD - Website ghép nhóm (Team Formation Website), revised requirement supplied 21/10/2026
+%% Active domain from migrations V1-V20 (PostgreSQL); inactive compatibility columns and deferred audit omitted.
+%% Every table except semesters and the
 %% infrastructure tables also has created_at / updated_at, left out for readability. Actor columns (*_by) reference
 %% USERS; only business relationships are drawn as lines, the others are marked "FK users".
 %% Infrastructure tables with no relationships: email_outbox, domain_event_outbox.
@@ -25,15 +26,13 @@ erDiagram
     STUDENT_GROUPS ||--o{ LEADER_TRANSFERS : "group_id"
     SEMESTERS |o--o{ IMPORT_BATCHES : "semester_code"
     USERS ||--o{ NOTIFICATIONS : "recipient_id"
-    USERS |o--o{ SYSTEM_AUDIT_TRAIL : "performed_by"
 
     USERS {
         uuid id PK
         varchar email UK
         varchar full_name
-        varchar password_hash "legacy nullable - Google sign-in only"
+        varchar password_hash "Admin and Moderator only; students Google"
         varchar role "ADMIN|LECTURER|STUDENT"
-        boolean lecturer_imported "required for Moderator"
         varchar status "ACTIVE|SUSPENDED|INACTIVE"
         varchar student_code UK
         varchar phone
@@ -51,7 +50,6 @@ erDiagram
         timestamp formation_opens_at "common opening date"
         timestamp default_deadline "common deadline"
         uuid moderator_id FK
-        timestamp archived_at "status: computed + Archived"
     }
     MAJORS {
         uuid id PK
@@ -104,8 +102,6 @@ erDiagram
         varchar eligibility_reason
         uuid eligibility_updated_by "FK users"
         timestamp eligibility_updated_at
-        boolean finalized
-        timestamp finalized_at
         varchar no_group_reason
     }
     STUDENT_GROUPS {
@@ -115,6 +111,8 @@ erDiagram
         varchar name
         varchar wanted_skills
         boolean locked "Leader lock"
+        boolean finalized "group finalization, independent of size and lock"
+        timestamp finalized_at
         uuid created_by "FK users"
         timestamp dissolved_at
         varchar dissolved_reason "TOO_SMALL_AT_DEADLINE|EMPTY|MODERATOR"
@@ -196,14 +194,4 @@ erDiagram
         uuid group_id
         uuid entity_id
         timestamp read_at
-    }
-    SYSTEM_AUDIT_TRAIL {
-        uuid id PK
-        varchar entity_name
-        uuid entity_id
-        varchar action
-        uuid performed_by FK "null = system"
-        varchar semester_code
-        timestamp performed_at
-        text details_json
     }

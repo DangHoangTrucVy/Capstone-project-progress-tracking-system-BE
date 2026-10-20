@@ -79,7 +79,7 @@ class RequirementsV29IntegrationTest extends TestSupport {
     }
 
     @Test
-    void finalizedRosterAndModeratorChangesAreBlockedButLeaderTransferStillWorks() throws Exception {
+    void moderatorMayChangeFinalizedRosterWhileStudentsRemainReadOnly() throws Exception {
         var w = world(4, 0);
         var s = w.students();
         var group = createGroup(w, s.get(0), "Finalized");
@@ -89,16 +89,16 @@ class RequirementsV29IntegrationTest extends TestSupport {
         postJson("/api/v1/scopes/" + w.scope().getId() + "/finalize", w.moderator(), Map.of())
                 .andExpect(status().isOk());
         postJson("/api/v1/groups/" + group + "/moderation/add", w.moderator(), Map.of("userId", s.get(3).getId()))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.errorCode").value("SCOPE_FINALIZED"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.finalized").value(true));
         var ss = semesterStudentRepository.findBySemesterCodeAndUserId(w.code(), s.get(0).getId()).orElseThrow();
         putJson("/api/v1/semester-students/" + ss.getId(), w.moderator(), Map.of("fullName", "Changed"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isOk());
         putJson("/api/v1/me/profile", s.get(0), Map.of("phone", "0999999999", "profilePrivate", true))
                 .andExpect(status().isConflict());
         var transfer = id(postJson("/api/v1/groups/" + group + "/leader-transfers", s.get(0),
                 Map.of("toUserId", s.get(1).getId(), "leaveAfter", false)).andExpect(status().isCreated()));
         postJson("/api/v1/leader-transfers/" + transfer + "/accept", s.get(1), Map.of()).andExpect(status().isOk());
-        assertThat(scopeRepository.findById(w.scope().getId()).orElseThrow().getLastChangeAfterFinalize()).isNotBlank();
+        assertThat(groupRepository.findById(group).orElseThrow().isFinalized()).isTrue();
     }
 
     @Test
@@ -117,19 +117,13 @@ class RequirementsV29IntegrationTest extends TestSupport {
     }
 
     @Test
-    void unimportedLecturerCannotBeAssignedAndAccountCreationCannotBypassLists() throws Exception {
+    void adminCanAssignModeratorWithoutAnyLecturerImport() throws Exception {
         var w = world(1, 0);
-        var lecturer = user("not-imported", Role.LECTURER);
-        lecturer.setLecturerImported(false);
-        userRepository.save(lecturer);
-        putJson("/api/v1/semesters/" + w.code() + "/moderator", w.admin(), Map.of("lecturerId", lecturer.getId()))
-                .andExpect(status().isBadRequest());
-        postJson("/api/v1/users", w.admin(), Map.of("email", "manual" + suffix + "@gmail.com", "fullName", "Manual",
-                "role", "LECTURER")).andExpect(status().isBadRequest());
-        upload("/api/v1/imports/lecturers", w.admin(), "lecturers.csv", "Họ tên,Email\nImported," + lecturer.getEmail() + "\n")
+        var lecturer = user("created-moderator", Role.LECTURER);
+        putJson("/api/v1/semesters/" + w.code() + "/moderator", w.admin(), Map.of("moderatorId", lecturer.getId()))
                 .andExpect(status().isOk());
-        putJson("/api/v1/semesters/" + w.code() + "/moderator", w.admin(), Map.of("lecturerId", lecturer.getId()))
-                .andExpect(status().isOk());
+        postJson("/api/v1/users", w.admin(), Map.of("email", "admin2" + suffix + "@gmail.com", "fullName", "Forbidden",
+                "password", "Password123", "role", "ADMIN")).andExpect(status().isBadRequest());
     }
 
     @Test

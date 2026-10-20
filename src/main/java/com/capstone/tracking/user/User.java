@@ -42,11 +42,6 @@ public class User extends BaseEntity implements UserDetails {
     @Column(nullable = false, length = 20)
     private Role role;
 
-    /** Only the lecturer import establishes membership of the approved lecturer list (requirement 9). */
-    @Column(nullable = false)
-    @Builder.Default
-    private boolean lecturerImported = false;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default

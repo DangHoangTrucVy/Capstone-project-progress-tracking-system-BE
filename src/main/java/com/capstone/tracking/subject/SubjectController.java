@@ -38,6 +38,7 @@ public class SubjectController {
 
     private final SubjectService subjects;
     private final ScopeService scopes;
+    private final com.capstone.tracking.semester.Access access;
 
     public record DeadlineRequest(Instant deadline) {}
 
@@ -47,8 +48,8 @@ public class SubjectController {
 
     @Operation(summary = "List the semester's subjects with their scopes")
     @GetMapping("/semesters/{semester}/subjects")
-    public List<SubjectResponse> list(@PathVariable String semester) {
-        return subjects.list(semester);
+    public List<SubjectResponse> list(@PathVariable String semester, @AuthenticationPrincipal User currentUser) {
+        return subjects.list(semester, currentUser);
     }
 
     @Operation(summary = "Initialize Capstone for a legacy semester without configuration (Moderator); no other subjects allowed")
@@ -64,11 +65,11 @@ public class SubjectController {
 
     @Operation(summary = "Get a subject with its scopes")
     @GetMapping("/subjects/{subjectId}")
-    public SubjectResponse get(@PathVariable UUID subjectId) {
-        return subjects.toResponse(subjects.get(subjectId));
+    public SubjectResponse get(@PathVariable UUID subjectId, @AuthenticationPrincipal User currentUser) {
+        return subjects.view(subjectId, currentUser);
     }
 
-    @Operation(summary = "Configure the Capstone term before formation opens, or change the request lifetime (Moderator)")
+    @Operation(summary = "Configure request lifetime (Moderator); formation term is fixed at 8 for Capstone term 9")
     @PutMapping("/subjects/{subjectId}")
     public SubjectResponse update(@PathVariable UUID subjectId, @RequestBody SubjectService.SubjectRequest request,
                                   @AuthenticationPrincipal User currentUser) {
@@ -84,8 +85,8 @@ public class SubjectController {
 
     @Operation(summary = "Get a formation scope")
     @GetMapping("/scopes/{scopeId}")
-    public ScopeResponse scope(@PathVariable UUID scopeId) {
-        return subjects.toResponse(scopes.get(scopeId));
+    public ScopeResponse scope(@PathVariable UUID scopeId, @AuthenticationPrincipal User currentUser) {
+        return subjects.viewScope(scopes.get(scopeId), currentUser);
     }
 
     @Operation(summary = "Set the scope's own deadline, or null to follow the common deadline (Moderator, before the deadline)")
@@ -104,7 +105,8 @@ public class SubjectController {
 
     @Operation(summary = "What still blocks finalizing the list, and the warnings")
     @GetMapping("/scopes/{scopeId}/finalize-check")
-    public FinalizeCheck finalizeCheck(@PathVariable UUID scopeId) {
+    public FinalizeCheck finalizeCheck(@PathVariable UUID scopeId, @AuthenticationPrincipal User currentUser) {
+        access.requireModerator(scopes.get(scopeId).semesterCode(), currentUser);
         return scopes.check(scopeId);
     }
 

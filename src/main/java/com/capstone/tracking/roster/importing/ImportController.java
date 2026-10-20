@@ -29,13 +29,12 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@Tag(name = "Imports", description = "Student list, ineligibility file and lecturer list: preview, then confirm (Admin)")
+@Tag(name = "Imports", description = "Student list and eligibility: preview then confirm (Admin); phone is optional")
 @SecurityRequirement(name = "bearerAuth")
 public class ImportController {
 
     private final StudentImportService students;
     private final EligibilityImportService eligibility;
-    private final LecturerImportService lecturers;
     private final ImportBatchRepository batches;
     private final Access access;
 
@@ -54,7 +53,7 @@ public class ImportController {
         return students.process(semester, file.getOriginalFilename(), file.getBytes(), false, currentUser);
     }
 
-    @Operation(summary = "Import the student list (columns: MSSV, Họ tên, Email, Số điện thoại, Kỳ, Ngành)")
+    @Operation(summary = "Import students (MSSV, Họ tên, Email, Kỳ=8, Ngành; optional Số điện thoại, Điều kiện, Lý do)")
     @PostMapping(value = "/semesters/{semester}/imports/students", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ImportReport importStudents(@PathVariable String semester, @RequestParam("file") MultipartFile file,
                                        @AuthenticationPrincipal User currentUser) throws IOException {
@@ -75,31 +74,5 @@ public class ImportController {
         return eligibility.process(semester, file.getOriginalFilename(), file.getBytes(), true, currentUser);
     }
 
-    @Operation(summary = "Check a lecturer list file without writing it")
-    @PostMapping(value = "/imports/lecturers/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ImportReport previewLecturers(@RequestParam("file") MultipartFile file,
-                                         @AuthenticationPrincipal User currentUser) throws IOException {
-        return lecturers.process(file.getOriginalFilename(), file.getBytes(), false, currentUser);
-    }
 
-    @Operation(summary = "Import the lecturer list (columns: Họ tên, Email)")
-    @PostMapping(value = "/imports/lecturers", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ImportReport importLecturers(@RequestParam("file") MultipartFile file,
-                                        @AuthenticationPrincipal User currentUser) throws IOException {
-        return lecturers.process(file.getOriginalFilename(), file.getBytes(), true, currentUser);
-    }
-
-    @Operation(summary = "Import history of a semester: who, when, which file, how many rows")
-    @GetMapping("/semesters/{semester}/imports")
-    public List<BatchResponse> history(@PathVariable String semester, @AuthenticationPrincipal User currentUser) {
-        access.requireModerator(semester, currentUser);
-        return batches.findBySemesterCodeOrderByImportedAtDesc(semester).stream().map(BatchResponse::from).toList();
-    }
-
-    @Operation(summary = "Lecturer list import history (Admin)")
-    @GetMapping("/imports/lecturers")
-    public List<BatchResponse> lecturerHistory(@AuthenticationPrincipal User currentUser) {
-        access.requireAdmin(currentUser);
-        return batches.findByKindOrderByImportedAtDesc(ImportBatch.Kind.LECTURERS).stream().map(BatchResponse::from).toList();
-    }
 }

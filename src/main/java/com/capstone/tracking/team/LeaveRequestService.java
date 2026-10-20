@@ -144,7 +144,6 @@ public class LeaveRequestService {
         if (request.getStatus() != Status.PENDING_MODERATOR) {
             throw closed(request);
         }
-        rules.requireNotFinalized(group.getScope());
         Instant now = Instant.now();
         request.setStatus(approve ? Status.APPROVED : Status.REJECTED);
         request.setDecidedBy(actor.getId());
@@ -159,7 +158,9 @@ public class LeaveRequestService {
                         String.valueOf(request.getUser().getStudentCode()), "group", group.getCode()));
         notifier.publish(DomainEvent.of(DomainEventType.LEAVE_DECIDED,
                 "Moderator đã " + (approve ? "đồng ý" : "từ chối") + " yêu cầu rời nhóm " + group.getName() + " của bạn",
-                request.getUser().getId()).about(group.getId(), request.getId())
+                java.util.stream.Stream.concat(java.util.stream.Stream.of(request.getUser().getId()),
+                        java.util.Optional.ofNullable(core.leaderOf(group.getId())).stream().map(m -> m.getUser().getId()))
+                        .distinct().toList()).about(group.getId(), request.getId())
                 .withDetails(request.getDecisionNote(), null).by(actor.getId()));
         return request;
     }

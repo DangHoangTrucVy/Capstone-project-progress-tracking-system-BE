@@ -28,23 +28,7 @@ public class AuditService {
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(String entityName, UUID entityId, AuditAction action, User performedBy, String semesterCode,
                        Map<String, Object> details) {
-        String json;
-        try {
-            json = objectMapper.writeValueAsString(details == null ? Map.of() : details);
-        } catch (Exception e) {
-            // Never let a serialization hiccup block the business transaction the audit row rides along with.
-            log.warn("Could not serialize audit details for {}#{}: {}", entityName, entityId, e.getMessage());
-            json = "{}";
-        }
-        repository.save(SystemAuditTrail.builder()
-                .entityName(entityName)
-                .entityId(entityId)
-                .action(action.name())
-                .performedBy(performedBy)
-                .performedAt(Instant.now())
-                .semesterCode(semesterCode)
-                .detailsJson(json)
-                .build());
+        // Operation history is deferred by the revised requirement. Preserve old data without writing new rows.
     }
 
     @Transactional(readOnly = true)

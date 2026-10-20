@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-@Tag(name = "Auth", description = "Sign-in (only accounts on the imported lists) and the current identity")
+@Tag(name = "Auth", description = "Students: Google and imported roster. Admin/Moderator: email and password.")
 public class AuthController {
 
     private final AuthService authService;
@@ -33,13 +33,13 @@ public class AuthController {
     /** clientId is what the FE passes to Google Identity Services; the button is hidden when it is null. */
     public record GoogleConfigResponse(boolean enabled, String clientId) {}
 
-    @io.swagger.v3.oas.annotations.Hidden
+    @Operation(summary = "Admin and Moderator sign in with email/password; students use Google")
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
 
-    @Operation(summary = "Log in with a Google ID token, returns a JWT; the account must be on an imported list")
+    @Operation(summary = "Student Google login; email must match an imported student and cannot be an FPT account")
     @PostMapping("/google")
     public LoginResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
         return authService.googleLogin(request);

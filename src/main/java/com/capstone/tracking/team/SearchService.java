@@ -32,6 +32,10 @@ public class SearchService {
 
     public List<ProfileView> candidates(UUID subjectId, String q, String skill, User viewer) {
         Enrollment mine = gate.enrollment(subjectId, viewer);
+        StudentGroup ownGroup = core.groupOf(mine.getId());
+        if (ownGroup == null || !core.isLeader(ownGroup.getId(), viewer.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Only a group Leader searches candidates");
+        }
         String query = fold(q);
         String skillQuery = fold(skill);
         return enrollments.findWithoutGroup(mine.getScope().getId()).stream()

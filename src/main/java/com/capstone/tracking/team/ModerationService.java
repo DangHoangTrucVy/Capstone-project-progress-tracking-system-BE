@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The Moderator's coordination until finalization (7.1): put students without a group into groups below the maximum
+ * The assigned Moderator's coordination in every phase, including after finalization (7.1): put students without a group into groups below the maximum
  * size (locked groups too), move students between groups, take a student out, create a group and appoint its Leader
  * without Apply or Invite, and dissolve groups, including Leader-locked groups before the deadline; every change is
  * recorded and the people affected are told.
@@ -287,7 +287,6 @@ public class ModerationService {
     private FormationScope requireCoordinating(FormationScope scope, User actor) {
         access.requireModerator(scope.semesterCode(), actor);
         FormationScope current = locks.read(FormationScope.class, scope.getId());
-        rules.requireNotFinalized(current);
         return current;
     }
 

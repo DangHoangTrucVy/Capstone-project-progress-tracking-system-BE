@@ -54,6 +54,13 @@ public class StudentGroup extends BaseEntity {
     @Column(nullable = false)
     private UUID createdBy;
 
+    /** Finalization belongs to the group; it is independent of Full and Leader lock. */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean finalized = false;
+
+    private Instant finalizedAt;
+
     private Instant dissolvedAt;
 
     @Enumerated(EnumType.STRING)

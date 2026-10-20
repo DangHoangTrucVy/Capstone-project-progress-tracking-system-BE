@@ -43,6 +43,14 @@ public class ReportController {
     private final AuditService audit;
     private final Access access;
 
+    @Operation(summary = "Prepare Excel export: notify the assigned Moderator about groups below 3; export stays allowed")
+    @GetMapping("/export-check")
+    public ExcelExportService.ExportCheck exportCheck(@PathVariable String semester,
+            @RequestParam(required = false) UUID subjectId, @RequestParam(required = false) UUID majorId,
+            @AuthenticationPrincipal User currentUser) {
+        return export.check(semester, subjectId, majorId, currentUser);
+    }
+
     public record AuditEntry(UUID id, String entityName, UUID entityId, String action, UUID performedBy,
                              String performedByName, Instant performedAt, String details) {
         static AuditEntry from(SystemAuditTrail a) {
@@ -82,11 +90,5 @@ public class ReportController {
                 .body(file.content());
     }
 
-    @Operation(summary = "History of the semester's operations: who did what and when (Admin, Moderator)")
-    @GetMapping("/audit")
-    public Page<AuditEntry> audit(@PathVariable String semester, @ParameterObject Pageable pageable,
-                                  @AuthenticationPrincipal User currentUser) {
-        access.requireModerator(semester, currentUser);
-        return audit.list(semester, pageable).map(AuditEntry::from);
-    }
+
 }

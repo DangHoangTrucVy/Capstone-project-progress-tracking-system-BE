@@ -31,7 +31,7 @@ class PostgresMigrationTest {
         List<String> versions = jdbc.queryForList(
                 "select version from flyway_schema_history where success and version is not null order by installed_rank",
                 String.class);
-        assertThat(versions).contains("1", "2", "8", "17", "18", "19", "2000", "2001");
+        assertThat(versions).contains("1", "2", "8", "17", "18", "19", "20", "2000", "2001");
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where not success", Integer.class))
                 .isZero();
     }
@@ -66,10 +66,8 @@ class PostgresMigrationTest {
     }
 
     @Test
-    void seededAccountsCannotSignInWithPassword() {
-        assertThatThrownBy(() -> authService.login(new LoginRequest("lecturer01@fpt.edu.vn", "Admin@123")))
-                .isInstanceOf(com.capstone.tracking.common.exception.ApiException.class)
-                .hasMessageContaining("Google");
+    void seededModeratorSignsInWithPassword() {
+        assertThat(authService.login(new LoginRequest("lecturer01@fpt.edu.vn", "Admin@123")).accessToken()).isNotBlank();
         assertThat(jdbc.queryForObject("select lecturer_imported from users where email = 'lecturer01@fpt.edu.vn'", Boolean.class))
                 .isTrue();
     }

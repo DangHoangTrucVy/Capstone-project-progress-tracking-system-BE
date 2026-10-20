@@ -41,7 +41,10 @@ public class NotificationHandler {
     public void handle(DomainEvent event) {
         Set<UUID> recipients = new LinkedHashSet<>(event.recipients() == null ? List.of() : event.recipients());
         recipients.remove(null);
-        recipients.remove(event.actorId()); // nobody needs to be told about their own action
+        // Export validation is a warning the requesting Moderator must receive as well.
+        if (event.type() != DomainEventType.EXPORT_SMALL_GROUPS) {
+            recipients.remove(event.actorId());
+        }
 
         String message = truncate(event.message(), 500);
         List<Notification> created = new ArrayList<>();

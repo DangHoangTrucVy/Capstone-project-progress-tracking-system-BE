@@ -20,8 +20,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * A student in one subject, with the three-part status of 5.1 kept per subject: eligibility, finalized flag and (computed
- * from {@code group_members}, never stored) whether they have a group.
+ * A student's eligibility in Capstone. Whether they have a group is computed from group_members;
+ * finalization belongs to StudentGroup and is never a student status.
  */
 @Entity
 @Table(name = "enrollments")
@@ -58,13 +58,6 @@ public class Enrollment extends BaseEntity {
     private UUID eligibilityUpdatedBy;
 
     private Instant eligibilityUpdatedAt;
-
-    /** "Đã chốt": set by the system when the list is finalized, for members of groups of a valid size. */
-    @Column(nullable = false)
-    @Builder.Default
-    private boolean finalized = false;
-
-    private Instant finalizedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 30)

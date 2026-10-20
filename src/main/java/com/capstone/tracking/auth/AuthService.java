@@ -21,9 +21,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Signing in (mục 9). An account signs in only when it is on an imported list: a student must be on the student list
- * of some semester, a lecturer on the lecturer list; nobody is matched by name and nobody can claim another's student
- * code. A verified Google account that is on no list is refused. Ineligible students sign in and only view.
+ * Students use Google with an imported student email. Admin/Moderator use email and password.
+ * Nobody is matched by name or allowed to claim another student's code. Ineligible students may still sign in to view.
  */
 @Service
 @RequiredArgsConstructor
@@ -33,12 +32,31 @@ public class AuthService {
     private final SemesterStudentRepository semesterStudents;
     private final JwtTokenProvider jwtTokenProvider;
     private final GoogleTokenVerifier googleTokenVerifier;
+    private final org.springframework.security.authentication.AuthenticationManager authenticationManager;
+    private final LoginAttemptLimiter limiter;
 
     @Value("${app.jwt.access-token-exp-minutes}")
     private long accessTokenExpMinutes;
 
     public LoginResponse login(LoginRequest request) {
-        throw new ApiException(HttpStatus.FORBIDDEN, "GOOGLE_LOGIN_REQUIRED", "Sign in with your Google account");
+        String email = request.email().trim().toLowerCase(java.util.Locale.ROOT);
+        limiter.checkAllowed(email);
+        User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        if (user != null && user.getRole() == Role.STUDENT) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "GOOGLE_LOGIN_REQUIRED", "Students must sign in with Google");
+        }
+        try {
+            authenticationManager.authenticate(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                    email, request.password()));
+        } catch (org.springframework.security.authentication.BadCredentialsException ex) {
+            limiter.recordFailure(email);
+            throw ex;
+        }
+        limiter.reset(email);
+        if (user == null) {
+            throw new org.springframework.security.authentication.BadCredentialsException("Bad credentials");
+        }
+        return issueTokens(user);
     }
 
     @Transactional
@@ -47,6 +65,12 @@ public class AuthService {
         User user = userRepository.findByEmailIgnoreCase(identity.email()).orElseThrow(() ->
                 new ApiException(HttpStatus.FORBIDDEN, "NOT_ON_LIST",
                         "This account is not on the imported student or lecturer list"));
+        if (user.getRole() != Role.STUDENT) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "PASSWORD_LOGIN_REQUIRED", "Admin and Moderator use email and password");
+        }
+        if (identity.email().toLowerCase(java.util.Locale.ROOT).endsWith("@fpt.edu.vn")) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "STUDENT_GOOGLE_EMAIL_REQUIRED", "Use the Google email in the training department list, not an FPT account");
+        }
         if (!user.isAccountNonLocked()) {
             throw new LockedException("This account is suspended");
         }
@@ -62,9 +86,6 @@ public class AuthService {
 
     /** A student account exists because of an import, but it must be on some semester's list to sign in. */
     private void requireOnList(User user) {
-        if (user.getRole() == Role.LECTURER && !user.isLecturerImported()) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "NOT_ON_LIST", "You are not on the imported lecturer list");
-        }
         if (user.getRole() == Role.STUDENT && !semesterStudents.existsByUserId(user.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "NOT_ON_LIST", "You are not on any semester's student list");
         }

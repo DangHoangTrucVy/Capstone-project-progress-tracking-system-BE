@@ -67,9 +67,10 @@ public class StudentImportService {
     private final ObjectMapper objectMapper;
     private final com.capstone.tracking.semester.SemesterRepository semesters;
     private final com.capstone.tracking.common.Locks locks;
+    private final com.capstone.tracking.roster.EligibilityService eligibilityService;
 
     private record Row(Line line, String code, String name, String email, String phone, int term, String majorKey,
-                       Major major, User user, SemesterStudent existing) {}
+                       Major major, User user, SemesterStudent existing, ImportedEligibility decision) {}
 
     @Transactional
     public ImportReport process(String semesterCode, String fileName, byte[] data, boolean commit, User actor) {
@@ -79,13 +80,10 @@ public class StudentImportService {
         Semester semester = access.requireModerator(semesterCode, actor);
         scopes.findBySemester(semesterCode).stream().map(com.capstone.tracking.subject.FormationScope::getId).sorted()
                 .forEach(id -> locks.write(com.capstone.tracking.subject.FormationScope.class, id));
-        if (semester.getArchivedAt() != null) {
-            throw new ApiException(HttpStatus.CONFLICT, "SEMESTER_ARCHIVED", "The semester is archived");
-        }
         Table table = SpreadsheetReader.read(data);
         List<String> missing = new ArrayList<>();
         for (String[] col : new String[][]{{SpreadsheetReader.CODE, "Mã số sinh viên"}, {SpreadsheetReader.NAME, "Họ tên"},
-                {SpreadsheetReader.EMAIL, "Email"}, {SpreadsheetReader.PHONE, "Số điện thoại"},
+                {SpreadsheetReader.EMAIL, "Email"},
                 {SpreadsheetReader.TERM, "Kỳ học"}, {SpreadsheetReader.MAJOR, "Ngành"}}) {
             if (!table.has(col[0])) {
                 missing.add(col[1]);
@@ -136,11 +134,20 @@ public class StudentImportService {
                 error = "Thiếu kỳ học";
             } else if (term == null) {
                 error = "Sai định dạng kỳ học (số từ 1 đến 12)";
+            } else if (term != 8) {
+                error = "Chỉ nhập sinh viên kỳ 8 để ghép nhóm cho Capstone kỳ 9";
             } else if (majorText == null) {
                 error = "Thiếu ngành";
             }
             if (error != null) {
                 errors.add(new RowError(line.rowNumber(), code, error));
+                continue;
+            }
+            ImportedEligibility decision;
+            try {
+                decision = ImportedEligibility.optional(line);
+            } catch (BadRequestException ex) {
+                errors.add(new RowError(line.rowNumber(), code, ex.getMessage()));
                 continue;
             }
             Major major = majors.findByCodeIgnoreCase(majorText).or(() -> majors.findByNameIgnoreCase(majorText)).orElse(null);
@@ -162,11 +169,6 @@ public class StudentImportService {
             User user = byCode != null ? byCode : byEmail;
             SemesterStudent existing = user == null ? null
                     : semesterStudents.findBySemesterCodeAndUserId(semesterCode, user.getId()).orElse(null);
-            if (existing != null && enrollments.findBySemesterStudentId(existing.getId()).stream()
-                    .anyMatch(e -> e.getScope().getPhase() == ScopePhase.FINALIZED)) {
-                errors.add(new RowError(line.rowNumber(), code, "Danh sách đã chốt: phải mở lại trước khi cập nhật"));
-                continue;
-            }
             String locked = structuralLock(semesterSubjects, existing, term, major);
             if (locked != null) {
                 errors.add(new RowError(line.rowNumber(), code, locked));
@@ -175,7 +177,7 @@ public class StudentImportService {
             if (major == null) {
                 newMajors.putIfAbsent(SpreadsheetReader.fold(majorText), majorText);
             }
-            valid.add(new Row(line, code, name, email, phone, term, SpreadsheetReader.fold(majorText), major, user, existing));
+            valid.add(new Row(line, code, name, email, phone, term, SpreadsheetReader.fold(majorText), major, user, existing, decision));
         }
 
         int created = 0;
@@ -199,6 +201,7 @@ public class StudentImportService {
         }
 
         Map<String, Major> createdMajors = new HashMap<>();
+        List<com.capstone.tracking.roster.EligibilityService.Change> eligibilityChanges = new ArrayList<>();
         newMajors.forEach((folded, display) -> createdMajors.put(folded, majors.saveAndFlush(
                 Major.builder().code(majorCode(display)).name(display.trim()).build())));
         for (Row row : valid) {
@@ -225,7 +228,14 @@ public class StudentImportService {
             }
             ss = semesterStudents.saveAndFlush(ss);
             sync.syncStudent(ss);
+            if (row.decision() != null) {
+                for (Enrollment e : enrollments.findBySemesterStudentId(ss.getId())) {
+                    eligibilityChanges.add(new com.capstone.tracking.roster.EligibilityService.Change(
+                            e.getId(), row.decision().value(), row.decision().reason()));
+                }
+            }
         }
+        eligibilityService.apply(eligibilityChanges, actor);
         ImportBatch batch = batches.save(ImportBatch.builder()
                 .kind(ImportBatch.Kind.STUDENTS)
                 .semesterCode(semesterCode)
@@ -256,6 +266,9 @@ public class StudentImportService {
         }
         boolean changed = existing.getCurrentTerm() != term || major == null
                 || !existing.getMajor().getId().equals(major.getId());
+        if (major == null || !existing.getMajor().getId().equals(major.getId())) {
+            return "không đổi ngành hoặc kỳ học: ngành của sinh viên không được thay đổi";
+        }
         if (!changed) {
             return null;
         }
@@ -274,10 +287,13 @@ public class StudentImportService {
                 .anyMatch(scope -> scope != null && scope.getPhase() != ScopePhase.PREPARING);
     }
 
-    private static boolean changes(Row row) {
+    private boolean changes(Row row) {
         User u = row.user();
         SemesterStudent ss = row.existing();
-        return !row.email().equalsIgnoreCase(u.getEmail()) || !row.name().equals(u.getFullName())
+        boolean eligibilityChanged = row.decision() != null && enrollments.findBySemesterStudentId(ss.getId()).stream()
+                .anyMatch(e -> e.getEligibility() != row.decision().value()
+                        || !Objects.equals(e.getEligibilityReason(), row.decision().reason()));
+        return eligibilityChanged || !row.email().equalsIgnoreCase(u.getEmail()) || !row.name().equals(u.getFullName())
                 || (row.phone() != null && !row.phone().equals(u.getPhone()))
                 || ss.getCurrentTerm() != row.term() || row.major() == null
                 || !ss.getMajor().getId().equals(row.major().getId());

@@ -37,9 +37,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (token != null && jwtTokenProvider.isValid(token) && SecurityContextHolder.getContext().getAuthentication() == null) {
             String email = jwtTokenProvider.parseClaims(token).get("email", String.class);
-            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+            UserDetails userDetails = null;
+            try {
+                userDetails = userDetailsService.loadUserByUsername(email);
+            } catch (org.springframework.security.core.userdetails.UsernameNotFoundException ignored) {
+                // An Admin may correct an email. Its old token is unauthenticated, not an internal-server error.
+            }
 
-            if (userDetails.isEnabled() && userDetails.isAccountNonLocked()) {
+            if (userDetails instanceof com.capstone.tracking.user.User current
+                    && current.getId().toString().equals(jwtTokenProvider.parseClaims(token).getSubject())
+                    && userDetails.isEnabled() && userDetails.isAccountNonLocked()) {
                 var authentication = new UsernamePasswordAuthenticationToken(
                         userDetails, null, userDetails.getAuthorities());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

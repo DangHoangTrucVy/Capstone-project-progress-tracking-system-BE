@@ -57,9 +57,8 @@ public class SemesterService {
     public record ModeratorRef(UUID id, String fullName, String email) {}
 
     public record SemesterResponse(String code, String name, LocalDate startDate, LocalDate endDate,
-                                   Instant formationOpensAt, Instant defaultDeadline, SemesterStatus status,
-                                   ModeratorRef moderator, long studentCount, long groupCount, long subjectCount,
-                                   Instant archivedAt) {}
+                                   Instant formationOpensAt, Instant defaultDeadline,
+                                   ModeratorRef moderator, long studentCount, long groupCount, long subjectCount) {}
 
     @Transactional
     public Semester create(SemesterRequest request, User actor) {
@@ -127,14 +126,6 @@ public class SemesterService {
         return semester;
     }
 
-    @Transactional
-    public Semester setArchived(String code, boolean archived, User actor) {
-        access.requireAdmin(actor);
-        Semester semester = lock(code);
-        semester.setArchivedAt(archived ? Instant.now() : null);
-        return semester;
-    }
-
     /** A semester holding student data is never deleted, only archived (3.1). */
     @Transactional
     public void delete(String code, User actor) {
@@ -157,9 +148,8 @@ public class SemesterService {
         UUID before = semester.getModeratorId();
         if (lecturerId != null) {
             User lecturer = users.findById(lecturerId).orElseThrow(() -> ResourceNotFoundException.of("User", lecturerId));
-            if (lecturer.getRole() != Role.LECTURER || lecturer.getStatus() != UserStatus.ACTIVE
-                    || !lecturer.isLecturerImported()) {
-                throw new BadRequestException("The Moderator must be an active lecturer from the imported lecturer list");
+            if (lecturer.getRole() != Role.LECTURER || lecturer.getStatus() != UserStatus.ACTIVE) {
+                throw new BadRequestException("The Moderator must be an active Moderator account created by Admin");
             }
         }
         semester.setModeratorId(lecturerId);
@@ -177,23 +167,34 @@ public class SemesterService {
         return semesters.findById(code).orElseThrow(() -> ResourceNotFoundException.of("Semester", code));
     }
 
+    public SemesterResponse details(String code, User viewer) {
+        Semester semester = get(code);
+        if (!mayView(semester, viewer)) throw new org.springframework.security.access.AccessDeniedException("This semester is not assigned to you");
+        return toResponse(semester);
+    }
+
+    private boolean mayView(Semester semester, User viewer) {
+        return access.isModerator(semester, viewer) || (viewer.getRole() == Role.STUDENT
+                && semesterStudents.findBySemesterCodeAndUserId(semester.getCode(), viewer.getId()).isPresent());
+    }
+
     /**
      * The semester list with code, dates, status and the numbers of students and groups (3.1); filtered by status or
      * by "coordinated by me", sorted by code, startDate, status, studentCount or groupCount.
      */
-    public List<SemesterResponse> list(SemesterStatus status, boolean mine, User viewer, String sort, boolean desc) {
+    public List<SemesterResponse> list(String q, boolean mine, User viewer, String sort, boolean desc) {
         Instant now = Instant.now();
         Comparator<SemesterResponse> order = switch (sort == null ? "startDate" : sort) {
             case "code" -> Comparator.comparing(SemesterResponse::code);
-            case "status" -> Comparator.comparing(SemesterResponse::status);
             case "studentCount" -> Comparator.comparingLong(SemesterResponse::studentCount);
             case "groupCount" -> Comparator.comparingLong(SemesterResponse::groupCount);
             default -> Comparator.comparing(SemesterResponse::startDate);
         };
         return semesters.findAllByOrderByStartDateDesc().stream()
+                .filter(s -> mayView(s, viewer))
                 .filter(s -> !mine || viewer.getId().equals(s.getModeratorId()))
                 .map(s -> toResponse(s, now))
-                .filter(r -> status == null ? r.status() != SemesterStatus.ARCHIVED : r.status() == status)
+                .filter(r -> q == null || q.isBlank() || (r.code() + " " + r.name()).toLowerCase(Locale.ROOT).contains(q.trim().toLowerCase(Locale.ROOT)))
                 .sorted(desc ? order.reversed() : order)
                 .toList();
     }
@@ -206,8 +207,8 @@ public class SemesterService {
         ModeratorRef moderator = s.getModeratorId() == null ? null : users.findById(s.getModeratorId())
                 .map(u -> new ModeratorRef(u.getId(), u.getFullName(), u.getEmail())).orElse(null);
         return new SemesterResponse(s.getCode(), s.getName(), s.getStartDate(), s.getEndDate(), s.getFormationOpensAt(),
-                s.getDefaultDeadline(), s.status(now), moderator, semesterStudents.countBySemesterCode(s.getCode()),
-                groups.countActiveBySemester(s.getCode()), subjects.countBySemesterCode(s.getCode()), s.getArchivedAt());
+                s.getDefaultDeadline(), moderator, semesterStudents.countBySemesterCode(s.getCode()),
+                groups.countActiveBySemester(s.getCode()), subjects.countBySemesterCode(s.getCode()));
     }
 
     private Semester lock(String code) {

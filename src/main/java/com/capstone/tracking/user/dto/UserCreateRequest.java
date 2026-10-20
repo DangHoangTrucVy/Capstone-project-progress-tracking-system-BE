@@ -7,13 +7,13 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * An Admin creates an account directly (another Admin, or a single lecturer outside the list import). password is
- * optional: accounts that only sign in with Google need none. Students come from the student list import.
+ * Admin creates a Moderator (internal role LECTURER) with a password. Other roles are rejected.
+ * Admin is provisioned in the database; students come from the student roster and use Google only.
  */
 public record UserCreateRequest(
         @NotBlank @Email String email,
         @NotBlank String fullName,
-        @Size(min = 8, message = "Password must be at least 8 characters") String password,
+        @NotBlank @Size(min = 8, max = 72, message = "Password must be 8 to 72 characters") String password,
         @NotNull Role role,
         @Size(max = 20) String phone
 ) {

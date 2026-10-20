@@ -33,6 +33,7 @@ public final class SpreadsheetReader {
     public static final String SUBJECT = "subject";
     public static final String ELIGIBILITY = "eligibility";
     public static final String REASON = "reason";
+    public static final String CREDITS_PERCENT = "creditsPercent";
 
     private static final Map<String, String> ALIASES = new HashMap<>();
 
@@ -47,6 +48,7 @@ public final class SpreadsheetReader {
         alias(SUBJECT, "mon", "ma mon", "mon hoc", "subject", "subject code");
         alias(ELIGIBILITY, "dieu kien", "du dieu kien", "eligible", "eligibility");
         alias(REASON, "ly do", "reason", "ghi chu", "note");
+        alias(CREDITS_PERCENT, "ty le tin chi", "phan tram tin chi", "completed credits percent", "credit completion percent");
     }
 
     /** One data row: its 1-based row number in the file and its cells by column key. */
