@@ -99,14 +99,6 @@ public class SubjectService {
         return subject;
     }
 
-    /** Only while every scope is still being prepared: no group exists yet. */
-    @Transactional
-    public void delete(UUID subjectId, User actor) {
-        Subject subject = get(subjectId);
-        access.requireModerator(subject.getSemesterCode(), actor);
-        throw new ConflictException("Capstone is the semester's required formation configuration and cannot be deleted");
-    }
-
     public Subject get(UUID subjectId) {
         return subjects.findById(subjectId).orElseThrow(() -> ResourceNotFoundException.of("Subject", subjectId));
     }

@@ -125,3 +125,8 @@ in-process (no Docker), apply every migration + the dev seed, validate the entit
 `InfrastructureIntegrationTest` needs Floci and Redis (`INFRA_TESTS=true`).
 
 > On JDK 21+ newer than Mockito's Byte Buddy supports, add `-DargLine=-Dnet.bytebuddy.experimental=true`.
+
+## API cleanup (21/10/2026)
+
+Client integration and removed operations: [API cleanup notes](docs/api-cleanup-20261021.md).
+Use semester-scoped student/group lists and `/users/moderators`; legacy compatibility operations have been removed.

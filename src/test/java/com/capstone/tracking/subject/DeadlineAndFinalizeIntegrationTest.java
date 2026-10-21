@@ -91,8 +91,8 @@ class DeadlineAndFinalizeIntegrationTest extends TestSupport {
         // A new group for the last student is too small; dissolving it in bulk puts them back without a group.
         UUID c = id(postJson("/api/v1/scopes/" + w.scope().getId() + "/groups", w.moderator(),
                 Map.of("name", "C", "leaderUserId", s.get(8).getId())).andExpect(status().isCreated()));
-        getAs("/api/v1/subjects/" + w.subjectId() + "/groups?maxSize=2", w.moderator())
-                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(c.toString()));
+        getAs("/api/v1/semesters/" + w.code() + "/groups?maxSize=2", w.moderator())
+                .andExpect(jsonPath("$.content.length()").value(1)).andExpect(jsonPath("$.content[0].id").value(c.toString()));
         postJson("/api/v1/moderation/dissolve", w.moderator(), Map.of("groupIds", List.of(c), "reason", "Dưới 3"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.dissolved").value(1));
 
@@ -104,7 +104,7 @@ class DeadlineAndFinalizeIntegrationTest extends TestSupport {
         Enrollment finalized = enrollmentRepository.findBySubjectIdAndUserId(w.subjectId(), s.get(0).getId()).orElseThrow();
         Enrollment notFinalized = enrollmentRepository.findBySubjectIdAndUserId(w.subjectId(), s.get(8).getId()).orElseThrow();
         assertThat(groupRepository.findById(a).orElseThrow().isFinalized()).isTrue();
-        assertThat(body(getAs("/api/v1/subjects/" + w.subjectId() + "/students", w.moderator())).toString()).doesNotContain("\"finalized\"");
+        assertThat(body(getAs("/api/v1/semesters/" + w.code() + "/students", w.moderator())).toString()).doesNotContain("\"finalized\"");
 
         // Finalized: view and export only, except transferring the Leader inside a group (recorded).
         postJson("/api/v1/groups/" + a + "/moderation/remove", w.moderator(), Map.of("userId", s.get(6).getId(), "reason", "x"))

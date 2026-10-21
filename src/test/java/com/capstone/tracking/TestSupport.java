@@ -72,6 +72,7 @@ public abstract class TestSupport {
     @Autowired protected GroupMemberRepository memberRepository;
     @Autowired protected JoinRequestRepository joinRequestRepository;
     @Autowired protected ScopeService scopeService;
+    @Autowired protected com.capstone.tracking.subject.SubjectService subjectService;
     @Autowired protected EmailOutboxDispatcher emailOutboxDispatcher;
     @MockBean protected EmailSender emailSender;
 
@@ -113,9 +114,9 @@ public abstract class TestSupport {
         Major otherMajor = major();
         List<User> a = enrol(semester, major, students);
         List<User> b = enrol(semester, otherMajor, otherMajorStudents);
-        UUID subjectId = UUID.fromString(body(postJson("/api/v1/semesters/" + semester.getCode() + "/subjects", moderator,
-                Map.of("code", "CAP", "name", "Capstone Project", "targetTerm", 8))
-                .andExpect(status().isCreated())).get("id").asText());
+        UUID subjectId = subjectService.create(semester.getCode(),
+                new com.capstone.tracking.subject.SubjectService.SubjectRequest("CAP", "Capstone Project", 8, null),
+                moderator).getId();
         FormationScope scope = scopeRepository.findBySubjectIdAndMajorId(subjectId, major.getId()).orElseThrow();
         FormationScope other = scopeRepository.findBySubjectIdAndMajorId(subjectId, otherMajor.getId()).orElse(null);
         scopeService.tick(scope.getId());

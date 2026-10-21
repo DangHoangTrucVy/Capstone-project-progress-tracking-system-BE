@@ -5,21 +5,17 @@ import com.capstone.tracking.subject.dto.ScopeResponse;
 import com.capstone.tracking.subject.dto.SubjectResponse;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -52,17 +48,6 @@ public class SubjectController {
         return subjects.list(semester, currentUser);
     }
 
-    @Operation(summary = "Initialize Capstone for a legacy semester without configuration (Moderator); no other subjects allowed")
-    @ApiResponse(responseCode = "201", description = "Created")
-    @PostMapping("/semesters/{semester}/subjects")
-    public ResponseEntity<SubjectResponse> create(@PathVariable String semester,
-                                                  @RequestBody SubjectService.SubjectRequest request,
-                                                  @AuthenticationPrincipal User currentUser) {
-        Subject created = subjects.create(semester, request, currentUser);
-        return ResponseEntity.created(URI.create("/api/v1/subjects/" + created.getId()))
-                .body(subjects.toResponse(created));
-    }
-
     @Operation(summary = "Get a subject with its scopes")
     @GetMapping("/subjects/{subjectId}")
     public SubjectResponse get(@PathVariable UUID subjectId, @AuthenticationPrincipal User currentUser) {
@@ -74,13 +59,6 @@ public class SubjectController {
     public SubjectResponse update(@PathVariable UUID subjectId, @RequestBody SubjectService.SubjectRequest request,
                                   @AuthenticationPrincipal User currentUser) {
         return subjects.toResponse(subjects.update(subjectId, request, currentUser));
-    }
-
-    @io.swagger.v3.oas.annotations.Hidden
-    @DeleteMapping("/subjects/{subjectId}")
-    public ResponseEntity<Void> delete(@PathVariable UUID subjectId, @AuthenticationPrincipal User currentUser) {
-        subjects.delete(subjectId, currentUser);
-        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "Get a formation scope")

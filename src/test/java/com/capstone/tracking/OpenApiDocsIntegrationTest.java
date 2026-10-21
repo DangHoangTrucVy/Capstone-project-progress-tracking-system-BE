@@ -23,7 +23,6 @@ class OpenApiDocsIntegrationTest extends TestSupport {
         JsonNode paths = paths();
         for (String[] op : new String[][] {
                 {"/api/v1/semesters", "post", "SemesterResponse"},
-                {"/api/v1/semesters/{semester}/subjects", "post", "SubjectResponse"},
                 {"/api/v1/subjects/{subjectId}/groups", "post", "GroupResponse"},
                 {"/api/v1/groups/{groupId}/applications", "post", "JoinRequestResponse"},
                 {"/api/v1/groups/{groupId}/invitations", "post", "JoinRequestResponse"},
@@ -58,6 +57,27 @@ class OpenApiDocsIntegrationTest extends TestSupport {
         assertThat(login.has("400")).isTrue();
         assertThat(login.has("401")).isTrue();
         assertThat(login.has("403")).isTrue();
+    }
+
+    @Test
+    @DisplayName("Removed compatibility operations are absent from OpenAPI and cannot be called")
+    void obsoleteOperationsAreRemoved() throws Exception {
+        var w = world(1, 0);
+        JsonNode paths = paths();
+        assertThat(paths.get("/api/v1/users").has("post")).isFalse();
+        assertThat(paths.get("/api/v1/semesters/{semester}/subjects").has("post")).isFalse();
+        assertThat(paths.get("/api/v1/subjects/{subjectId}/groups").has("get")).isFalse();
+        assertThat(paths.has("/api/v1/subjects/{subjectId}/students")).isFalse();
+        assertThat(paths.get("/api/v1/subjects/{subjectId}").has("delete")).isFalse();
+        assertThat(paths.has("/api/v1/semesters/{semester}/students")).isTrue();
+        assertThat(paths.has("/api/v1/semesters/{semester}/groups")).isTrue();
+        postJson("/api/v1/users", w.admin(), java.util.Map.of()).andExpect(status().isMethodNotAllowed());
+        getAs("/api/v1/subjects/" + w.subjectId() + "/students", w.admin()).andExpect(status().isNotFound());
+        getAs("/api/v1/subjects/" + w.subjectId() + "/groups", w.admin()).andExpect(status().isMethodNotAllowed());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .delete("/api/v1/subjects/" + w.subjectId()).with(
+                        org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(w.admin())))
+                .andExpect(status().isMethodNotAllowed());
     }
 
     @Test

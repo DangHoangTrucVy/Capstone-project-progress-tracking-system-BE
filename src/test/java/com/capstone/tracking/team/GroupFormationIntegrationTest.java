@@ -224,7 +224,7 @@ class GroupFormationIntegrationTest extends TestSupport {
         // Ineligible students only view.
         postJson("/api/v1/subjects/" + w.subjectId() + "/groups", leader, Map.of("name", "New"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.errorCode").value("NOT_ELIGIBLE"));
-        getAs("/api/v1/subjects/" + w.subjectId() + "/students?hasGroup=false", w.moderator())
+        getAs("/api/v1/semesters/" + w.code() + "/students?hasGroup=false", w.moderator())
                 .andExpect(jsonPath("$.content[0].noGroupReason").value("INELIGIBLE"));
     }
 }

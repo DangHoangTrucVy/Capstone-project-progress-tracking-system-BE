@@ -67,7 +67,7 @@ public class SemesterController {
         return service.toResponse(service.update(semester, request, currentUser));
     }
 
-    @Operation(summary = "Delete an empty semester (no students, no subjects) (Admin)")
+    @Operation(summary = "Delete an empty semester with no students (Admin)")
     @DeleteMapping("/{semester}")
     public ResponseEntity<Void> delete(@PathVariable String semester, @AuthenticationPrincipal User currentUser) {
         service.delete(semester, currentUser);

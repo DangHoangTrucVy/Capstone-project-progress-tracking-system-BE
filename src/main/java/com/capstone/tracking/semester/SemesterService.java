@@ -126,14 +126,14 @@ public class SemesterService {
         return semester;
     }
 
-    /** A semester holding student data is never deleted, only archived (3.1). */
+    /** A semester holding student data cannot be deleted (3.1). */
     @Transactional
     public void delete(String code, User actor) {
         access.requireAdmin(actor);
         Semester semester = lock(code);
         if (semesterStudents.countBySemesterCode(code) > 0 || groups.countActiveBySemester(code) > 0) {
             throw new ApiException(HttpStatus.CONFLICT, "SEMESTER_IN_USE",
-                    "This semester has students or subjects; archive it instead");
+                    "This semester has students and cannot be deleted");
         }
         subjects.deleteAll(subjects.findBySemesterCodeOrderByCodeAsc(code));
         subjects.flush();

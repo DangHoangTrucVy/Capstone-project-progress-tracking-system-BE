@@ -70,14 +70,14 @@ class SemesterAndImportIntegrationTest extends TestSupport {
         // Another lecturer is not this semester's Moderator.
         User other = user("not-moderator", Role.LECTURER);
         postJson("/api/v1/semesters/" + w.code() + "/subjects", other,
-                Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isForbidden());
+                Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isMethodNotAllowed());
         // v2.9: no other subject or second Capstone configuration can be created.
         postJson("/api/v1/semesters/" + w.code() + "/subjects", w.moderator(),
-                Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isBadRequest());
+                Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isMethodNotAllowed());
         postJson("/api/v1/semesters/" + w.code() + "/subjects", w.moderator(),
-                Map.of("code", "CAP", "name", "Capstone Project", "targetTerm", 8)).andExpect(status().isConflict());
+                Map.of("code", "CAP", "name", "Capstone Project", "targetTerm", 8)).andExpect(status().isMethodNotAllowed());
         // A subject whose scopes opened cannot be deleted.
-        deleteAs("/api/v1/subjects/" + w.subjectId(), w.moderator()).andExpect(status().isConflict());
+        deleteAs("/api/v1/subjects/" + w.subjectId(), w.moderator()).andExpect(status().isMethodNotAllowed());
     }
 
     @Test

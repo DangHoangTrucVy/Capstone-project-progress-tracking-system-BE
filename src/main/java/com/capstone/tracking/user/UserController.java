@@ -56,16 +56,6 @@ public class UserController {
         return ResponseEntity.created(URI.create("/api/v1/users/" + created.getId())).body(UserResponse.from(created));
     }
 
-    @Operation(summary = "Create a Moderator account (role LECTURER); Admin creation on the web is forbidden")
-    @ApiResponse(responseCode = "201", description = "Created")
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<UserResponse> create(@Valid @RequestBody UserCreateRequest request) {
-        User created = userService.create(request);
-        return ResponseEntity.created(URI.create("/api/v1/users/" + created.getId()))
-                .body(UserResponse.from(created));
-    }
-
     @Operation(summary = "List accounts (filter by role, search email/name/student code)")
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")

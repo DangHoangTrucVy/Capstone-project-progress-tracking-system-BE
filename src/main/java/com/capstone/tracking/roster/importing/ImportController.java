@@ -1,20 +1,13 @@
 package com.capstone.tracking.roster.importing;
 
-import com.capstone.tracking.roster.ImportBatch;
-import com.capstone.tracking.roster.ImportBatchRepository;
-import com.capstone.tracking.semester.Access;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.io.IOException;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,17 +28,6 @@ public class ImportController {
 
     private final StudentImportService students;
     private final EligibilityImportService eligibility;
-    private final ImportBatchRepository batches;
-    private final Access access;
-
-    public record BatchResponse(UUID id, ImportBatch.Kind kind, String semesterCode, String fileName, UUID importedBy,
-                                Instant importedAt, int createdCount, int updatedCount, int errorCount, String errorsJson) {
-        static BatchResponse from(ImportBatch b) {
-            return new BatchResponse(b.getId(), b.getKind(), b.getSemesterCode(), b.getFileName(), b.getImportedBy(),
-                    b.getImportedAt(), b.getCreatedCount(), b.getUpdatedCount(), b.getErrorCount(), b.getErrorsJson());
-        }
-    }
-
     @Operation(summary = "Check a student list file without writing it")
     @PostMapping(value = "/semesters/{semester}/imports/students/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ImportReport previewStudents(@PathVariable String semester, @RequestParam("file") MultipartFile file,

@@ -37,7 +37,7 @@ class RevisedRequirementsIntegrationTest extends TestSupport {
         putJson("/api/v1/users/" + w.students().get(0).getId() + "/password", w.admin(), Map.of("password", "Password123"))
                 .andExpect(status().isBadRequest());
         postJson("/api/v1/users", w.admin(), Map.of("email", "admin-" + suffix + "@gmail.com", "fullName", "No",
-                "password", "Password123", "role", "ADMIN")).andExpect(status().isBadRequest());
+                "password", "Password123", "role", "ADMIN")).andExpect(status().isMethodNotAllowed());
         getAs("/api/v1/semesters/" + w.code() + "/students", w.moderator()).andExpect(status().isForbidden());
     }
 

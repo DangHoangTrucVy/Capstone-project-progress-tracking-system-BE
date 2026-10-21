@@ -123,7 +123,7 @@ class RequirementsV29IntegrationTest extends TestSupport {
         putJson("/api/v1/semesters/" + w.code() + "/moderator", w.admin(), Map.of("moderatorId", lecturer.getId()))
                 .andExpect(status().isOk());
         postJson("/api/v1/users", w.admin(), Map.of("email", "admin2" + suffix + "@gmail.com", "fullName", "Forbidden",
-                "password", "Password123", "role", "ADMIN")).andExpect(status().isBadRequest());
+                "password", "Password123", "role", "ADMIN")).andExpect(status().isMethodNotAllowed());
     }
 
     @Test
