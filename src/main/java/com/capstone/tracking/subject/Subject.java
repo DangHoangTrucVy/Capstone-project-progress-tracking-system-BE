@@ -30,7 +30,7 @@ public class Subject extends BaseEntity {
 
     public static final int DEFAULT_MIN_GROUP_SIZE = 3;
     public static final int DEFAULT_MAX_GROUP_SIZE = 5;
-    public static final int DEFAULT_REQUEST_TTL_HOURS = 48;
+    public static final int DEFAULT_REQUEST_TTL_MINUTES = 15;
 
     @Column(name = "semester_code", nullable = false, length = 10)
     private String semesterCode;
@@ -57,7 +57,7 @@ public class Subject extends BaseEntity {
     /** How long an Apply or Invite waits for an answer (3.5). */
     @Column(nullable = false)
     @Builder.Default
-    private int requestTtlHours = DEFAULT_REQUEST_TTL_HOURS;
+    private int requestTtlMinutes = DEFAULT_REQUEST_TTL_MINUTES;
 
     @Column(nullable = false)
     private UUID createdBy;

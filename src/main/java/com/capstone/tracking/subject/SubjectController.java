@@ -54,7 +54,7 @@ public class SubjectController {
         return subjects.view(subjectId, currentUser);
     }
 
-    @Operation(summary = "Configure request lifetime (Moderator); formation term is fixed at 8 for Capstone term 9")
+    @Operation(summary = "Configure Apply/Invite lifetime in minutes (Moderator); demo: requestTtlMinutes=15")
     @PutMapping("/subjects/{subjectId}")
     public SubjectResponse update(@PathVariable UUID subjectId, @RequestBody SubjectService.SubjectRequest request,
                                   @AuthenticationPrincipal User currentUser) {

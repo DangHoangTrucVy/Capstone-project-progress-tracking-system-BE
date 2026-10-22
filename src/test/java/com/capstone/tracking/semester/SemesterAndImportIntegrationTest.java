@@ -39,8 +39,8 @@ class SemesterAndImportIntegrationTest extends TestSupport {
                 .andExpect(jsonPath("$.studentCount").value(0));
         postJson("/api/v1/semesters", admin, body).andExpect(status().isConflict());
 
-        // A deadline closer than 48 hours is refused (3.5).
-        putJson("/api/v1/semesters/" + code, admin, Map.of("defaultDeadline", Instant.now().plus(Duration.ofHours(10)).toString()))
+        // A deadline closer than the configured 10 minutes is refused.
+        putJson("/api/v1/semesters/" + code, admin, Map.of("defaultDeadline", Instant.now().plus(Duration.ofMinutes(5)).toString()))
                 .andExpect(status().isBadRequest());
 
         // The Moderator is a lecturer from the imported list; then they edit the timeline, not the dates.

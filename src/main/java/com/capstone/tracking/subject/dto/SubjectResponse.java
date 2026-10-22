@@ -12,11 +12,12 @@ public record SubjectResponse(
         int targetTerm,
         int minGroupSize,
         int maxGroupSize,
-        int requestTtlHours,
+        int requestTtlMinutes,
+        int minDeadlineNoticeMinutes,
         List<ScopeResponse> scopes
 ) {
-    public static SubjectResponse from(Subject s, List<ScopeResponse> scopes) {
+    public static SubjectResponse from(Subject s, List<ScopeResponse> scopes, int minDeadlineNoticeMinutes) {
         return new SubjectResponse(s.getId(), s.getSemesterCode(), s.getCode(), s.getName(), s.getTargetTerm(),
-                s.getMinGroupSize(), s.getMaxGroupSize(), s.getRequestTtlHours(), scopes);
+                s.getMinGroupSize(), s.getMaxGroupSize(), s.getRequestTtlMinutes(), minDeadlineNoticeMinutes, scopes);
     }
 }

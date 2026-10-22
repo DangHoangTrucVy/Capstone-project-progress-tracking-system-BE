@@ -31,7 +31,9 @@ class PostgresMigrationTest {
         List<String> versions = jdbc.queryForList(
                 "select version from flyway_schema_history where success and version is not null order by installed_rank",
                 String.class);
-        assertThat(versions).contains("1", "2", "8", "17", "18", "19", "20", "2000", "2001");
+        assertThat(versions).contains("1", "2", "8", "17", "18", "19", "20", "21", "22", "2000", "2001");
+        assertThat(jdbc.queryForObject("select request_ttl_minutes from subjects where semester_code='FA26'", Integer.class))
+                .isEqualTo(15);
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where not success", Integer.class))
                 .isZero();
     }

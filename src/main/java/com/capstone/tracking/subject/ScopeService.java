@@ -52,9 +52,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ScopeService {
 
-    /** A new deadline must leave students at least this long (3.5). */
-    public static final Duration MIN_DEADLINE_NOTICE = Duration.ofHours(48);
-
     private final FormationScopeRepository scopes;
     private final SemesterRepository semesters;
     private final EnrollmentRepository enrollments;
@@ -69,6 +66,7 @@ public class ScopeService {
     private final Notifier notifier;
     private final AuditService audit;
     private final Locks locks;
+    private final FormationTiming timing;
 
     public FormationScope get(UUID scopeId) {
         return scopes.findById(scopeId).orElseThrow(() -> ResourceNotFoundException.of("Scope", scopeId));
@@ -151,12 +149,13 @@ public class ScopeService {
         }
     }
 
-    public static void requireNotice(Instant deadline, Instant now) {
+    public void requireNotice(Instant deadline, Instant now) {
         if (deadline == null) {
             throw new BadRequestException("The scope has no deadline: set the common deadline or its own deadline");
         }
-        if (deadline.isBefore(now.plus(MIN_DEADLINE_NOTICE))) {
-            throw new BadRequestException("A new deadline must be at least 48 hours from now");
+        if (deadline.isBefore(now.plus(timing.minimumDeadlineNotice()))) {
+            throw new BadRequestException("A new deadline must be at least "
+                    + timing.minDeadlineNoticeMinutes() + " minutes from now");
         }
     }
 

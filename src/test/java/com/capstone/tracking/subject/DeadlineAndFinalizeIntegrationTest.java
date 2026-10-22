@@ -129,7 +129,7 @@ class DeadlineAndFinalizeIntegrationTest extends TestSupport {
         World w = world(2, 0);
         passDeadline(w.scope());
         postJson("/api/v1/scopes/" + w.scope().getId() + "/extend", w.moderator(),
-                Map.of("deadline", Instant.now().plus(Duration.ofHours(5)).toString())).andExpect(status().isBadRequest());
+                Map.of("deadline", Instant.now().plus(Duration.ofMinutes(5)).toString())).andExpect(status().isBadRequest());
         postJson("/api/v1/scopes/" + w.scope().getId() + "/extend", w.moderator(),
                 Map.of("deadline", Instant.now().plus(Duration.ofDays(3)).toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.phase").value("OPEN"))

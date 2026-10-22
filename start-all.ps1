@@ -1,7 +1,7 @@
 # Start backend + frontend after Windows boots/signs in, and print the public FE URL.
 # Normally run automatically by the scheduled task from install-autostart.ps1.
 # Manual: powershell -ExecutionPolicy Bypass -File .\start-all.ps1
-# Requires: .\deploy-lan.ps1 (BE) and .\deploy-fe.ps1 (FE) have each been run once.
+# Requires: .env.lan, current backend volumes, and the frontend Compose configuration.
 
 param(
     [string]$FeDir = ""   # default: sibling folder whose name ends with "-FE"
@@ -25,7 +25,7 @@ if ($LASTEXITCODE -ne 0) {
     $dd = @("$env:ProgramFiles\Docker\Docker\Docker Desktop.exe",
             "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe") |
         Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($dd) { Log "Starting Docker Desktop ($dd)"; Start-Process $dd } else { Log "WARN: Docker Desktop.exe not found" }
+    if ($dd) { Log "Starting Docker Desktop ($dd)"; Start-Process $dd -WindowStyle Hidden } else { Log "WARN: Docker Desktop.exe not found" }
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 5
         docker info *> $null
@@ -36,15 +36,21 @@ docker info *> $null
 if ($LASTEXITCODE -ne 0) { Log "ERROR: Docker not ready after 5 minutes"; exit 1 }
 Log "Docker ready"
 
-# 2. Backend (LAN stack; the BE-only tunnel is not needed since the FE tunnel proxies /api)
+# 2. Current backend on 8081, matching the FE nginx proxy. Recover missing containers with 'up'.
 Set-Location $BeDir
 if (-not (Test-Path ".env.lan")) { Log "ERROR: .env.lan missing - run .\deploy-lan.ps1 once"; exit 1 }
-docker compose -p capstone-lan -f docker-compose.lan.yml --env-file .env.lan up -d --remove-orphans 2>&1 | ForEach-Object { Log $_ }
+try {
+    & (Join-Path $BeDir "start-backend.ps1") -Port 8081
+} catch {
+    Log "ERROR: Backend startup failed: $_"
+    exit 1
+}
 
 # 3. Frontend + tunnel
 if (-not $FeDir -or -not (Test-Path (Join-Path $FeDir "docker-compose.yml"))) { Log "ERROR: FE folder not found (use -FeDir)"; exit 1 }
 Set-Location $FeDir
 docker compose -p capstone-fe up -d 2>&1 | ForEach-Object { Log $_ }
+if ($LASTEXITCODE -ne 0) { Log "ERROR: Frontend startup failed"; exit 1 }
 
 # 4. Public URL (changes on every tunnel restart)
 $url = $null

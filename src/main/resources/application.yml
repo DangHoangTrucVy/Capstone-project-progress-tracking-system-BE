@@ -101,6 +101,8 @@ app:
   # How often scopes are opened / locked automatically and expired requests written down (3.4).
   formation:
     tick-ms: ${FORMATION_TICK_MS:30000}
+    default-request-ttl-minutes: ${FORMATION_REQUEST_TTL_MINUTES:15}
+    min-deadline-notice-minutes: ${FORMATION_MIN_DEADLINE_NOTICE_MINUTES:10}
 
 springdoc:
   swagger-ui:

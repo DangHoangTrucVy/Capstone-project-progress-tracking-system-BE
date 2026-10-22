@@ -33,8 +33,11 @@ public class SubjectService {
     private final RosterSync sync;
     private final ScopeRules rules;
     private final Access access;
+    private final FormationTiming timing;
 
-    public record SubjectRequest(String code, String name, Integer targetTerm, Integer requestTtlHours) {}
+    public record SubjectRequest(String code, String name, Integer targetTerm,
+            @io.swagger.v3.oas.annotations.media.Schema(description = "Apply/Invite lifetime in minutes (1–20160); demo: 10 or 15", example = "15")
+            Integer requestTtlMinutes) {}
 
     @Transactional
     public Subject create(String semesterCode, SubjectRequest request, User actor) {
@@ -60,7 +63,7 @@ public class SubjectService {
                 .code(code)
                 .name(request.name().trim())
                 .targetTerm(request.targetTerm())
-                .requestTtlHours(ttl(request.requestTtlHours(), Subject.DEFAULT_REQUEST_TTL_HOURS))
+                .requestTtlMinutes(ttl(request.requestTtlMinutes(), timing.defaultRequestTtlMinutes()))
                 .createdBy(actor.getId())
                 .build());
         sync.syncSubject(subject);
@@ -75,8 +78,8 @@ public class SubjectService {
                 || (request.name() != null && !Subject.CAPSTONE_NAME.equals(request.name().trim()))) {
             throw new BadRequestException("Only Capstone Project (CAP) is supported");
         }
-        if (request.requestTtlHours() != null) {
-            subject.setRequestTtlHours(ttl(request.requestTtlHours(), subject.getRequestTtlHours()));
+        if (request.requestTtlMinutes() != null) {
+            subject.setRequestTtlMinutes(ttl(request.requestTtlMinutes(), subject.getRequestTtlMinutes()));
         }
         if (request.targetTerm() != null && request.targetTerm() != 8) {
             throw new BadRequestException("Capstone formation is only for students currently in term 8");
@@ -123,7 +126,7 @@ public class SubjectService {
         }
         var enrollment = enrollments.findBySubjectIdAndUserId(subjectId, viewer.getId())
                 .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("You are not enrolled"));
-        return SubjectResponse.from(subject, List.of(toResponse(enrollment.getScope())));
+        return SubjectResponse.from(subject, List.of(toResponse(enrollment.getScope())), timing.minDeadlineNoticeMinutes());
     }
 
     public ScopeResponse viewScope(FormationScope scope, User viewer) {
@@ -134,7 +137,7 @@ public class SubjectService {
 
     public SubjectResponse toResponse(Subject subject) {
         return SubjectResponse.from(subject, scopes.findBySubjectIdOrderByMajor_CodeAsc(subject.getId()).stream()
-                .map(this::toResponse).toList());
+                .map(this::toResponse).toList(), timing.minDeadlineNoticeMinutes());
     }
 
     public ScopeResponse toResponse(FormationScope scope) {
@@ -146,13 +149,13 @@ public class SubjectService {
         return rules.deadline(scope);
     }
 
-    private static int ttl(Integer hours, int fallback) {
-        if (hours == null) {
+    private static int ttl(Integer minutes, int fallback) {
+        if (minutes == null) {
             return fallback;
         }
-        if (hours < 1 || hours > 24 * 14) {
-            throw new BadRequestException("The request lifetime must be between 1 hour and 14 days");
+        if (minutes < 1 || minutes > 60 * 24 * 14) {
+            throw new BadRequestException("The request lifetime must be between 1 minute and 14 days (20160 minutes)");
         }
-        return hours;
+        return minutes;
     }
 }

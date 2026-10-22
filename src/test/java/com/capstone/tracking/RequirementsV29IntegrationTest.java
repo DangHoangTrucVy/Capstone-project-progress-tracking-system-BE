@@ -21,6 +21,8 @@ class RequirementsV29IntegrationTest extends TestSupport {
         var capstone = body(getAs("/api/v1/semesters/" + semester + "/subjects", admin));
         assertThat(capstone.size()).isEqualTo(1);
         assertThat(capstone.get(0).get("code").asText()).isEqualTo("CAP");
+        assertThat(capstone.get(0).get("requestTtlMinutes").asInt()).isEqualTo(15);
+        assertThat(capstone.get(0).get("minDeadlineNoticeMinutes").asInt()).isEqualTo(10);
         String csv = "MSSV,Họ tên,Email,Số điện thoại,Kỳ,Ngành\nAUTO" + suffix
                 + ",Imported,auto-" + suffix + "@gmail.com,0900000000,8,Auto " + suffix + "\n";
         upload("/api/v1/semesters/" + semester + "/imports/students", admin, "auto.csv", csv)

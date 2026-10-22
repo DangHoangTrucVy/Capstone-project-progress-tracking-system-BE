@@ -34,7 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Apply and Invite (6.2). The Leader accepting an Apply, or the student accepting an Invite, makes the student a
  * member at once; neither request holds a seat, so capacity and "no group yet" are checked again at that moment under
  * the locks (scope shared, then the student's enrollment, then the group). A student has at most 3 open Applies;
- * Invites are unlimited. Requests live {@code requestTtlHours} (48 h) and close at the deadline.
+ * Invites are unlimited. Requests live {@code requestTtlMinutes} and close at the formation deadline.
  */
 @Service
 @RequiredArgsConstructor
@@ -362,6 +362,6 @@ public class JoinRequestService {
     }
 
     private static Instant expiry(StudentGroup group, Instant now) {
-        return now.plus(Duration.ofHours(group.getScope().getSubject().getRequestTtlHours()));
+        return now.plus(Duration.ofMinutes(group.getScope().getSubject().getRequestTtlMinutes()));
     }
 }

@@ -73,8 +73,9 @@ Quyền theo học kỳ và theo nhóm được kiểm tra ở server (`Access`,
 ### Run it in IntelliJ IDEA
 
 1. **Open the project**: `File → Open...` and select this folder (the one with `pom.xml`).
-2. **Start PostgreSQL**: `docker compose up -d` starts Postgres on `localhost:5432` with the database/user/password
-   already baked in (see `docker-compose.yml`). No Docker? Point `DB_URL` at any Postgres you have.
+2. **Start a separate development PostgreSQL**: `docker compose -f docker-compose.infra.yml up -d postgres redis floci`
+   starts the optional infrastructure project, with Postgres on `localhost:5432` (see `docker-compose.infra.yml`).
+   The normal Docker Desktop stack below uses an internal database and serves the backend on port 8081.
 3. **Set environment variables**: copy `.env.example` to `.env` as a reference and paste the values into the
    `CapstoneTrackingBackendApplication` run configuration. Defaults work as long as Postgres is reachable.
 4. **Run** `CapstoneTrackingBackendApplication.main()` (or `mvn spring-boot:run`). With `SPRING_PROFILES_ACTIVE=dev`
@@ -130,3 +131,29 @@ in-process (no Docker), apply every migration + the dev seed, validate the entit
 
 Client integration and removed operations: [API cleanup notes](docs/api-cleanup-20261021.md).
 Use semester-scoped student/group lists and `/users/moderators`; legacy compatibility operations have been removed.
+
+## Start the current Docker backend
+
+Run `start-backend.cmd` or `powershell -NoProfile -ExecutionPolicy Bypass -File .\start-backend.ps1`.
+It starts `capstone-project-progress-tracking-system-be` on port 8081 using `.env.lan`, waits for healthy services,
+and recreates missing containers while reusing the database volumes. Add `-Build` to rebuild Java changes.
+
+Docker Desktop's project name now matches the root `docker-compose.yml` and the current containers:
+`capstone-project-progress-tracking-system-be`. Its Start button can start the same services as the script.
+The root Compose includes `docker-compose.desktop.yml` and automatically reads `.env.lan`.
+The existing `capstone-debug_pgdata` and `capstone-debug_uploads` volumes are reused as external volumes;
+the old `capstone-debug` containers are stopped and retained for recovery. Never run both database containers
+against the same data volume at once. On this installation the backend stays on port 8081, so FE and tunnels
+keep their connection. See [Docker Desktop repair notes](docs/docker-desktop-fix-20261022.md).
+Compose `start` only starts existing containers; the startup script uses `up` to recover missing ones.
+`start-all.ps1` also starts this backend before starting the frontend.
+
+## Demo request timing
+
+Apply/Invite lifetime is configured in **minutes** with `PUT /api/v1/subjects/{subjectId}`:
+`{"requestTtlMinutes":15}`. Values from 1 to 20160 minutes are accepted. Existing requests retain their saved
+expiry when this setting changes; new requests use the new value. FE: **Deadline và chốt → Thời hạn Apply / Invite**.
+
+Local `.env.lan` uses `FORMATION_REQUEST_TTL_MINUTES=15` for new Capstone configurations and
+`FORMATION_MIN_DEADLINE_NOTICE_MINUTES=10` to allow short demo deadlines. The main backend also defaults to 15 and 10 minutes when the variables are omitted. Changing the request lifetime does not change the formation deadline;
+the Moderator selects that deadline separately. Migration V21 preserves historical hour settings as minutes; V22 sets the database default for new configurations to 15 minutes without rewriting existing data.

@@ -75,7 +75,7 @@ public class SemesterService {
                 request.startDate(), request.endDate());
         semester.setFormationOpensAt(request.formationOpensAt());
         if (request.defaultDeadline() != null) {
-            ScopeService.requireNotice(request.defaultDeadline(), Instant.now());
+            scopes.requireNotice(request.defaultDeadline(), Instant.now());
             semester.setDefaultDeadline(request.defaultDeadline());
         }
         requireTimeline(semester);
@@ -89,7 +89,7 @@ public class SemesterService {
 
     /**
      * The Admin edits everything; the Moderator edits the common timeline (opening date and deadline). A new common
-     * deadline must be at least 48 hours away and moves the scopes that follow it (3.5).
+     * deadline must satisfy the configured minimum notice and moves scopes that follow it (3.5).
      */
     @Transactional
     public Semester update(String code, SemesterRequest request, User actor) {
@@ -113,7 +113,7 @@ public class SemesterService {
         }
         Instant before = semester.getDefaultDeadline();
         if (request.defaultDeadline() != null && !request.defaultDeadline().equals(before)) {
-            ScopeService.requireNotice(request.defaultDeadline(), Instant.now());
+            scopes.requireNotice(request.defaultDeadline(), Instant.now());
             semester.setDefaultDeadline(request.defaultDeadline());
             requireTimeline(semester);
             audit.record("Semester", entityId(semester.getCode()),
