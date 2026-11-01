@@ -42,7 +42,7 @@ services:
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:-capstone-tracking@fpt.edu.vn}
+      MAIL_FROM: ${MAIL_FROM:-}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       STORAGE_TYPE: local
       STORAGE_LOCAL_DIR: /app/uploads

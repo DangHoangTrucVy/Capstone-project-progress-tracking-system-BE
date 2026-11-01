@@ -65,6 +65,9 @@ $defaults = [ordered]@{
     ALLOWED_EMAIL_DOMAIN   = "fpt.edu.vn"
     GOOGLE_CLIENT_IDS      = ""
     MAIL_ENABLED           = "false"
+    MAIL_USERNAME          = ""
+    MAIL_PASSWORD          = ""
+    MAIL_FROM              = ""
     EXTRA_CORS_ORIGINS     = ""
 }
 foreach ($k in $defaults.Keys) { if (-not $envMap.Contains($k)) { $envMap[$k] = $defaults[$k] } }

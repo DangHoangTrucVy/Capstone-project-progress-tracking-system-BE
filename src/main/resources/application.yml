@@ -57,6 +57,11 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      # Without timeouts a stuck SMTP connection blocks the outbox dispatcher (and its row locks) forever.
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 15000
+      mail.smtp.writetimeout: 15000
 
   jackson:
     default-property-inclusion: non_null
@@ -95,7 +100,8 @@ app:
   # Email copies of the notifications, to the address on the imported list. Off = logged only.
   mail:
     enabled: ${MAIL_ENABLED:false}
-    from: ${MAIL_FROM:ghep-nhom@fpt.edu.vn}
+    # Sender address; empty = MAIL_USERNAME. Gmail only sends as the signed-in account or one of its verified aliases.
+    from: ${MAIL_FROM:}
     # How often the outbox dispatcher sends queued emails (and retries failed ones).
     dispatch-delay-ms: ${MAIL_DISPATCH_DELAY_MS:5000}
   # How often scopes are opened / locked automatically and expired requests written down (3.4).

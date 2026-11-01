@@ -52,8 +52,14 @@ Set-Location $FeDir
 docker compose -p capstone-fe up -d 2>&1 | ForEach-Object { Log $_ }
 if ($LASTEXITCODE -ne 0) { Log "ERROR: Frontend startup failed"; exit 1 }
 
-# 4. Public URL (changes on every tunnel restart)
+# 4. Public URL. Fixed ngrok domain (FE .env.tunnel) when configured; otherwise the trycloudflare URL, which changes on every tunnel restart.
 $url = $null
+$tunnelEnv = Join-Path $FeDir ".env.tunnel"
+if (Test-Path $tunnelEnv) {
+    $t = @{}
+    foreach ($line in Get-Content $tunnelEnv) { if ($line -match '^\s*([A-Z_]+)=(.*)$') { $t[$Matches[1]] = $Matches[2].Trim() } }
+    if ($t["NGROK_AUTHTOKEN"] -and $t["NGROK_DOMAIN"]) { $url = "https://$($t['NGROK_DOMAIN'])" }
+}
 for ($i = 0; $i -lt 45 -and -not $url; $i++) {
     Start-Sleep -Seconds 2
     $logs = (docker compose -p capstone-fe logs cloudflared 2>&1) -join "`n"

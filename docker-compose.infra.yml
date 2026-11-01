@@ -73,7 +73,7 @@ services:
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:-capstone-tracking@fpt.edu.vn}
+      MAIL_FROM: ${MAIL_FROM:-}
       STORAGE_LOCAL_DIR: /app/uploads
       # Infrastructure tier: S3 + SQS on Floci, cache + login rate limit on Redis.
       STORAGE_TYPE: s3
