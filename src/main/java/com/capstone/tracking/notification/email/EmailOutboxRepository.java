@@ -15,7 +15,7 @@ import java.util.UUID;
 
 public interface EmailOutboxRepository extends JpaRepository<EmailOutbox, UUID> {
 
-    boolean existsByEventId(UUID eventId);
+    boolean existsByEventIdAndRecipientsTo(UUID eventId, String recipientsTo);
 
     /**
      * Due pending emails, locked FOR UPDATE SKIP LOCKED (lock timeout -2): with several instances each dispatcher

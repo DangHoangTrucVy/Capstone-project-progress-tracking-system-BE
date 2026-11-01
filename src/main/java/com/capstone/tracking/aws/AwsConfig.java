@@ -11,29 +11,14 @@ import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.sqs.SqsClient;
 
 import java.net.URI;
 
-/** AWS SDK clients, created only when a feature is switched to AWS (storage type s3 / messaging type sqs). */
+/** AWS SDK clients, created only when a feature is switched to AWS (messaging type sqs). */
 @Configuration
 @EnableConfigurationProperties(AwsProperties.class)
 public class AwsConfig {
-
-    @Bean
-    @ConditionalOnProperty(prefix = "app.storage", name = "type", havingValue = "s3")
-    public S3Client s3Client(AwsProperties aws) {
-        var builder = S3Client.builder()
-                .httpClientBuilder(UrlConnectionHttpClient.builder())
-                .region(Region.of(aws.region()))
-                .credentialsProvider(credentials(aws));
-        if (StringUtils.hasText(aws.endpoint())) {
-            // Emulators like Floci serve buckets by path (http://host:4566/bucket/key), not bucket subdomains.
-            builder.endpointOverride(URI.create(aws.endpoint())).forcePathStyle(true);
-        }
-        return builder.build();
-    }
 
     @Bean
     @ConditionalOnProperty(prefix = "app.messaging", name = "type", havingValue = "sqs")

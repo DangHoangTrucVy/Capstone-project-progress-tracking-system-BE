@@ -1,66 +1,64 @@
 package com.capstone.tracking.notification;
 
-import com.capstone.tracking.WorkflowTestSupport;
-import com.capstone.tracking.group.StudentGroup;
-import com.capstone.tracking.notification.email.EmailMessage;
-import com.capstone.tracking.notification.email.EmailOutbox;
-import com.capstone.tracking.notification.email.EmailOutboxRepository;
-import com.capstone.tracking.user.Role;
-import com.capstone.tracking.user.User;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mail.MailSendException;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Map;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.reset;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.capstone.tracking.TestSupport;
+import com.capstone.tracking.notification.email.EmailMessage;
+import com.capstone.tracking.notification.email.EmailOutbox;
+import com.capstone.tracking.notification.email.EmailOutboxRepository;
+import com.capstone.tracking.user.User;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mail.MailSendException;
 
 /** Emails leave the request path: queued in the outbox with the notification, sent and retried by the dispatcher. */
-class EmailOutboxIntegrationTest extends WorkflowTestSupport {
+class EmailOutboxIntegrationTest extends TestSupport {
 
     @Autowired private EmailOutboxRepository outboxRepository;
 
-    private User supervisor;
+    private World w;
     private User leader;
-    private StudentGroup group;
+    private User applicant;
+    private UUID group;
 
     @BeforeEach
-    void setUp() {
-        supervisor = user("ob-gv", Role.INSTRUCTOR);
-        leader = user("ob-leader", Role.GROUP_LEADER);
-        group = group("OB", supervisor, true);
-        join(group, leader, true);
+    void setUp() throws Exception {
+        w = world(2, 0);
+        leader = w.students().get(0);
+        applicant = w.students().get(1);
+        group = createGroup(w, leader, "Mail team");
+        dispatchEmails(); // the "formation opened" emails of world()
         reset(emailSender);
     }
 
     @Test
     void requestOnlyQueuesTheEmailAndTheDispatcherSendsItOnce() throws Exception {
-        raiseFlag();
+        apply();
 
-        assertThat(sendsForGroup()).isZero();
-        EmailOutbox queued = outboxFor(group);
+        assertThat(sendsTo(leader)).isZero();
+        EmailOutbox queued = outboxFor(leader);
         assertThat(queued.getStatus()).isEqualTo(EmailOutbox.Status.PENDING);
         assertThat(queued.getRecipientsTo()).isEqualTo(leader.getEmail());
 
         dispatchEmails();
         dispatchEmails();
-        assertThat(sendsForGroup()).isEqualTo(1);
+        assertThat(sendsTo(leader)).isEqualTo(1);
         assertThat(outboxRepository.findById(queued.getId()).orElseThrow().getStatus()).isEqualTo(EmailOutbox.Status.SENT);
     }
 
     @Test
     void failedSendIsRetriedWithBackoffThenGivenUp() throws Exception {
         doThrow(new MailSendException("SMTP down")).when(emailSender).send(any());
-        raiseFlag();
-        EmailOutbox queued = outboxFor(group);
+        apply();
+        EmailOutbox queued = outboxFor(leader);
         Instant now = Instant.now();
 
         emailOutboxDispatcher.dispatchPending(now);
@@ -70,11 +68,9 @@ class EmailOutboxIntegrationTest extends WorkflowTestSupport {
         assertThat(afterFirst.getLastError()).contains("SMTP down");
         assertThat(afterFirst.getNextAttemptAt()).isAfter(now.plus(Duration.ofSeconds(59)));
 
-        // Not due yet: nothing is tried.
         emailOutboxDispatcher.dispatchPending(now.plus(Duration.ofSeconds(30)));
-        assertThat(sendsForGroup()).isEqualTo(1);
+        assertThat(sendsTo(leader)).isEqualTo(1);
 
-        // Attempts 2-5 at ever later times, then FAILED.
         for (int i = 0; i < 4; i++) {
             emailOutboxDispatcher.dispatchPending(now.plus(Duration.ofDays(1 + i)));
         }
@@ -82,27 +78,26 @@ class EmailOutboxIntegrationTest extends WorkflowTestSupport {
         assertThat(gaveUp.getAttempts()).isEqualTo(5);
         assertThat(gaveUp.getStatus()).isEqualTo(EmailOutbox.Status.FAILED);
         emailOutboxDispatcher.dispatchPending(now.plus(Duration.ofDays(30)));
-        assertThat(sendsForGroup()).isEqualTo(5);
+        assertThat(sendsTo(leader)).isEqualTo(5);
     }
 
-    private void raiseFlag() throws Exception {
-        postJson("/api/v1/groups/" + group.getId() + "/warning-flags", supervisor,
-                Map.of("type", "GROUP_BEHIND_SCHEDULE", "severity", "LOW", "reason", "Chậm sprint 2"))
-                .andExpect(status().isCreated());
+    private void apply() throws Exception {
+        postJson("/api/v1/groups/" + group + "/applications", applicant, java.util.Map.of())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isCreated());
     }
 
-    /** Send attempts for this test's group only: other tests' pending emails share the database. */
-    private long sendsForGroup() {
+    /** Send attempts of this test's application email only: other emails share the database. */
+    private long sendsTo(User user) {
         return mockingDetails(emailSender).getInvocations().stream()
                 .filter(i -> i.getMethod().getName().equals("send"))
                 .map(i -> (EmailMessage) i.getArgument(0))
-                .filter(m -> m.subject().contains(group.getGroupCode()))
+                .filter(m -> m.to().contains(user.getEmail()) && m.subject().contains("xin vào nhóm"))
                 .count();
     }
 
-    private EmailOutbox outboxFor(StudentGroup g) {
+    private EmailOutbox outboxFor(User user) {
         return outboxRepository.findAll().stream()
-                .filter(e -> e.getSubject().contains(g.getGroupCode()))
+                .filter(e -> e.getRecipientsTo().equals(user.getEmail()) && e.getSubject().contains("xin vào nhóm"))
                 .findFirst().orElseThrow();
     }
 }

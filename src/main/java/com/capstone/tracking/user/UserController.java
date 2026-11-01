@@ -20,11 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.UUID;
 
-/**
- * FR-010: user management + RBAC (blueprint.md §6, §11).
- * Only Admin can create/edit accounts directly; every authenticated user can read their own profile
- * via /api/v1/auth/me. Admin owns account lookup, group provisioning and roster management.
- */
+/** Account management (mục 2): only the Admin. Students and lecturers normally come from the list imports. */
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -34,21 +30,39 @@ public class UserController {
 
     private final UserService userService;
 
-    @Operation(summary = "Create a user account")
-    @ApiResponse(responseCode = "201", description = "Created")
-    @PostMapping
+    public record ModeratorCreateRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Email String email,
+            @jakarta.validation.constraints.NotBlank String fullName,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 8, max = 72) String password,
+            @jakarta.validation.constraints.Size(max = 20) String phone) {}
+
+    public record PasswordRequest(@jakarta.validation.constraints.NotBlank
+            @jakarta.validation.constraints.Size(min = 8, max = 72) String password) {}
+
+    @Operation(summary = "Set or reset a Moderator password (Admin); never assigns a password to a student")
+    @PutMapping("/{id}/password")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<UserResponse> create(@Valid @RequestBody UserCreateRequest request) {
-        User created = userService.create(request);
-        return ResponseEntity.created(URI.create("/api/v1/users/" + created.getId()))
-                .body(UserResponse.from(created));
+    public ResponseEntity<Void> moderatorPassword(@PathVariable UUID id, @Valid @RequestBody PasswordRequest request) {
+        userService.setModeratorPassword(id, request.password());
+        return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "List users (filter by role)")
+    @Operation(summary = "Create a Moderator account with email and password (Admin); no lecturer import needed")
+    @ApiResponse(responseCode = "201", description = "Created")
+    @PostMapping("/moderators")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UserResponse> createModerator(@Valid @RequestBody ModeratorCreateRequest request) {
+        User created = userService.create(new UserCreateRequest(request.email(), request.fullName(), request.password(),
+                Role.LECTURER, request.phone()));
+        return ResponseEntity.created(URI.create("/api/v1/users/" + created.getId())).body(UserResponse.from(created));
+    }
+
+    @Operation(summary = "List accounts (filter by role, search email/name/student code)")
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public Page<UserResponse> list(@RequestParam(required = false) Role role, @ParameterObject Pageable pageable) {
-        return userService.list(role, pageable).map(UserResponse::from);
+    public Page<UserResponse> list(@RequestParam(required = false) Role role,
+                                   @RequestParam(required = false) String q,
+                                   @ParameterObject Pageable pageable) {
+        return userService.list(role, q, pageable).map(UserResponse::from);
     }
 
     @Operation(summary = "Get a user")
@@ -58,7 +72,7 @@ public class UserController {
         return UserResponse.from(userService.getById(id));
     }
 
-    @Operation(summary = "Update a user (role, campus, active flag...)")
+    @Operation(summary = "Update an account (name, email, phone, status)")
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public UserResponse update(@PathVariable UUID id, @Valid @RequestBody UserUpdateRequest request) {

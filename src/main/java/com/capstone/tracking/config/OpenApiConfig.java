@@ -38,52 +38,35 @@ public class OpenApiConfig {
 
     /** Matches SecurityConfig.PUBLIC_ENDPOINTS: these operations need no token. */
     private static final Set<String> PUBLIC_PATHS = Set.of(
-            "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/google/config",
-            "/api/v1/auth/campuses");
-
-    /** Legacy aliases of the /artifacts endpoints; they still work but would list every operation twice. */
-    private static final List<String> HIDDEN_PATH_PREFIXES = List.of(
-            "/api/v1/documents", "/api/v1/groups/{groupId}/documents");
+            "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/google/config");
 
     /** Swagger UI shows tags in this order, which follows the semester workflow. */
     private static final Map<String, String> TAGS = new LinkedHashMap<>();
 
     static {
-        TAGS.put("Auth", "Sign in and get a JWT. Start here.");
-        TAGS.put("Users", "User accounts (Admin) and my own recruiting profile");
-        TAGS.put("Registrations", "Admin approves or rejects students who signed up with a personal email");
-        TAGS.put("Semesters", "Semester calendar");
-        TAGS.put("Eligibility", "Eligible student list import and the not-eligible flag");
-        TAGS.put("Student Groups", "Groups, members, leader, roster lock and roster approval");
-        TAGS.put("Group Formation", "Apply, invite, member votes, leave requests, roster change reports, formation deadline. "
-                + "A student joins a group only by accepting an Invite; approving an Apply sends that Invite (YC10, YC11).");
-        TAGS.put("Topics", "Topic catalogue managed by Admin");
-        TAGS.put("Question Bank", "Per-topic question bank");
-        TAGS.put("Topic Proposals", "Leader submits topics, supervisor forwards one, Council decides; proposal rounds");
-        TAGS.put("Milestones", "Semester checkpoints that documents are submitted against");
-        TAGS.put("Schedule Slots", "Instructor availability slots");
-        TAGS.put("Bookings", "Groups book instructor slots");
-        TAGS.put("Meetings", "Meeting sessions started from a confirmed booking");
-        TAGS.put("Meeting Minutes", "Generated minutes and Leader / Instructor sign-off");
-        TAGS.put("Requirement Logs", "Requirements raised during a meeting");
-        TAGS.put("Weekly Progress", "Weekly progress reports, tasks and supervisor feedback");
-        TAGS.put("Documents", "Group document submissions (file or link) per milestone. "
-                + "Every /artifacts path is also served under /documents.");
-        TAGS.put("Evaluations", "Instructor scoring of a group on 3 criteria");
-        TAGS.put("Warning Flags", "Supervisor warnings on late groups or inactive members");
-        TAGS.put("Reviews", "Review 1, Review 2 and the closed council (Review 3)");
-        TAGS.put("Defenses", "Final defense scheduling and grading, attempts 1 and 2");
-        TAGS.put("Group Overview", "Leader dashboard in one call");
+        TAGS.put("Auth", "Sign in and get a JWT. Start here. Students: Google and imported roster. Admin/Moderator: email and password.");
+        TAGS.put("Semesters", "Semester list, common timeline and Moderator assignment (3.1, 3.6)");
+        TAGS.put("Majors", "Students' majors; groups are formed within one major (3.3)");
+        TAGS.put("Imports", "Student list with optional eligibility, and eligibility updates: preview, then confirm (4.1, 4.2)");
+        TAGS.put("Subjects & scopes", "Capstone configuration and major scopes: phases, deadlines, "
+                + "extension, finalizing, reopening (3.2-3.5, 7.2)");
+        TAGS.put("Student list", "List management by semester, subject and major; eligibility (4.3, 5)");
+        TAGS.put("Groups", "Creating a group, the Leader's settings, lock, kick, leaving, search (6, 8.2)");
+        TAGS.put("Requests", "Apply / Invite, Likes, leave requests and complaints, Leader transfer (6.2, 6.4, 8.2)");
+        TAGS.put("Moderation", "The assigned Moderator arranges all groups in every phase, including after finalization, including locked groups (7.1)");
+        TAGS.put("Statistics & export", "Statistics, the handover Excel file (7.3, 10)");
+        TAGS.put("Profile", "My profile, private mode and my semesters");
         TAGS.put("Notifications", "My in-app notifications and the real-time stream");
-        TAGS.put("Reports", "Progress statistics");
+        TAGS.put("Users", "Account management (Admin)");
     }
 
     private static final String DESCRIPTION = """
-            Backend API for tracking capstone project progress: group formation, topics, meetings, \
-            weekly progress, documents, reviews and defenses.
+            Backend API for the Capstone Team Formation Website (requirements v2.9): \
+            same-major groups, semester rosters, moderation, finalization and Excel handover.
 
             **How to call protected endpoints**
-            1. `POST /api/v1/auth/login` (section **Auth**) with your email and password.
+            1. Students: `POST /api/v1/auth/google` with a Google ID token matching the imported roster.
+               Admin/Moderator: `POST /api/v1/auth/login` with email and password.
             2. Copy `accessToken` from the response.
             3. Click **Authorize** (top right), paste the token (without `Bearer `) and confirm.
 
@@ -101,18 +84,18 @@ public class OpenApiConfig {
     static {
         ERRORS.put("400", "Invalid request: validation failed (VALIDATION_FAILED, with fieldErrors) or bad input (BAD_REQUEST)");
         ERRORS.put("401", "Missing, invalid or expired token (UNAUTHORIZED)");
-        ERRORS.put("403", "Role not allowed, not the owner (e.g. not this group's Leader) or student not eligible "
-                + "(FORBIDDEN, NOT_ELIGIBLE)");
+        ERRORS.put("403", "Role or semester not allowed, not the owner (e.g. not this group's Leader), student not "
+                + "eligible or an earlier semester (FORBIDDEN, NOT_LEADER, NOT_ELIGIBLE, READ_ONLY_SEMESTER)");
         ERRORS.put("404", "Resource not found (NOT_FOUND)");
-        ERRORS.put("409", "Business rule conflict, e.g. group full, already in a group, roster locked, deadline passed, "
-                + "request no longer pending (CONFLICT)");
+        ERRORS.put("409", "Business rule conflict, e.g. group full, already in a group, scope not open or past its "
+                + "deadline, list finalized, request no longer pending (CONFLICT, GROUP_FULL, SCOPE_NOT_OPEN...)");
     }
 
     @Bean
     public OpenAPI openApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Capstone Progress Tracking API")
+                        .title("Team Formation API (Website ghép nhóm)")
                         .version("v1")
                         .description(DESCRIPTION))
                 // Relative URL: "Try it out" calls the host/scheme Swagger was loaded from, so it works behind an HTTPS proxy.
@@ -150,12 +133,11 @@ public class OpenApiConfig {
         };
     }
 
-    /** Orders and describes tags, hides alias paths, marks the sign-in endpoints as public and lists error answers. */
+    /** Orders and describes tags, marks the sign-in endpoints as public and lists error answers. */
     @Bean
     public OpenApiCustomizer cleanupCustomizer() {
         return openApi -> {
             if (openApi.getPaths() != null) {
-                openApi.getPaths().keySet().removeIf(path -> HIDDEN_PATH_PREFIXES.stream().anyMatch(path::startsWith));
                 PUBLIC_PATHS.forEach(path -> {
                     var item = openApi.getPaths().get(path);
                     if (item != null) {
@@ -196,8 +178,8 @@ public class OpenApiConfig {
                 addError(op, "401");
                 addError(op, "403");
             } else if (path.equals("/api/v1/auth/login") || path.equals("/api/v1/auth/google")) {
-                addError(op, "401", "Wrong email/password (INVALID_CREDENTIALS) or Google sign-in rejected "
-                        + "(GOOGLE_SIGN_IN_FAILED)");
+                addError(op, "401", "Google sign-in rejected (GOOGLE_SIGN_IN_FAILED)");
+                addError(op, "403", "Email is not on an imported list (NOT_ON_LIST) or the account is inactive");
             }
             if (path.contains("{")) {
                 addError(op, "404");

@@ -10,3 +10,4 @@ docker-compose.yml
 Dockerfile
 docker-compose.prod.yml
 .env.prod
+.env.lan

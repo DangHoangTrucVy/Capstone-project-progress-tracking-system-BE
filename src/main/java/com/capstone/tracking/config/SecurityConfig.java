@@ -23,11 +23,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 /**
- * Stateless JWT-based security matching blueprint.md §11:
- * - no HTTP session (every request carries its own Bearer token)
- * - RBAC enforced with @PreAuthorize at the controller layer (see UserController, method-security enabled below)
- * - /api/v1/auth/register, /api/v1/auth/login, and Swagger UI are the only endpoints reachable without
- *   a token (/api/v1/auth/me requires one, since it reads the caller's own identity)
+ * Stateless JWT security: no HTTP session, every request carries its Bearer token. Only sign-in, Swagger and the
+ * health check are public; everything else needs a token, and the services check the role, the semester
+ * (Moderator) and the group (Leader) of each request.
  */
 @Configuration
 @EnableWebSecurity
@@ -42,32 +40,13 @@ public class SecurityConfig {
     private String allowedOrigins;
 
     private static final String[] PUBLIC_ENDPOINTS = {
-            "/api/v1/auth/register",
             "/api/v1/auth/login",
             "/api/v1/auth/google",
             "/api/v1/auth/google/config",
-            "/api/v1/auth/campuses",
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/v3/api-docs/**",
             "/actuator/health"
-    };
-
-    private static final String[] ALL_ROLES = {"ADMIN", "INSTRUCTOR", "COUNCIL", "GROUP_LEADER", "STUDENT"};
-
-    private static final String[] STUDENT_ENDPOINTS = {
-            "/api/v1/auth/me",
-            "/api/v1/eligibility/me",
-            "/api/v1/me/**",
-            "/api/v1/notifications/**",
-            "/api/v1/groups",
-            "/api/v1/groups/*",
-            "/api/v1/groups/*/applications",
-            "/api/v1/groups/*/invites",
-            "/api/v1/groups/*/leave-requests",
-            "/api/v1/applications/**",
-            "/api/v1/invites/**",
-            "/api/v1/leave-requests/**"
     };
 
     @Bean
@@ -79,10 +58,9 @@ public class SecurityConfig {
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
-                        // Students sign in and take part in group formation even without a group (YC02, YC04);
-                        // each of these endpoints enforces its own rules with @PreAuthorize / service checks.
-                        .requestMatchers(STUDENT_ENDPOINTS).hasAnyRole(ALL_ROLES)
-                        .anyRequest().hasAnyRole("ADMIN", "INSTRUCTOR", "COUNCIL", "GROUP_LEADER")
+                        // Who may do what depends on the semester (its Moderator), the group (its Leader) and the
+                        // student's enrollment, so each endpoint checks that itself, on the server (12).
+                        .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

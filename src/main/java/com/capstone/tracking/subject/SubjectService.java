@@ -1,0 +1,161 @@
+package com.capstone.tracking.subject;
+
+import com.capstone.tracking.common.exception.ApiException;
+import com.capstone.tracking.common.exception.BadRequestException;
+import com.capstone.tracking.common.exception.ConflictException;
+import com.capstone.tracking.common.exception.ResourceNotFoundException;
+import com.capstone.tracking.roster.EnrollmentRepository;
+import com.capstone.tracking.roster.RosterSync;
+import com.capstone.tracking.semester.Access;
+import com.capstone.tracking.subject.dto.ScopeResponse;
+import com.capstone.tracking.subject.dto.SubjectResponse;
+import com.capstone.tracking.team.StudentGroupRepository;
+import com.capstone.tracking.user.User;
+import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/** The subjects that need groups in a semester (3.2), created by the Moderator; each major becomes a scope. */
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class SubjectService {
+
+    private final SubjectRepository subjects;
+    private final FormationScopeRepository scopes;
+    private final EnrollmentRepository enrollments;
+    private final StudentGroupRepository groups;
+    private final RosterSync sync;
+    private final ScopeRules rules;
+    private final Access access;
+    private final FormationTiming timing;
+
+    public record SubjectRequest(String code, String name, Integer targetTerm,
+            @io.swagger.v3.oas.annotations.media.Schema(description = "Apply/Invite lifetime in minutes (1–20160); demo: 10 or 15", example = "15")
+            Integer requestTtlMinutes) {}
+
+    @Transactional
+    public Subject create(String semesterCode, SubjectRequest request, User actor) {
+        access.requireModerator(semesterCode, actor);
+        if (request.code() == null || request.code().isBlank() || request.code().trim().length() > 20) {
+            throw new BadRequestException("The subject code must contain 1 to 20 characters");
+        }
+        if (request.name() == null || request.name().isBlank()) {
+            throw new BadRequestException("The subject name is required");
+        }
+        if (request.targetTerm() == null || request.targetTerm() != 8) {
+            throw new BadRequestException("Capstone formation is only for students currently in term 8");
+        }
+        String code = request.code().trim().toUpperCase(Locale.ROOT);
+        if (!Subject.CAPSTONE_CODE.equals(code) || !Subject.CAPSTONE_NAME.equals(request.name().trim())) {
+            throw new BadRequestException("Only Capstone Project (CAP) is supported");
+        }
+        if (subjects.countBySemesterCode(semesterCode) > 0) {
+            throw new ConflictException("Capstone is already configured for " + semesterCode);
+        }
+        Subject subject = subjects.saveAndFlush(Subject.builder()
+                .semesterCode(semesterCode)
+                .code(code)
+                .name(request.name().trim())
+                .targetTerm(request.targetTerm())
+                .requestTtlMinutes(ttl(request.requestTtlMinutes(), timing.defaultRequestTtlMinutes()))
+                .createdBy(actor.getId())
+                .build());
+        sync.syncSubject(subject);
+        return subject;
+    }
+
+    @Transactional
+    public Subject update(UUID subjectId, SubjectRequest request, User actor) {
+        Subject subject = get(subjectId);
+        access.requireModerator(subject.getSemesterCode(), actor);
+        if ((request.code() != null && !Subject.CAPSTONE_CODE.equals(request.code().trim().toUpperCase(Locale.ROOT)))
+                || (request.name() != null && !Subject.CAPSTONE_NAME.equals(request.name().trim()))) {
+            throw new BadRequestException("Only Capstone Project (CAP) is supported");
+        }
+        if (request.requestTtlMinutes() != null) {
+            subject.setRequestTtlMinutes(ttl(request.requestTtlMinutes(), subject.getRequestTtlMinutes()));
+        }
+        if (request.targetTerm() != null && request.targetTerm() != 8) {
+            throw new BadRequestException("Capstone formation is only for students currently in term 8");
+        }
+        if (request.targetTerm() != null && request.targetTerm() != subject.getTargetTerm()) {
+            if (request.targetTerm() < 1 || request.targetTerm() > 12) {
+                throw new BadRequestException("The target term must be between 1 and 12");
+            }
+            if (scopes.existsBySubjectIdAndPhaseNot(subjectId, ScopePhase.PREPARING)) {
+                throw new ConflictException("The Capstone term cannot change after formation has opened");
+            }
+            if (!groups.findActiveBySubject(subjectId).isEmpty()) {
+                throw new ConflictException("The Capstone term cannot change while groups exist");
+            }
+            enrollments.deleteAll(enrollments.findBySubjectId(subjectId));
+            enrollments.flush();
+            subject.setTargetTerm(request.targetTerm());
+            sync.syncSubject(subject);
+        }
+        return subject;
+    }
+
+    public Subject get(UUID subjectId) {
+        return subjects.findById(subjectId).orElseThrow(() -> ResourceNotFoundException.of("Subject", subjectId));
+    }
+
+    public List<SubjectResponse> list(String semesterCode, User viewer) {
+        if (access.isModerator(semesterCode, viewer)) {
+            return subjects.findBySemesterCodeOrderByCodeAsc(semesterCode).stream().map(this::toResponse).toList();
+        }
+        if (viewer.getRole() != com.capstone.tracking.user.Role.STUDENT) {
+            throw new org.springframework.security.access.AccessDeniedException("This semester is not assigned to you");
+        }
+        return subjects.findBySemesterCodeOrderByCodeAsc(semesterCode).stream()
+                .filter(s -> enrollments.findBySubjectIdAndUserId(s.getId(), viewer.getId()).isPresent())
+                .map(s -> view(s.getId(), viewer)).toList();
+    }
+
+    public SubjectResponse view(UUID subjectId, User viewer) {
+        Subject subject = get(subjectId);
+        if (access.isModerator(subject.getSemesterCode(), viewer)) return toResponse(subject);
+        if (viewer.getRole() != com.capstone.tracking.user.Role.STUDENT) {
+            throw new org.springframework.security.access.AccessDeniedException("This semester is not assigned to you");
+        }
+        var enrollment = enrollments.findBySubjectIdAndUserId(subjectId, viewer.getId())
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("You are not enrolled"));
+        return SubjectResponse.from(subject, List.of(toResponse(enrollment.getScope())), timing.minDeadlineNoticeMinutes());
+    }
+
+    public ScopeResponse viewScope(FormationScope scope, User viewer) {
+        SubjectResponse permitted = view(scope.getSubject().getId(), viewer);
+        return permitted.scopes().stream().filter(s -> s.id().equals(scope.getId())).findFirst()
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("This is another major's scope"));
+    }
+
+    public SubjectResponse toResponse(Subject subject) {
+        return SubjectResponse.from(subject, scopes.findBySubjectIdOrderByMajor_CodeAsc(subject.getId()).stream()
+                .map(this::toResponse).toList(), timing.minDeadlineNoticeMinutes());
+    }
+
+    public ScopeResponse toResponse(FormationScope scope) {
+        return ScopeResponse.from(scope, rules.deadline(scope), enrollments.countByScopeId(scope.getId()),
+                groups.findActiveByScope(scope.getId()).size());
+    }
+
+    public Instant deadline(FormationScope scope) {
+        return rules.deadline(scope);
+    }
+
+    private static int ttl(Integer minutes, int fallback) {
+        if (minutes == null) {
+            return fallback;
+        }
+        if (minutes < 1 || minutes > 60 * 24 * 14) {
+            throw new BadRequestException("The request lifetime must be between 1 minute and 14 days (20160 minutes)");
+        }
+        return minutes;
+    }
+}

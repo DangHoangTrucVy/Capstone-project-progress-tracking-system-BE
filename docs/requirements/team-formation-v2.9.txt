@@ -1,0 +1,367 @@
+Màu ĐỎ + CAM HỎI THẦY
+YÊU CẦU WEBSITE GHÉP NHÓM
+Tên đề tài: Website ghép nhóm (tiếng Anh nếu cần: Team Formation Website). Website dùng để ghép nhóm cho môn Capstone Project (đồ án tốt nghiệp). ĐÃ CHỐT
+Phiên bản 2.9 (bản để nhóm kiểm tra) • Cập nhật 20/10/2026: bỏ vai trò sub moderator; chỉ ghép nhóm trong cùng ngành; chỉ phục vụ môn Capstone; chỉ đăng nhập bằng Gmail; Moderator toàn quyền điều phối nhóm
+Nguồn:
+Google Doc "Capstone_Requirement_SWD" v2.5 (12/10/2026).
+Ghi chú review ngày 16/10/2026.
+Câu trả lời của Kiên cho 31 điểm cần chốt (17/10/2026).
+Quyết định của Kiên ngày 19/10/2026: lược bỏ vai trò sub moderator; chỉ ghép nhóm trong cùng ngành, bỏ ghép liên ngành; bỏ mọi phần liên quan tới môn khác ngoài Capstone.
+Quyết định của Kiên ngày 20/10/2026: chỉ đăng nhập bằng Gmail theo danh sách email đã nhập, không dùng mật khẩu; Moderator toàn quyền điều phối nhóm, kể cả nhóm đã khóa.
+Cách đọc. Mỗi quy tắc có một nhãn trạng thái:
+ĐÃ CHỐT: đã được giảng viên xác nhận hoặc Kiên đã quyết định.
+ĐỀ XUẤT: phương án tạm dùng, chờ nhóm duyệt.
+CẦN HỎI: còn chờ câu trả lời. Danh sách câu hỏi nằm ở mục Câu hỏi cần hỏi mentor cuối tab này.
+Quy tắc không gắn nhãn được kế thừa từ v2.5 và coi là đã chốt.
+1. Phạm vi
+Trong phạm vi
+Quản lý học kỳ và phạm vi ghép nhóm của từng ngành.
+Quản lý ngành và phân công người điều phối.
+Nhập danh sách sinh viên và danh sách giảng viên.
+Tạo nhóm, nộp đơn (Apply), mời (Invite), xét duyệt.
+Quản lý thành viên, trưởng nhóm (Leader) và trạng thái nhóm.
+Cập nhật điều kiện tham gia của sinh viên.
+Điều phối sau deadline, thống kê, chốt danh sách, xuất Excel bàn giao.
+Môn ghép nhóm: hệ thống chỉ phục vụ Capstone Project (đồ án tốt nghiệp). Hệ thống ghép nhóm đồ án cho tất cả các ngành có sinh viên làm đồ án trong học kỳ, nhưng sinh viên chỉ ghép nhóm trong cùng ngành của mình. ĐÃ CHỐT
+Ngoài phạm vi
+Kho đề tài, đề xuất và duyệt đề tài.
+Phân công giảng viên hướng dẫn, hội đồng.
+Lịch tư vấn, meeting, milestone, sprint, tài liệu tiến độ.
+Bảo vệ và chấm điểm.
+Chat nội bộ.
+Ghép nhóm cho các môn khác ngoài Capstone, và ghép nhóm liên ngành.
+2. Vai trò
+
+Vai trò
+Là ai
+Được làm gì
+Phòng đào tạo
+Ngoài hệ thống
+Gửi cho Admin một file danh sách sinh viên chung cho cả học kỳ, và file hoặc thông tin sinh viên không đủ điều kiện.
+Admin
+Quản trị hệ thống
+Tạo học kỳ. Nhập danh sách sinh viên và danh sách giảng viên. Quản lý tài khoản. Gán Moderator cho học kỳ. Mở lại danh sách đã chốt. Xuất Excel toàn học kỳ. ĐÃ CHỐT
+Moderator
+Giảng viên, điều phối toàn bộ học kỳ
+Điều phối mọi ngành và mọi phạm vi ghép nhóm: đặt deadline riêng và gia hạn cho từng phạm vi; hủy, gộp và phân bổ nhóm sau deadline; xử lý khiếu nại rời nhóm; đổi điều kiện sinh viên (kèm lý do); chốt danh sách; mở lại danh sách đã chốt; xem thống kê và xuất Excel. ĐÃ CHỐT
+Leader
+Sinh viên tạo nhóm
+Quản lý nhóm, duyệt đơn, gửi lời mời, khóa/mở khóa nhóm, kick thành viên trước deadline, chuyển chức Leader.
+Sinh viên
+Có tên trong danh sách đã nhập
+Tạo nhóm hoặc nộp đơn, nhận lời mời, quản lý hồ sơ, rời nhóm theo quy định.
+
+
+Hệ thống không có vai trò sub moderator. Mỗi học kỳ có đúng một Moderator, điều phối mọi ngành và mọi phạm vi ghép nhóm. ĐÃ CHỐT (quyết định 19/10/2026)
+Giảng viên nhận vai trò Moderator được lấy từ danh sách giảng viên do Admin nhập. Giảng viên đăng nhập bằng tài khoản (email) có trong file danh sách giảng viên Admin đã nhập. ĐÃ CHỐT
+Thay Moderator — ĐỀ XUẤT: Admin thay Moderator bất cứ lúc nào; khiếu nại đang chờ chuyển sang người mới. Chưa gán Moderator thì Admin làm thay các việc của Moderator.
+3. Học kỳ và ngành
+3.1. Học kỳ
+Mã học kỳ có dạng SP26 (Spring 2026), SU26 (Summer 2026), FA26 (Fall 2026). Mỗi năm một bộ mã nên không trùng. ĐÃ CHỐT
+Học kỳ dài khoảng 4 tháng, trong đó học 10 tuần đầu. Ghép nhóm cho đồ án bắt đầu từ khoảng tuần 5 của học kỳ trước. Deadline rơi vào học kỳ đồ án, theo timeline của nhà trường. Đây là mốc tham khảo, do Admin/Moderator nhập theo timeline thực tế. ĐÃ CHỐT (timeline chính thức: CẦN HỎI H4)
+Mọi ngành đi theo timeline chung của học kỳ: ngày mở ghép nhóm và deadline chung. Deadline chung là mặc định; từng phạm vi có thể có deadline riêng theo 3.5. ĐÃ CHỐT
+Học kỳ đã có dữ liệu sinh viên không bị xóa. Học kỳ chỉ được cập nhật thông tin, hoặc lưu trữ (ẩn khỏi danh sách đang dùng, vẫn xem lại được). ĐÃ CHỐT
+Mỗi học kỳ có trạng thái để theo dõi kỳ nào đang diễn ra. ĐÃ CHỐT (có trạng thái "đang diễn ra"); các giá trị dưới đây ĐÃ CHỐT:
+
+Trạng thái học kỳ
+Ý nghĩa
+Sắp tới (Upcoming)
+Đã tạo, chưa tới ngày bắt đầu
+Đang diễn ra (Ongoing)
+Trong khoảng ngày bắt đầu – kết thúc
+Đã kết thúc (Completed)
+Qua ngày kết thúc
+Lưu trữ (Archived)
+Admin ẩn khỏi danh sách đang dùng, chỉ xem lại
+
+
+Ba trạng thái đầu do hệ thống tự tính theo ngày. Lưu trữ do Admin bấm.
+Trạng thái học kỳ chỉ để theo dõi thời gian. Nó khác với giai đoạn ghép nhóm của từng ngành (3.4).
+Danh sách học kỳ hiển thị mã, thời gian, trạng thái, số sinh viên, số nhóm. Có lọc và sắp xếp.
+3.2. Sinh viên làm đồ án và phạm vi ghép nhóm
+Chỉ sinh viên đang ở kỳ học làm đồ án mới được ghép nhóm, theo cột "kỳ" trong file nhập (là kỳ học thứ mấy của sinh viên, ví dụ kỳ 8). ĐÃ CHỐT Kỳ học làm đồ án do Moderator thiết lập cho từng học kỳ (ĐỀ XUẤT).
+Chỉ ghép nhóm trong cùng ngành. ĐÃ CHỐT (19/10/2026)
+Mỗi ngành trong học kỳ là một phạm vi ghép nhóm riêng, có giai đoạn và deadline riêng. Hệ thống tự tạo một phạm vi cho mỗi ngành có sinh viên trong danh sách đã nhập (ví dụ Kỹ thuật phần mềm, AI, Kinh tế…), nên mọi ngành làm đồ án đều được ghép nhóm.
+Mỗi sinh viên chỉ thuộc một nhóm trong một học kỳ.
+3.3. Ngành của sinh viên
+Mỗi sinh viên thuộc một ngành. Sinh viên chỉ được ghép nhóm với sinh viên cùng ngành (một nhóm chung một ngành), ví dụ sinh viên ngành AI chỉ ghép với sinh viên ngành AI. ĐÃ CHỐT
+Ngành lấy từ cột trong file nhập của phòng đào tạo. Không dùng cột "ngành theo chuyên đề". ĐÃ CHỐT
+Không đổi ngành giữa kỳ. ĐÃ CHỐT tạm, chờ xác nhận với nhà trường (H1).
+Mỗi kỳ chắc chắn có sinh viên cho các ngành, nên không có chức năng tắt ngành. ĐÃ CHỐT
+3.4. Giai đoạn của một phạm vi ghép nhóm ( Chốt )
+Mỗi phạm vi ghép nhóm (một ngành trong học kỳ) đi qua các giai đoạn sau:
+
+Giai đoạn
+Ý nghĩa
+Được làm gì
+Đang chuẩn bị
+Đã tạo học kỳ, đang nhập danh sách
+Admin nhập và sửa dữ liệu. Sinh viên đăng nhập chỉ được xem và cập nhật hồ sơ, chưa được tạo nhóm hay nộp đơn. ĐÃ CHỐT
+Đang mở ghép nhóm
+Từ ngày mở theo timeline chung
+Sinh viên tạo nhóm, nộp đơn, mời. Leader duyệt.
+Đã khóa theo deadline
+Từ deadline của phạm vi
+Leader mất quyền duyệt đơn, kick, mở khóa. Mọi đơn và lời mời đang chờ bị hủy. Yêu cầu rời nhóm đang chờ Leader duyệt tự chuyển thành khiếu nại gửi Moderator. Nhóm dưới 3 người tự động bị giải tán (chỉ một lần, đúng lúc khóa). Moderator sắp xếp sinh viên lẻ.
+Đã chốt danh sách
+Moderator bấm chốt
+Danh sách dùng để bàn giao. Chỉ xem và xuất Excel, ngoại trừ chuyển Leader trong nhóm (xem 6.4).
+
+
+Chuyển giai đoạn
+Đang chuẩn bị → Đang mở ghép nhóm: tự động theo ngày mở của timeline chung. Hệ thống chỉ mở khi học kỳ đã có Moderator, phạm vi đã có sinh viên và đã có deadline. Nếu thiếu, hệ thống báo cho Moderator; khi bổ sung đủ mà ngày mở đã qua thì phạm vi mở ngay. Phạm vi chưa mở thì không tự khóa khi tới deadline: Moderator phải đặt deadline mới cho phạm vi đó. ĐỀ XUẤT
+Đang mở ghép nhóm → Đã khóa theo deadline: tự động khi tới deadline. Đúng giờ deadline coi như đã quá hạn. ĐÃ CHỐT
+Đã khóa theo deadline → Đang mở ghép nhóm (gia hạn sau deadline): Moderator (hoặc Admin) gia hạn trực tiếp kèm deadline mới, không qua bước duyệt (ĐỀ XUẤT, v2.8). Khi mở lại, các chức năng của sinh viên dùng như bình thường. Các đơn và lời mời đã bị hủy ở deadline đầu không được khôi phục. ĐÃ CHỐT
+Khi mở lại, phạm vi quay về đúng giai đoạn "Đang mở ghép nhóm": Leader có lại quyền duyệt đơn, kick, mở khóa; nhóm bớt người được quay về Mở. Nhóm đã bị giải tán không được lập lại tự động. Tới deadline mới, mọi xử lý tự động (hủy đơn, giải tán nhóm dưới 3) áp dụng lại. ĐỀ XUẤT
+Trong toàn tài liệu, "trước deadline" nghĩa là "khi phạm vi đang ở giai đoạn Đang mở ghép nhóm", "sau deadline" nghĩa là "khi phạm vi đã khóa theo deadline".
+Đã khóa theo deadline → Đã chốt danh sách: do Moderator bấm chốt, phải thỏa tiêu chí ở 7.2. ĐÃ CHỐT
+Đã chốt danh sách → Đã khóa theo deadline (mở lại): do Admin hoặc Moderator thực hiện, bắt buộc ghi lý do. ĐÃ CHỐT (tình huống dùng: xem câu N6)
+Khi mở lại: gỡ cờ "Đã chốt" của sinh viên trong phạm vi, lưu lại thời điểm chốt trước đó; file Excel xuất trong lúc này ghi "Đã mở lại lúc …". Nếu cần cho sinh viên tự ghép tiếp thì đi tiếp bằng gia hạn sau deadline như trên. ĐỀ XUẤT
+3.5. Deadline
+Deadline mặc định của mọi phạm vi là deadline chung của học kỳ. ĐÃ CHỐT
+Moderator được đặt deadline riêng cho từng phạm vi, sớm hơn hoặc muộn hơn deadline chung, không cần ai duyệt. ĐỀ XUẤT (v2.8: bước duyệt cũ chỉ dành cho sub moderator)
+Giới hạn khi đổi deadline — ĐỀ XUẤT:
+Deadline mới phải sau thời điểm hiện tại ít nhất 48 giờ; mỗi lần đổi deadline, sinh viên trong phạm vi được thông báo.
+Khi Moderator/Admin đổi deadline chung: phạm vi đang dùng deadline chung đi theo deadline mới; phạm vi đã có deadline riêng giữ deadline riêng.
+Thời hạn chờ của đơn và lời mời mặc định là 48 giờ. Moderator cấu hình được.
+3.6. Phân công Moderator
+Admin gán một Moderator cho mỗi học kỳ. ĐÃ CHỐT
+Thay Moderator: xem mục 2.
+4. Nhập danh sách
+4.1. Danh sách sinh viên
+Phòng đào tạo gửi một file chung cho cả học kỳ. Admin nhập file vào hệ thống, khoảng tuần 5 của học kỳ trước học kỳ đồ án. ĐÃ CHỐT
+Cột tối thiểu: Mã số sinh viên, Họ tên, Email, Số điện thoại, Kỳ học hiện tại (kỳ thứ mấy), Ngành. Thiếu kỳ học hoặc ngành thì dòng đó báo lỗi. ĐÃ CHỐT
+Được nhập nhiều lần. Mỗi lần nhập, hệ thống hiển thị màn hình kiểm tra trước khi ghi:
+số dòng mới, số dòng cập nhật, số dòng lỗi;
+từng dòng lỗi kèm lý do: sai định dạng, trùng mã số trong file, thiếu cột bắt buộc, email đã thuộc tài khoản giảng viên.
+Admin xác nhận thì hệ thống mới ghi. ĐÃ CHỐT
+Đối chiếu theo mã số sinh viên + học kỳ. Nhập lại không tạo bản ghi trùng. Sinh viên có trong lần nhập trước nhưng vắng trong file mới thì giữ nguyên, không bị xóa hay đổi trạng thái. ĐỀ XUẤT
+Mỗi lần nhập được lưu lại: người nhập, thời điểm, tên file, số dòng mới / cập nhật / lỗi.
+Nhập lại sau khi phạm vi đã mở — ĐỀ XUẤT:
+Dòng thêm sinh viên mới, hoặc làm đổi ngành / kỳ học của sinh viên đã có, bị báo lỗi và không ghi. Chỉ cập nhật thông tin liên hệ (họ tên, email, số điện thoại).
+File gắn cờ không đủ điều kiện: dòng thuộc phạm vi đã chốt được tách riêng, không ghi, và hệ thống báo cho Moderator để quyết định có mở lại hay không.
+Không có trường hợp thêm sinh viên vào giữa kỳ. Sinh viên kỳ trước được nhập trước. Khi vào kỳ đồ án, điều kiện của họ được đánh giá lại; ai không đủ thì bị gắn cờ không đủ điều kiện. ĐÃ CHỐT
+4.2. Danh sách giảng viên
+Admin nhập danh sách giảng viên (họ tên, email) để làm nguồn gán Moderator. ĐÃ CHỐT
+Một email không được vừa là sinh viên vừa là giảng viên. ĐỀ XUẤT
+4.3. Màn hình quản lý danh sách
+Màn hình theo học kỳ và ngành, gồm ba tab:
+Tất cả sinh viên.
+Nhóm: mã nhóm, tên, sĩ số, trạng thái, Leader.
+Chưa có nhóm: kèm lý do.
+Có tìm kiếm theo mã số, tên, email; lọc theo ngành, có/chưa có nhóm, điều kiện; phân trang; sửa thông tin từng sinh viên.
+Moderator và Admin thấy toàn bộ, lọc được theo ngành.
+5. Điều kiện tham gia và trạng thái sinh viên
+5.1. Ba phần trạng thái của sinh viên — ĐÃ CHỐT
+
+Phần
+Giá trị
+Ai thay đổi
+Điều kiện
+Chưa kết luận / Đủ điều kiện / Không đủ điều kiện
+Nhập file của phòng đào tạo, hoặc moderator đổi tay kèm lý do
+Tình trạng nhóm
+Có nhóm / Chưa có nhóm
+Hệ thống tự tính từ thành viên nhóm, không ai sửa tay
+Đã chốt
+Có / Không
+Hệ thống tự gán khi chốt danh sách
+
+
+Mới nhập vào thì điều kiện là "Chưa kết luận". Sinh viên chưa kết luận vẫn được ghép nhóm.
+Chỉ ghi "Đủ điều kiện" khi có dữ liệu xác nhận.
+5.2. Không đủ điều kiện
+Gắn cờ bằng cách: Admin nhập file của phòng đào tạo, hoặc moderator đổi tay kèm lý do. ĐÃ CHỐT
+Khi bị gắn cờ, hệ thống:
+tự loại sinh viên khỏi nhóm;
+hủy mọi đơn và lời mời đang chờ liên quan;
+nếu sinh viên là Leader, chuyển Leader theo 6.5;
+nếu nhóm không còn ai, giải tán nhóm.
+Sinh viên không đủ điều kiện vẫn đăng nhập được nhưng chỉ xem.
+Áp dụng cả sau deadline. Nếu danh sách đã chốt thì phải mở lại (3.4) mới gắn cờ được.
+Gỡ cờ (moderator, kèm lý do) không trả sinh viên về nhóm cũ, không giữ chỗ. Sinh viên phải tự nộp đơn lại, nếu phạm vi còn đang mở.
+6. Nhóm, đơn, lời mời và Leader ( ĐÃ CHỐT )
+6.1. Tạo nhóm và sĩ số
+Sinh viên chưa có nhóm và đủ quyền tham gia thì được tạo nhóm, trở thành Leader và là thành viên đầu tiên.
+Nhóm mới có thể chỉ có 1 người. Tối đa 5 người. Nhóm 3, 4, 5 người đều hợp lệ để bàn giao. ĐÃ CHỐT
+Mọi thành viên trong nhóm phải cùng ngành. Tìm kiếm và mời chỉ trong ngành.
+6.2. Nộp đơn (Apply) và mời (Invite)
+Nộp đơn: sinh viên nộp đơn, Leader đồng ý thì sinh viên vào nhóm ngay.
+Tối đa 3 đơn đang chờ cùng lúc. Đơn bị từ chối, tự rút hoặc hết hạn thì trả lại lượt. Không giới hạn tổng số lần nộp.
+Mời: Leader mời sinh viên chưa có nhóm, sinh viên đồng ý hoặc từ chối. Một sinh viên nhận được nhiều lời mời; lời mời không tính vào giới hạn 3 đơn.
+Lời mời không giữ chỗ. Khi đồng ý, hệ thống kiểm tra lại sức chứa và việc sinh viên chưa có nhóm.
+Các thao tác xảy ra cùng lúc không được làm nhóm quá 5 người, hoặc làm một sinh viên thuộc hai nhóm.
+Khi vào nhóm, mọi đơn và lời mời khác của sinh viên đó tự hủy.
+Người gửi được rút đơn hoặc lời mời trước khi có kết quả.
+Lúc duyệt hoặc đồng ý, hệ thống kiểm tra đơn còn hạn và phạm vi còn đang mở. Đơn vừa hết hạn thì không duyệt được. ĐÃ CHỐT
+Tới deadline, hủy mọi đơn và lời mời đang chờ.
+6.3. Trạng thái nhóm
+Mở: nhận đơn. Nhóm đủ 5 người bớt người thì tự quay về Mở nếu chưa khóa và còn trước deadline.
+Đủ: 5 người, không nhận thêm.
+Khóa: Leader chủ động khóa (kể cả khi nhóm chỉ có 1 người). Không nhận đơn mới. Trước deadline vẫn duyệt được đơn đã có trước khi khóa, và gửi/nhận lời mời tới đủ 5 người. Leader mở khóa được.
+Nhóm có thể vừa Đủ vừa Khóa; hệ thống và file Excel giữ được thông tin khóa.
+Sau deadline nhóm không quay về Mở, kể cả khi bị bớt người. ĐÃ CHỐT
+6.4. Rời nhóm
+Trước deadline, nhóm chưa khóa: thành viên tự rời.
+Nhóm đang khóa: phải được Leader duyệt. Leader không duyệt thì thành viên khiếu nại lên Moderator.
+Leader muốn rời có hai cách:
+chuyển chức cho thành viên khác rồi rời;
+mở khóa rồi tự rời, hệ thống tự chọn Leader mới theo 6.5.
+Khi thành viên cuối cùng rời, nhóm tự giải tán.
+Sau khi đã chốt danh sách, nhóm vẫn được chuyển Leader cho thành viên trong nhóm. ĐÃ CHỐT
+Leader hiện tại thực hiện, người nhận phải đồng ý. Thao tác được ghi lịch sử và báo cho Moderator. File Excel xuất sau đó ghi thêm "Thay đổi gần nhất sau chốt: …". ĐỀ XUẤT
+Sau deadline không ai tự rời nhóm được, vì nhóm đã bị khóa. Chỉ Moderator được đưa sinh viên ra khỏi nhóm hoặc chuyển sang nhóm khác (xem 7.1). ĐÃ CHỐT
+Leader chuyển chức thì người nhận phải đồng ý. Khi chuyển chức để rời nhóm đang khóa, chuyển chức và rời diễn ra trong một thao tác. ĐÃ CHỐT
+6.5. Chọn Leader mới tự động — ĐÃ CHỐT
+Áp dụng khi Leader tự rời sau khi mở khóa, bị loại do không đủ điều kiện, hoặc bị moderator chuyển sang nhóm khác:
+Leader mới là người vào nhóm sớm nhất trong số thành viên còn lại.
+Nếu nhiều người bị loại cùng lúc (ví dụ một lần nhập file gắn cờ), hệ thống loại hết trước rồi mới chọn Leader trong số người còn lại.
+Nếu nhóm không còn ai, giải tán.
+7. Điều phối sau deadline và chốt danh sách
+7.1. Điều phối — ĐÃ CHỐT
+Tới deadline, hệ thống tự động giải tán nhóm dưới 3 người. Thành viên của các nhóm này được báo và chuyển vào danh sách chưa có nhóm. Hệ thống báo cho Moderator vào sắp xếp lại nhóm. ĐÃ CHỐT
+Moderator có toàn quyền điều phối mọi nhóm, kể cả nhóm đang khóa (Leader tự khóa hoặc khóa theo deadline): thêm sinh viên, đưa sinh viên ra, chuyển sinh viên giữa các nhóm, gộp, giải tán, tạo nhóm mới và chỉ định Leader. Không cần đơn, lời mời hay sự đồng ý của Leader. ĐÃ CHỐT (20/10/2026)
+Quyền này dùng được cho tới khi chốt danh sách; sau khi chốt thì phải mở lại trước (3.4). ĐỀ XUẤT
+Moderator đưa sinh viên chưa có nhóm vào các nhóm chưa đủ 5 người, kể cả nhóm đang khóa, miễn không quá 5.
+Khi còn sinh viên lẻ không đủ để lập một nhóm, Moderator được chuyển thành viên từ nhóm khác sang để nhóm mới đủ điều kiện (ít nhất 3 người). ĐÃ CHỐT (20/10/2026)
+Nhóm bị rút người vẫn phải còn ít nhất 3 người; nếu không, hệ thống cảnh báo và Moderator phải xử lý tiếp nhóm đó. ĐỀ XUẤT
+Sau deadline, nếu một nhóm tụt xuống dưới 3 người (ví dụ có người bị gắn cờ), nhóm bị giải tán và Moderator gộp thành viên vào các nhóm chưa đủ.
+Việc giải tán sau thời điểm deadline do Moderator làm, không tự động (để nhóm Moderator đang lập dở không bị giải tán). Màn hình có bộ lọc "nhóm dưới 3 người" và nút giải tán tất cả các nhóm đang lọc trong một lần bấm. Nhóm dưới 3 người còn lại sẽ chặn việc chốt danh sách (7.2). ĐÃ CHỐT
+Nhóm bị giải tán thì mọi yêu cầu rời nhóm và khiếu nại liên quan được đóng.
+Khi Moderator chuyển Leader của một nhóm sang nhóm khác, nhóm cũ chọn Leader mới theo 6.5.
+Mọi thay đổi do moderator thực hiện đều được thông báo cho người bị ảnh hưởng.
+7.2. Tiêu chí chốt danh sách — ĐÃ CHỐT
+Không cho chốt khi:
+còn nhóm dưới 3 người;
+còn khiếu nại hoặc yêu cầu rời nhóm chưa xử lý.
+Chỉ cảnh báo khi: còn sinh viên đủ điều kiện hoặc chưa kết luận mà chưa có nhóm.
+Khi chốt:
+thành viên của các nhóm 3–5 người được đánh dấu "Đã chốt";
+sinh viên chưa có nhóm và sinh viên không đủ điều kiện không được đánh dấu, và nằm ở sheet "Chưa có nhóm" của file Excel.
+Sau khi chốt, chỉ được xem và xuất Excel, ngoại trừ chuyển Leader trong nhóm. Muốn sửa gì khác thì Admin hoặc Moderator mở lại (3.4).
+7.3. Thống kê — ĐÃ CHỐT
+Theo học kỳ và ngành. Moderator và Admin xem toàn bộ, lọc được theo ngành.
+Tổng sinh viên = có nhóm + chưa có nhóm.
+Số sinh viên không đủ điều kiện (đếm riêng, cũng nằm trong "chưa có nhóm").
+Số nhóm theo sĩ số (1, 2, 3, 4, 5) và theo trạng thái. Nhóm vừa Đủ vừa Khóa được đếm ở cả hai.
+Số nhóm dưới 3 người, số khiếu nại chưa xử lý, số đơn và lời mời đang chờ.
+Số liệu lấy cùng nguồn với file Excel tại cùng thời điểm.
+8. Hồ sơ, tìm kiếm, thông báo
+8.1. Hồ sơ và chế độ riêng tư
+Hồ sơ gồm kỹ năng, điểm mạnh, điểm yếu. Bắt buộc có Email, Số điện thoại ( option ). Cho phép đặt chế độ Riêng tư.
+Hồ sơ riêng tư vẫn xuất hiện trong tìm kiếm nhưng không hiện thông tin chi tiết.
+Khi sinh viên nộp đơn, Leader và thành viên nhóm nhận đơn được xem đầy đủ hồ sơ của sinh viên đó, kể cả khi đang riêng tư.
+Quyền xem qua đơn kết thúc khi nào? ĐỀ XUẤT:
+Kết thúc ngay khi đơn bị rút, bị từ chối, bị hủy hoặc hết hạn.
+Kết quả tìm kiếm hồ sơ riêng tư chỉ hiện tên và mã số; không dùng kỹ năng ẩn để lọc.
+Đồng đội cùng nhóm xem được hồ sơ nhau cho tới khi không còn cùng nhóm.
+8.2. Tìm kiếm và Like
+Leader tìm sinh viên chưa có nhóm theo kỹ năng, tên, mã số.
+Sinh viên tìm nhóm đang Mở theo tên nhóm và kỹ năng cần tuyển.
+Chỉ tìm trong cùng học kỳ và cùng ngành.
+Thành viên được Like ứng viên để góp ý. Like chỉ để tham khảo; Leader quyết định ngay, không cần đủ phiếu.
+8.3. Thông báo
+Thông báo hiện trên web (quả chuông) và gửi email, dùng email trong danh sách đã nhập.
+Đã có từ trước: được nhận vào nhóm, nhận lời mời.
+ĐÃ CHỐT thêm:
+bị gắn cờ không đủ điều kiện và bị loại khỏi nhóm;
+tự động trở thành Leader;
+nhóm bị giải tán;
+bị moderator chuyển sang nhóm khác;
+phạm vi bị khóa theo deadline, được gia hạn hoặc đã chốt.
+9. Đăng nhập
+Mọi người dùng chỉ đăng nhập bằng tài khoản Gmail (Google). Hệ thống không có tài khoản mật khẩu riêng, không có chức năng đăng ký, quên mật khẩu hay đổi mật khẩu. ĐÃ CHỐT (20/10/2026)
+Email dùng để đăng nhập là email trong file đã nhập (danh sách sinh viên, danh sách giảng viên). Email có trong danh sách thì vào được trang; không có thì bị từ chối. ĐÃ CHỐT
+Sinh viên chỉ đăng nhập được khi tài khoản khớp với một sinh viên trong danh sách đã nhập. Đăng nhập Google thành công nhưng email không có trong danh sách thì bị từ chối. Không đối chiếu bằng họ tên, không cho tự nhận mã số của người khác. ĐÃ CHỐT
+Giảng viên (Moderator) chỉ đăng nhập được khi email nằm trong danh sách giảng viên Admin đã nhập. Chỉ có quyền điều phối ở học kỳ được gán. Ai đăng nhập được mà không có tên trong danh sách giảng viên thì không bao giờ nhận vai trò moderator. ĐÃ CHỐT
+Sinh viên có tên ở nhiều học kỳ nghĩa là sinh viên đó đang học lại đồ án. ĐÃ CHỐT Khi đó:
+mỗi học kỳ là một bản ghi riêng, nhóm cũ ở học kỳ trước được giữ làm lịch sử và không ảnh hưởng học kỳ mới;
+khi đăng nhập, hệ thống vào học kỳ gần nhất có tên sinh viên;
+học kỳ cũ chỉ được xem. ĐỀ XUẤT
+Sinh viên không đủ điều kiện đăng nhập được nhưng chỉ xem.
+10. Xuất Excel
+ĐÃ CHỐT (v2.5, cùng các thay đổi của v2.7 đã được duyệt ngày 17/10/2026).
+Xuất bất cứ lúc nào, nhiều lần. Mỗi lần lấy dữ liệu hiện tại.
+Hai sheet, mỗi sinh viên một dòng, không gộp ô.
+Sheet "Danh sách nhóm", thành viên mọi nhóm hiện có:
+Học kỳ, Ngành;
+Mã nhóm, Tên nhóm, Sĩ số, Trạng thái nhóm (giữ thông tin khóa);
+Mã số, Họ tên, Email, Số điện thoại, Vai trò (Leader/Member).
+Sheet "Chưa có nhóm", gồm cả sinh viên không đủ điều kiện:
+Học kỳ, Ngành;
+Mã số, Họ tên, Email, Số điện thoại;
+Điều kiện, Lý do chưa có nhóm (chỉ ghi khi có căn cứ);
+Ghi chú điều phối (cột trống).
+Đầu mỗi sheet ghi: học kỳ, ngành, thời điểm xuất, và "Đã chốt lúc …" hoặc "Chưa chốt" (hoặc "Đã mở lại lúc …", "Thay đổi gần nhất sau chốt: …" nếu có).
+Moderator và Admin xuất theo ngành hoặc toàn học kỳ.
+Tên file: Danh_sach_ghep_nhom_<HocKy>_<Nganh hoặc TatCa>_<yyyyMMdd_HHmmss>.xlsx.
+Sắp xếp:
+sheet nhóm: theo Ngành → Mã nhóm → Leader trước, rồi thành viên theo mã số;
+sheet chưa có nhóm: theo Ngành → mã số.
+Mã số và số điện thoại lưu dạng văn bản (giữ số 0 đầu). Có tiêu đề, bộ lọc, cố định hàng tiêu đề.
+Không đưa kỹ năng, điểm mạnh/yếu hay nội dung hồ sơ riêng tư vào file.
+11. Lịch sử thao tác — ĐÃ CHỐT ( ngoài ) 
+Hệ thống lưu ai làm gì, lúc nào cho các thao tác:
+nhập file;
+đổi giai đoạn, gia hạn, mở lại;
+gán hoặc thay moderator;
+moderator chuyển, thêm người hoặc giải tán nhóm;
+chuyển Leader sau khi đã chốt;
+đổi điều kiện sinh viên (kèm lý do).
+12. Ghi chú cho bước thiết kế
+Phân quyền theo vai trò và học kỳ phải được kiểm tra ở phía máy chủ, không chỉ ẩn trên giao diện.
+Các thao tác cùng lúc không được làm nhóm quá 5 người, hoặc làm sinh viên thuộc hai nhóm trong cùng học kỳ.
+Nếu hai người vào nhóm cùng thời điểm, cần một tiêu chí phụ cố định để chọn Leader.
+Thống kê và file Excel phải nhất quán tại thời điểm xuất.
+Diagram sẽ được vẽ lại sau khi bản requirement này được nhóm duyệt.
+13. Từ ngữ thống nhất — ĐÃ CHỐT
+
+Dùng trong tài liệu
+Không dùng lẫn với
+Khóa theo deadline: Leader mất quyền khi tới deadline
+"chốt"
+Chốt danh sách: bước cuối để bàn giao
+"khóa", "finalize"
+Khóa nhóm: Leader chủ động khóa nhóm
+"khóa theo deadline"
+Phạm vi ghép nhóm: một ngành trong một học kỳ
+"đợt"
+Ngành: ngành học của sinh viên, ví dụ Kỹ thuật phần mềm, AI, Kinh tế ("nhóm đề tài" trong ghi chú review là ngành)
+"nhóm đề tài", "chuyên ngành", "phân ngành"
+Moderator: giảng viên điều phối ghép nhóm của cả học kỳ
+"điều phối viên", "sub moderator", "Moderator chính"
+
+
+Tên đề tài: Website ghép nhóm. ĐÃ CHỐT Ngôn ngữ: tài liệu viết tiếng Việt, tên trạng thái và thuật ngữ kỹ thuật dùng tiếng Anh như bảng trên.
+14. Những quy tắc cũ không dùng nữa
+Phạm vi quản lý toàn bộ luận án đến bảo vệ; quy trình qua giảng viên hướng dẫn; nhóm 4–6 người; vote đa số bắt buộc; giới hạn gộp 3 đơn + lời mời.
+Luồng "nộp đơn → Leader gửi lời mời → sinh viên đồng ý". Hiện tại Leader duyệt đơn là sinh viên vào nhóm ngay.
+Hủy mọi nhóm dưới 5 người tại deadline. Hiện tại ngưỡng là dưới 3.
+Một trạng thái chung cho cả học kỳ. Hiện tại giai đoạn tính theo từng phạm vi ghép nhóm, dùng timeline chung.
+Moderator tự hủy nhóm dưới 3 người bằng tay. Hiện tại hệ thống tự động giải tán.
+Thêm sinh viên vào giữa kỳ. Hiện tại không có trường hợp này.
+Diagram của phạm vi quản lý toàn bộ Capstone.
+Đăng nhập bằng tài khoản FPT cho sinh viên từ K18 trở về trước. Hiện tại mọi người chỉ đăng nhập bằng Gmail theo danh sách email đã nhập (20/10/2026).
+Vai trò sub moderator (người điều phối chính và phụ cho từng ngành), kiêm nhiệm, đề nghị và duyệt gia hạn deadline. Hiện tại một Moderator làm toàn bộ việc điều phối (v2.8).
+Ghép nhóm liên ngành: môn cho phép ghép khác ngành, thiết lập kiểu ghép, phạm vi cả môn. Hiện tại chỉ ghép trong cùng ngành (v2.8).
+Quản lý nhiều môn: Moderator tạo môn, môn Khởi nghiệp, sinh viên ghép nhóm ở nhiều môn. Hiện tại chỉ làm Capstone (v2.9).
+Câu hỏi cần hỏi mentor
+Những câu dưới đây chưa có trả lời. Khi có câu trả lời, ghi vào cột "Trả lời" để cập nhật requirement.
+
+#
+Câu hỏi
+Vì sao cần hỏi
+Trả lời
+H1
+Sinh viên có được đổi ngành / chuyên ngành hẹp giữa kỳ không? Nếu có thì nhóm đang ở xử lý thế nào?
+Theo luật thì không được đổi, cần xác nhận lại. Requirement đang ghi: không cho đổi ngành giữa kỳ (3.3).
+
+
+H4
+Timeline chính thức của nhà trường: tuần nào bắt đầu ghép nhóm, deadline rơi vào tuần nào của kỳ sau?
+Requirement đang để mốc tham khảo là tuần 5 của học kỳ trước (3.1).
+
+
+
+
+

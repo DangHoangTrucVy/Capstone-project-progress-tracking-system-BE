@@ -19,10 +19,9 @@ app:
     secret: test-only-secret-key-must-be-at-least-32-bytes-long
     access-token-exp-minutes: 60
     refresh-token-exp-days: 7
-  storage:
-    local-dir: target/test-uploads
-  security:
-    allowed-email-domain: fpt.edu.vn,gmail.com
   mail:
-    # Tests dispatch the email outbox explicitly (WorkflowTestSupport.sentEmails) instead of on a timer.
+    # Tests dispatch the email outbox explicitly (TestSupport.dispatchEmails) instead of on a timer.
     dispatch-delay-ms: 3600000
+  formation:
+    # Tests run the automatic transitions themselves (ScopeService.tick) instead of on a timer.
+    tick-ms: 3600000

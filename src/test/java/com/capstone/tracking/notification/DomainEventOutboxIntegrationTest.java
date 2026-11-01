@@ -1,6 +1,6 @@
 package com.capstone.tracking.notification;
 
-import com.capstone.tracking.WorkflowTestSupport;
+import com.capstone.tracking.TestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-class DomainEventOutboxIntegrationTest extends WorkflowTestSupport {
+class DomainEventOutboxIntegrationTest extends TestSupport {
     @Autowired TransactionTemplate transactions;
     @Autowired ApplicationEventPublisher publisher;
     @Autowired DomainEventOutboxRepository outbox;
@@ -49,6 +49,6 @@ class DomainEventOutboxIntegrationTest extends WorkflowTestSupport {
     }
 
     private DomainEvent event() {
-        return DomainEvent.of(DomainEventType.TOPIC_APPROVED, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "Topic");
+        return DomainEvent.of(DomainEventType.SCOPE_OPENED, "Đã mở ghép nhóm", UUID.randomUUID());
     }
 }

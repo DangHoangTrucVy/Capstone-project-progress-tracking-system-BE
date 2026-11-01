@@ -33,7 +33,7 @@ class RedisNotificationBroadcasterTest {
 
     private final UUID recipient = UUID.randomUUID();
     private final NotificationResponse notification = new NotificationResponse(UUID.randomUUID(),
-            DomainEventType.TOPIC_APPROVED, "Hội đồng đã DUYỆT đề tài", UUID.randomUUID(), UUID.randomUUID(),
+            DomainEventType.APPLICATION_ACCEPTED, "Bạn đã được nhận vào nhóm Alpha", UUID.randomUUID(), UUID.randomUUID(),
             "Đạt", Instant.now().truncatedTo(ChronoUnit.MILLIS), false, null, Instant.now().truncatedTo(ChronoUnit.MILLIS));
 
     @Test
