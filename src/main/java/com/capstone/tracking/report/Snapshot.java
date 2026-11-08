@@ -1,20 +1,18 @@
 package com.capstone.tracking.report;
 
-import com.capstone.tracking.common.exception.ResourceNotFoundException;
 import com.capstone.tracking.roster.Enrollment;
 import com.capstone.tracking.roster.EnrollmentRepository;
 import com.capstone.tracking.semester.Access;
+import com.capstone.tracking.semester.FormationScope;
+import com.capstone.tracking.semester.FormationScopeRepository;
 import com.capstone.tracking.semester.Semester;
-import com.capstone.tracking.subject.FormationScope;
-import com.capstone.tracking.subject.FormationScopeRepository;
-import com.capstone.tracking.subject.Subject;
-import com.capstone.tracking.subject.SubjectRepository;
 import com.capstone.tracking.team.GroupCore;
 import com.capstone.tracking.team.GroupMember;
 import com.capstone.tracking.team.GroupMemberRepository;
 import com.capstone.tracking.team.JoinRequest;
 import com.capstone.tracking.team.JoinRequestRepository;
 import com.capstone.tracking.team.LeaveRequestRepository;
+import com.capstone.tracking.team.RoomStatus;
 import com.capstone.tracking.team.StudentGroup;
 import com.capstone.tracking.team.StudentGroupRepository;
 import com.capstone.tracking.user.User;
@@ -29,9 +27,9 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The data behind statistics and the Excel export, read once per call: the scopes selected (one major, one subject or
- * the whole semester), their groups with members, and their students. Callers run it in one repeatable-read
- * transaction, so the numbers and the file agree at the moment they are produced (7.3, 12).
+ * The data behind statistics and the Excel export, read once per call: the semester's majors (or one), their rooms
+ * with members, and their students. Callers run it in one repeatable-read transaction, so the numbers and the file
+ * agree at the moment they are produced (7.7, 12).
  */
 @Component
 @RequiredArgsConstructor
@@ -39,7 +37,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class Snapshot {
 
     private final Access access;
-    private final SubjectRepository subjects;
     private final FormationScopeRepository scopes;
     private final EnrollmentRepository enrollments;
     private final StudentGroupRepository groups;
@@ -48,57 +45,41 @@ public class Snapshot {
     private final LeaveRequestRepository leaveRequests;
     private final GroupCore core;
 
-    public record GroupData(StudentGroup group, List<GroupMember> members, boolean full, String state) {}
-
-    public record ScopeData(FormationScope scope, Instant deadline, List<GroupData> groups, List<Enrollment> students,
-                            Map<UUID, GroupMember> membershipByEnrollment, long openComplaints, long pendingApplies,
-                            long pendingInvites) {}
-
-    public record Data(Semester semester, Subject subject, UUID majorId, Instant takenAt, List<ScopeData> scopes) {}
-
-    public Data take(String semesterCode, UUID subjectId, UUID majorId, User viewer, java.util.function.Function<FormationScope, Instant> deadline) {
-        Semester semester = access.requireModerator(semesterCode, viewer);
-        Subject subject = null;
-        List<FormationScope> selected;
-        if (subjectId != null) {
-            subject = subjects.findById(subjectId).orElseThrow(() -> ResourceNotFoundException.of("Subject", subjectId));
-            if (!subject.getSemesterCode().equals(semesterCode)) {
-                throw new ResourceNotFoundException("Subject " + subjectId + " is not in semester " + semesterCode);
-            }
-            selected = scopes.findBySubjectIdOrderByMajor_CodeAsc(subjectId);
-        } else {
-            selected = scopes.findBySemester(semesterCode);
+    public record RoomData(StudentGroup room, List<GroupMember> members, RoomStatus status) {
+        public int size() {
+            return members.size();
         }
-        selected = selected.stream().filter(s -> majorId == null || s.getMajor().getId().equals(majorId)).toList();
-        Instant now = Instant.now();
-        List<ScopeData> data = selected.stream().map(scope -> scopeData(scope, deadline.apply(scope), now)).toList();
-        return new Data(semester, subject, majorId, now, data);
     }
 
-    private ScopeData scopeData(FormationScope scope, Instant deadline, Instant now) {
-        List<StudentGroup> active = groups.findActiveByScope(scope.getId());
-        Map<UUID, List<GroupMember>> byGroup = active.isEmpty() ? Map.of()
-                : members.findActiveIn(active.stream().map(StudentGroup::getId).toList()).stream()
+    public record ScopeData(FormationScope scope, List<RoomData> rooms, List<Enrollment> students,
+                            Map<UUID, GroupMember> membershipByEnrollment, long openComplaints, long pendingRequests,
+                            long pendingInvites) {}
+
+    public record Data(Semester semester, UUID majorId, Instant takenAt, List<ScopeData> scopes) {}
+
+    public Data take(String semesterCode, UUID majorId, User viewer) {
+        Semester semester = access.requireModerator(semesterCode, viewer);
+        Instant now = Instant.now();
+        List<ScopeData> data = scopes.findBySemester(semesterCode).stream()
+                .filter(s -> majorId == null || s.getMajor().getId().equals(majorId))
+                .map(scope -> scopeData(semester, scope, now)).toList();
+        return new Data(semester, majorId, now, data);
+    }
+
+    private ScopeData scopeData(Semester semester, FormationScope scope, Instant now) {
+        List<StudentGroup> rooms = groups.findActiveByScope(scope.getId());
+        Map<UUID, List<GroupMember>> byRoom = rooms.isEmpty() ? Map.of()
+                : members.findActiveIn(rooms.stream().map(StudentGroup::getId).toList()).stream()
                         .collect(Collectors.groupingBy(m -> m.getGroup().getId()));
-        int max = scope.getSubject().getMaxGroupSize();
-        List<GroupData> groupData = active.stream().map(g -> {
-            List<GroupMember> list = byGroup.getOrDefault(g.getId(), List.of());
-            String state = stateLabel(g, list.size(), max, now);
-            return new GroupData(g, list, list.size() >= max, state);
+        List<RoomData> roomData = rooms.stream().map(g -> {
+            List<GroupMember> list = byRoom.getOrDefault(g.getId(), List.of());
+            return new RoomData(g, list, core.status(g, list.size(), semester, now));
         }).toList();
-        Map<UUID, GroupMember> membership = byGroup.values().stream().flatMap(List::stream)
+        Map<UUID, GroupMember> membership = byRoom.values().stream().flatMap(List::stream)
                 .collect(Collectors.toMap(m -> m.getEnrollment().getId(), m -> m));
-        return new ScopeData(scope, deadline, groupData, enrollments.findByScopeId(scope.getId()), membership,
+        return new ScopeData(scope, roomData, enrollments.findByScopeId(scope.getId()), membership,
                 leaveRequests.countOpenInScope(scope.getId()),
                 joinRequests.countOpenInScope(scope.getId(), JoinRequest.Type.APPLY, now),
                 joinRequests.countOpenInScope(scope.getId(), JoinRequest.Type.INVITE, now));
-    }
-
-    /** "Mở", "Đủ", "Khóa", or "Đủ, Khóa": a full group keeps its lock information (6.3, 10). */
-    private String stateLabel(StudentGroup g, int size, int max, Instant now) {
-        boolean full = size >= max;
-        boolean locked = core.state(g, size, now) == com.capstone.tracking.team.GroupState.LOCKED;
-        String label = full && locked ? "Đủ, Khóa" : full ? "Đủ" : locked ? "Khóa" : "Mở";
-        return g.isFinalized() ? label + ", Đã chốt" : label;
     }
 }

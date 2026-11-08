@@ -110,7 +110,8 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -d '{"email":"admin@fpt.edu.vn","password":"Admin@123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])")
 
 curl -s http://localhost:8080/api/v1/semesters -H "Authorization: Bearer $TOKEN"
-curl -s http://localhost:8080/api/v1/semesters/FA26/scopes -H "Authorization: Bearer $TOKEN"
+curl -s http://localhost:8080/api/v1/semesters/FA26/rooms -H "Authorization: Bearer $TOKEN"
+curl -s http://localhost:8080/api/v1/semesters/FA26/phase-check -H "Authorization: Bearer $TOKEN"
 curl -s -o list.xlsx "http://localhost:8080/api/v1/semesters/FA26/export" -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -122,10 +123,18 @@ mvn test
 
 Most tests run on in-memory H2. `PostgresMigrationTest` and the `*PostgresTest` classes start a real PostgreSQL 16
 in-process (no Docker), apply every migration + the dev seed, validate the entities and re-run the flows on it;
-`ConcurrentJoinPostgresTest` checks that simultaneous joins never exceed 5 members or put a student in two groups.
+`ConcurrentJoinPostgresTest` checks that simultaneous joins never exceed the maximum size, put a student in two rooms
+or give a room two Leaders.
 `InfrastructureIntegrationTest` needs Floci and Redis (`INFRA_TESTS=true`).
 
 > On JDK 21+ newer than Mockito's Byte Buddy supports, add `-DargLine=-Dnet.bytebuddy.experimental=true`.
+
+## API v3.0 (08/11/2026)
+
+The semester is the central entity: phases OPENING → FORMING → SUPPLEMENT → CLOSED, one deadline and the rules per
+semester; the Moderator creates rooms, students join them freely and the first one in is the Leader; rooms become
+coded groups when the Moderator approves them or when formation ends. Endpoints, removed operations and the rules
+applied: [API v3.0](docs/api-v3.0.md).
 
 ## API cleanup (21/10/2026)
 
@@ -150,10 +159,11 @@ Compose `start` only starts existing containers; the startup script uses `up` to
 
 ## Demo request timing
 
-Apply/Invite lifetime is configured in **minutes** with `PUT /api/v1/subjects/{subjectId}`:
-`{"requestTtlMinutes":15}`. Values from 1 to 20160 minutes are accepted. Existing requests retain their saved
-expiry when this setting changes; new requests use the new value. FE: **Deadline và chốt → Thời hạn Apply / Invite**.
+The lifetime of a request to join a locked room (and of an invite before the deadline) is a semester rule in
+**minutes**: `PUT /api/v1/semesters/{semester}/rules` with `{"requestTtlMinutes":15}`. Values from 1 to 20160 minutes
+are accepted. Existing requests retain their saved expiry when this setting changes; new requests use the new value.
+Invites of the supplement phase never expire.
 
-Local `.env.lan` uses `FORMATION_REQUEST_TTL_MINUTES=15` for new Capstone configurations and
+Local `.env.lan` uses `FORMATION_REQUEST_TTL_MINUTES=15` for new semesters and
 `FORMATION_MIN_DEADLINE_NOTICE_MINUTES=10` to allow short demo deadlines. The main backend also defaults to 15 and 10 minutes when the variables are omitted. Changing the request lifetime does not change the formation deadline;
 the Moderator selects that deadline separately. Migration V21 preserves historical hour settings as minutes; V22 sets the database default for new configurations to 15 minutes without rewriting existing data.

@@ -4,14 +4,14 @@ import com.capstone.tracking.common.exception.ApiException;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import java.util.List;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 /**
- * Whether a student may act in a subject: they must be on its list, in their most recent semester (older semesters
- * of a retaking student are view-only, mục 9) and not ineligible (ineligible students only view, 5.2).
+ * Whether a student may act in a semester: they must be on its list, it must be their most recent semester (older
+ * semesters of a retaking student are view-only, mục 9) and they must not be ineligible (ineligible students only
+ * view, 5.2).
  */
 @Component
 @RequiredArgsConstructor
@@ -20,14 +20,14 @@ public class StudentGate {
     private final EnrollmentRepository enrollments;
     private final SemesterStudentRepository semesterStudents;
 
-    public Enrollment enrollment(UUID subjectId, User user) {
-        return enrollments.findBySubjectIdAndUserId(subjectId, user.getId())
+    public Enrollment enrollment(String semesterCode, User user) {
+        return enrollments.findBySemesterAndUser(semesterCode, user.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "NOT_ENROLLED",
-                        "You are not on the list of this subject"));
+                        "You are not on the student list of semester " + semesterCode));
     }
 
-    public Enrollment requireCanAct(UUID subjectId, User user) {
-        return requireCanAct(enrollment(subjectId, user));
+    public Enrollment requireCanAct(String semesterCode, User user) {
+        return requireCanAct(enrollment(semesterCode, user));
     }
 
     public Enrollment requireCanAct(Enrollment enrollment) {
@@ -49,7 +49,7 @@ public class StudentGate {
         if (enrollment.isIneligible()) {
             String reason = enrollment.getEligibilityReason();
             throw new ApiException(HttpStatus.FORBIDDEN, "NOT_ELIGIBLE",
-                    "You are not eligible for this subject" + (reason == null ? "" : ": " + reason));
+                    "Not eligible for Capstone" + (reason == null ? "" : ": " + reason));
         }
     }
 }

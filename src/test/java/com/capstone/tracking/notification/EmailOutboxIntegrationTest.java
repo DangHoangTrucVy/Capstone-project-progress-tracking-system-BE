@@ -82,8 +82,7 @@ class EmailOutboxIntegrationTest extends TestSupport {
     }
 
     private void apply() throws Exception {
-        postJson("/api/v1/groups/" + group + "/applications", applicant, java.util.Map.of())
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isCreated());
+        requestToJoin(group, leader, applicant);
     }
 
     /** Send attempts of this test's application email only: other emails share the database. */
@@ -91,13 +90,13 @@ class EmailOutboxIntegrationTest extends TestSupport {
         return mockingDetails(emailSender).getInvocations().stream()
                 .filter(i -> i.getMethod().getName().equals("send"))
                 .map(i -> (EmailMessage) i.getArgument(0))
-                .filter(m -> m.to().contains(user.getEmail()) && m.subject().contains("xin vào nhóm"))
+                .filter(m -> m.to().contains(user.getEmail()) && m.subject().contains("xin vào"))
                 .count();
     }
 
     private EmailOutbox outboxFor(User user) {
         return outboxRepository.findAll().stream()
-                .filter(e -> e.getRecipientsTo().equals(user.getEmail()) && e.getSubject().contains("xin vào nhóm"))
+                .filter(e -> e.getRecipientsTo().equals(user.getEmail()) && e.getSubject().contains("xin vào"))
                 .findFirst().orElseThrow();
     }
 }

@@ -1,7 +1,7 @@
 package com.capstone.tracking.roster;
 
 import com.capstone.tracking.common.BaseEntity;
-import com.capstone.tracking.subject.FormationScope;
+import com.capstone.tracking.semester.FormationScope;
 import com.capstone.tracking.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -20,7 +20,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * A student's eligibility in Capstone. Whether they have a group is computed from group_members;
+ * A student of the semester in Capstone formation (one per semester student), in the scope of their major, with their
+ * eligibility (5.1). Whether they have a group is computed from group_members;
  * finalization belongs to StudentGroup and is never a student status.
  */
 @Entity
@@ -31,9 +32,6 @@ import lombok.Setter;
 @AllArgsConstructor
 @Builder
 public class Enrollment extends BaseEntity {
-
-    @Column(name = "subject_id", nullable = false)
-    private UUID subjectId;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "scope_id", nullable = false)

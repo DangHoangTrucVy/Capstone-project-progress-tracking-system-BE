@@ -66,51 +66,47 @@ class RevisedRequirementsIntegrationTest extends TestSupport {
 
     @Test
     void majorCannotBeChangedEvenInPreparationAndRetakesKeepSeparateMembership() throws Exception {
-        var w = world(1, 0);
-        var scope = scopeRepository.findById(w.scope().getId()).orElseThrow();
-        scope.setPhase(com.capstone.tracking.subject.ScopePhase.PREPARING);
-        scopeRepository.save(scope);
+        var w = openingWorld(1, 0);
         var ss = semesterStudentRepository.findBySemesterCodeAndUserId(w.code(), w.students().get(0).getId()).orElseThrow();
-        putJson("/api/v1/semester-students/" + ss.getId(), w.admin(), Map.of("majorId", w.otherMajor().getId()))
-                .andExpect(status().isBadRequest());
-        putJson("/api/v1/subjects/" + w.subjectId(), w.moderator(), Map.of("targetTerm", 9))
-                .andExpect(status().isBadRequest());
+        // The edit screen has no major: the request only changes contact details, never the major (3.3).
+        putJson("/api/v1/semester-students/" + ss.getId(), w.admin(), Map.of("majorId", w.otherMajor().getId(),
+                "phone", "0909090909")).andExpect(status().isOk()).andExpect(jsonPath("$.majorId").value(w.major().getId().toString()));
+        assertThat(semesterStudentRepository.findById(ss.getId()).orElseThrow().getMajor().getId()).isEqualTo(w.major().getId());
     }
 
     @Test
-    void finalizedGroupsAllowModeratorChangesAndEligibilityFileWithoutReopenAndExportOnlyWarns() throws Exception {
+    void approvedGroupsKeepTheirCodeTheEligibilityFileStillAppliesAndExportOnlyWarns() throws Exception {
         var w = world(4, 0);
         var s = w.students();
         var group = createGroup(w, s.get(0), "Finalized group");
         join(group, s.get(0), s.get(1));
         join(group, s.get(0), s.get(2));
-        passDeadline(w.scope());
-        postJson("/api/v1/scopes/" + w.scope().getId() + "/finalize", w.moderator(), Map.of()).andExpect(status().isOk());
-        getAs("/api/v1/groups/" + group, w.moderator()).andExpect(jsonPath("$.finalized").value(true));
+        postJson("/api/v1/rooms/" + group + "/finalize-request", s.get(0), Map.of()).andExpect(status().isOk());
+        postJson("/api/v1/rooms/" + group + "/finalize-decision", w.moderator(), Map.of("approve", true))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.finalized").value(true))
+                .andExpect(jsonPath("$.code").value(w.code() + "-" + w.major().getCode() + "-001"));
         String csv = "MSSV,Điều kiện,Lý do\n" + s.get(0).getStudentCode() + ",INELIGIBLE,Đổi ngành ở kỳ trước\n";
         upload("/api/v1/semesters/" + w.code() + "/imports/eligibility", w.admin(), "flags.csv", csv)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.updatedRows").value(1))
-                .andExpect(jsonPath("$.blockedFinalized.length()").value(0));
-        assertThat(enrollmentRepository.findBySubjectIdAndUserId(w.subjectId(), s.get(0).getId()).orElseThrow().getEligibility())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.updatedRows").value(1));
+        assertThat(enrollmentRepository.findBySemesterAndUser(w.code(), s.get(0).getId()).orElseThrow().getEligibility())
                 .isEqualTo(Eligibility.INELIGIBLE);
-        getAs("/api/v1/groups/" + group, w.moderator()).andExpect(jsonPath("$.size").value(2))
+        getAs("/api/v1/rooms/" + group, w.moderator()).andExpect(jsonPath("$.size").value(2))
                 .andExpect(jsonPath("$.finalized").value(true)).andExpect(jsonPath("$.leaderId").value(s.get(1).getId().toString()));
-        assertThat(scopeRepository.findById(w.scope().getId()).orElseThrow().getPhase())
-                .isEqualTo(com.capstone.tracking.subject.ScopePhase.FINALIZED);
         long before = notifications.countByRecipientIdAndReadAtIsNull(w.moderator().getId());
         getAs("/api/v1/semesters/" + w.code() + "/export-check", w.moderator()).andExpect(status().isOk())
                 .andExpect(jsonPath("$.canExport").value(true)).andExpect(jsonPath("$.groupsUnderMinimum.length()").value(1));
         assertThat(notifications.countByRecipientIdAndReadAtIsNull(w.moderator().getId())).isGreaterThan(before);
         getAs("/api/v1/semesters/" + w.code() + "/export", w.moderator()).andExpect(status().isOk())
                 .andExpect(content().contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
-        postJson("/api/v1/groups/" + group + "/moderation/add", w.moderator(), Map.of("userId", s.get(3).getId()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.size").value(3));
-        postJson("/api/v1/groups/" + group + "/moderation/leader", w.moderator(), Map.of("userId", s.get(3).getId()))
+        // An approved group takes no new member before the supplement phase (7.1).
+        postJson("/api/v1/rooms/" + group + "/moderation/add", w.moderator(), Map.of("userId", s.get(3).getId()))
+                .andExpect(status().isConflict());
+        postJson("/api/v1/rooms/" + group + "/moderation/leader", w.moderator(), Map.of("userId", s.get(2).getId()))
                 .andExpect(status().isOk());
-        getAs("/api/v1/semesters/" + w.code() + "/groups?finalized=true", w.moderator())
+        getAs("/api/v1/semesters/" + w.code() + "/rooms?finalized=true", w.moderator())
                 .andExpect(jsonPath("$.totalElements").value(1));
         getAs("/api/v1/semesters/" + w.code() + "/statistics", w.moderator())
-                .andExpect(jsonPath("$.total.finalizedGroups").value(1));
+                .andExpect(jsonPath("$.total.groups").value(1));
     }
 
     @Test
@@ -125,8 +121,8 @@ class RevisedRequirementsIntegrationTest extends TestSupport {
         getAs("/api/v1/semesters/" + w.code() + "/students", user("unassigned", Role.LECTURER))
                 .andExpect(status().isForbidden());
         var outsider = user("unassigned-scope", Role.LECTURER);
-        getAs("/api/v1/scopes/" + w.scope().getId(), outsider).andExpect(status().isForbidden());
-        getAs("/api/v1/scopes/" + w.scope().getId() + "/finalize-check", outsider).andExpect(status().isForbidden());
+        getAs("/api/v1/semesters/" + w.code() + "/phase-check", outsider).andExpect(status().isForbidden());
+        getAs("/api/v1/scopes/" + w.scope().getId(), w.admin()).andExpect(status().isNotFound());
         getAs("/api/v1/semesters/" + w.code(), outsider).andExpect(status().isForbidden());
     }
 
@@ -153,8 +149,8 @@ class RevisedRequirementsIntegrationTest extends TestSupport {
         var member = w.students().get(1);
         var group = createGroup(w, leader, "Complaint");
         join(group, leader, member);
-        postJson("/api/v1/groups/" + group + "/lock", leader, Map.of()).andExpect(status().isOk());
-        var request = body(postJson("/api/v1/groups/" + group + "/leave", member, Map.of("reason", "Xin rời")))
+        postJson("/api/v1/rooms/" + group + "/lock", leader, Map.of()).andExpect(status().isOk());
+        var request = body(postJson("/api/v1/rooms/" + group + "/leave", member, Map.of("reason", "Xin rời")))
                 .get("request").get("id").asText();
         postJson("/api/v1/leave-requests/" + request + "/leader-decision", leader, Map.of("approve", false))
                 .andExpect(status().isOk());
@@ -164,6 +160,6 @@ class RevisedRequirementsIntegrationTest extends TestSupport {
         postJson("/api/v1/leave-requests/" + request + "/moderator-decision", w.moderator(), Map.of("approve", false))
                 .andExpect(status().isOk());
         assertThat(notifications.countByRecipientIdAndReadAtIsNull(leader.getId())).isGreaterThan(before);
-        getAs("/api/v1/groups/" + group, leader).andExpect(jsonPath("$.size").value(2));
+        getAs("/api/v1/rooms/" + group, leader).andExpect(jsonPath("$.size").value(2));
     }
 }

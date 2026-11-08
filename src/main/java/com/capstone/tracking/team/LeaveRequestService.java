@@ -10,9 +10,8 @@ import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.notification.Notifier;
 import com.capstone.tracking.roster.NoGroupReason;
 import com.capstone.tracking.semester.Access;
-import com.capstone.tracking.subject.FormationScope;
-import com.capstone.tracking.subject.FormationScopeRepository;
-import com.capstone.tracking.subject.ScopeRules;
+import com.capstone.tracking.semester.Semester;
+import com.capstone.tracking.semester.SemesterGuard;
 import com.capstone.tracking.team.LeaveRequest.Status;
 import com.capstone.tracking.team.dto.LeaveRequestResponse;
 import com.capstone.tracking.user.User;
@@ -37,9 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class LeaveRequestService {
 
     private final LeaveRequestRepository leaveRequests;
-    private final FormationScopeRepository scopes;
     private final GroupCore core;
-    private final ScopeRules rules;
+    private final SemesterGuard guard;
     private final Access access;
     private final Notifier notifier;
     private final AuditService audit;
@@ -49,16 +47,16 @@ public class LeaveRequestService {
     @Transactional
     public LeaveRequest leaderDecide(UUID requestId, boolean approve, String note, User leader) {
         LeaveRequest snapshot = find(requestId);
-        FormationScope scope = lockScopeShared(snapshot.getGroup().getScope().getId());
+        Semester semester = lockSemester(snapshot);
         core.lockEnrollment(snapshot.getEnrollment().getId());
         LeaveRequest request = lock(requestId);
         StudentGroup group = core.lock(request.getGroup().getId());
         core.requireLeader(group, leader.getId());
-        gate.requireCanAct(scope.getSubject().getId(), leader);
+        gate.requireCanAct(semester.getCode(), leader);
         if (request.getStatus() != Status.PENDING_LEADER) {
             throw closed(request);
         }
-        rules.requireOpen(scope);
+        guard.requireBeforeDeadline(semester);
         Instant now = Instant.now();
         request.setLeaderDecidedBy(leader.getId());
         request.setLeaderDecidedAt(now);
@@ -73,7 +71,7 @@ public class LeaveRequestService {
             request.setStatus(Status.REJECTED);
         }
         notifier.publish(DomainEvent.of(DomainEventType.LEAVE_DECIDED,
-                "Leader đã " + (approve ? "đồng ý" : "từ chối") + " yêu cầu rời nhóm " + group.getName() + " của bạn"
+                "Trưởng nhóm đã " + (approve ? "đồng ý" : "từ chối") + " yêu cầu rời " + GroupCore.label(group) + " của bạn"
                         + (approve ? "" : ". Bạn có thể gửi khiếu nại tới Moderator."),
                 request.getUser().getId()).about(group.getId(), request.getId())
                 .withDetails(request.getLeaderNote(), null).by(leader.getId()));
@@ -84,7 +82,7 @@ public class LeaveRequestService {
     @Transactional
     public LeaveRequest escalate(UUID requestId, String reason, User user) {
         LeaveRequest snapshot = find(requestId);
-        lockScopeShared(snapshot.getGroup().getScope().getId());
+        Semester semester = lockSemester(snapshot);
         gate.requireCanAct(snapshot.getEnrollment());
         LeaveRequest request = lock(requestId);
         if (!request.getUser().getId().equals(user.getId())) {
@@ -94,7 +92,7 @@ public class LeaveRequestService {
             throw new ApiException(HttpStatus.CONFLICT, "CANNOT_COMPLAIN",
                     "Only a request the Leader refused can be taken to the Moderator");
         }
-        rules.requireNotFinalized(request.getGroup().getScope());
+        guard.requireNotClosed(semester);
         if (!core.isMember(request.getGroup().getId(), user.getId())) {
             throw new ApiException(HttpStatus.CONFLICT, "NOT_MEMBER", "You are no longer in this group");
         }
@@ -108,7 +106,7 @@ public class LeaveRequestService {
         }
         notifier.publish(DomainEvent.of(DomainEventType.COMPLAINT_RECEIVED,
                 user.getFullName() + " (" + user.getStudentCode() + ") khiếu nại: Leader nhóm "
-                        + request.getGroup().getCode() + " không cho rời nhóm",
+                        + GroupCore.label(request.getGroup()) + " không cho rời nhóm",
                 notifier.coordinators(request.getGroup().getScope().semesterCode()))
                 .about(request.getGroup().getId(), request.getId()).withDetails(request.getReason(), null).by(user.getId()));
         return request;
@@ -117,9 +115,9 @@ public class LeaveRequestService {
     @Transactional
     public LeaveRequest withdraw(UUID requestId, User user) {
         LeaveRequest snapshot = find(requestId);
-        lockScopeShared(snapshot.getGroup().getScope().getId());
+        Semester semester = lockSemester(snapshot);
         gate.requireCanAct(snapshot.getEnrollment());
-        rules.requireNotFinalized(snapshot.getGroup().getScope());
+        guard.requireNotClosed(semester);
         LeaveRequest request = lock(requestId);
         if (!request.getUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("This is not your request");
@@ -136,8 +134,8 @@ public class LeaveRequestService {
     @Transactional
     public LeaveRequest moderatorDecide(UUID requestId, boolean approve, String note, User actor) {
         LeaveRequest snapshot = find(requestId);
-        lockScopeShared(snapshot.getGroup().getScope().getId());
         access.requireModerator(snapshot.getGroup().getScope().semesterCode(), actor);
+        guard.requireNotClosed(lockSemester(snapshot));
         core.lockEnrollment(snapshot.getEnrollment().getId());
         LeaveRequest request = lock(requestId);
         StudentGroup group = core.lock(request.getGroup().getId());
@@ -155,9 +153,9 @@ public class LeaveRequestService {
         }
         audit.record("LeaveRequest", request.getId(), AuditAction.LEAVE_REQUEST_DECIDED, actor,
                 group.getScope().semesterCode(), Map.of("approved", approve, "student",
-                        String.valueOf(request.getUser().getStudentCode()), "group", group.getCode()));
+                        String.valueOf(request.getUser().getStudentCode()), "room", group.getName()));
         notifier.publish(DomainEvent.of(DomainEventType.LEAVE_DECIDED,
-                "Moderator đã " + (approve ? "đồng ý" : "từ chối") + " yêu cầu rời nhóm " + group.getName() + " của bạn",
+                "Moderator đã " + (approve ? "đồng ý" : "từ chối") + " yêu cầu rời " + GroupCore.label(group) + " của bạn",
                 java.util.stream.Stream.concat(java.util.stream.Stream.of(request.getUser().getId()),
                         java.util.Optional.ofNullable(core.leaderOf(group.getId())).stream().map(m -> m.getUser().getId()))
                         .distinct().toList()).about(group.getId(), request.getId())
@@ -181,10 +179,10 @@ public class LeaveRequestService {
         return leaveRequests.findByUserIdOrderByCreatedAtDesc(viewer.getId()).stream().map(LeaveRequestResponse::from).toList();
     }
 
-    /** The Moderator's queue: complaints and requests after the deadline, by subject (and optionally scope). */
-    public List<LeaveRequestResponse> waitingForModerator(UUID subjectId, UUID scopeId, String semesterCode, User viewer) {
+    /** The Moderator's queue: complaints and requests after the deadline, by semester (and optionally major). */
+    public List<LeaveRequestResponse> waitingForModerator(String semesterCode, UUID majorId, User viewer) {
         access.requireModerator(semesterCode, viewer);
-        return leaveRequests.findWaitingForModerator(subjectId, scopeId).stream().map(LeaveRequestResponse::from).toList();
+        return leaveRequests.findWaitingForModerator(semesterCode, majorId).stream().map(LeaveRequestResponse::from).toList();
     }
 
     private void removeMember(LeaveRequest request, Instant now) {
@@ -196,7 +194,7 @@ public class LeaveRequestService {
         // remove() closes the member's open requests; this one was decided, keep its outcome.
         request.setStatus(Status.APPROVED);
         notifier.publish(DomainEvent.of(DomainEventType.MEMBER_LEFT,
-                request.getUser().getFullName() + " đã rời nhóm " + request.getGroup().getName(),
+                request.getUser().getFullName() + " đã rời " + GroupCore.label(request.getGroup()),
                 core.activeMembers(request.getGroup().getId()).stream().map(m -> m.getUser().getId()).toList())
                 .about(request.getGroup().getId(), null));
     }
@@ -209,8 +207,8 @@ public class LeaveRequestService {
         return locks.write(LeaveRequest.class, id);
     }
 
-    private FormationScope lockScopeShared(UUID scopeId) {
-        return locks.read(FormationScope.class, scopeId);
+    private Semester lockSemester(LeaveRequest request) {
+        return locks.readSemester(request.getGroup().getScope().semesterCode());
     }
 
     private static ApiException closed(LeaveRequest request) {

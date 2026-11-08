@@ -8,7 +8,6 @@ import com.capstone.tracking.notification.DomainEvent;
 import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.notification.Notifier;
 import com.capstone.tracking.semester.Access;
-import com.capstone.tracking.subject.ScopeRules;
 import com.capstone.tracking.team.GroupCore;
 import com.capstone.tracking.team.GroupMember;
 import com.capstone.tracking.team.GroupMemberRepository;
@@ -26,10 +25,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * A student's eligibility in a subject (5.1, 5.2): from the training department's file, or changed by the Moderator
- * with a reason. Flagging a student ineligible takes them out of their group of that subject, cancels their open
- * requests, hands the Leader role on (6.5) and dissolves a group left empty. It applies in every phase, including
- * after finalization without reopening. Lifting the flag does not restore the old group.
+ * A student's eligibility (5.1, 5.2): from the training department's file, or changed by the Moderator with a reason.
+ * Flagging a student ineligible takes them out of their room, cancels their open requests and invites, hands the
+ * Leader role on (6.7) and leaves an emptied room empty. It applies in every phase. Lifting the flag does not restore
+ * the old room (5.2).
  */
 @Service
 @RequiredArgsConstructor
@@ -39,7 +38,6 @@ public class EligibilityService {
     private final GroupMemberRepository members;
     private final JoinRequestRepository requests;
     private final GroupCore core;
-    private final ScopeRules rules;
     private final Access access;
     private final Notifier notifier;
     private final AuditService audit;
@@ -73,8 +71,7 @@ public class EligibilityService {
         Map<UUID, StudentGroup> touched = new LinkedHashMap<>();
         List<Enrollment> selected = changes.stream().map(c -> enrollments.findById(c.enrollmentId())
                 .orElseThrow(() -> ResourceNotFoundException.of("Enrollment", c.enrollmentId()))).toList();
-        selected.stream().map(e -> e.getScope().getId()).distinct().sorted()
-                .forEach(id -> locks.read(com.capstone.tracking.subject.FormationScope.class, id));
+        selected.stream().map(e -> e.getScope().semesterCode()).distinct().sorted().forEach(locks::readSemester);
         selected.stream().map(Enrollment::getId).distinct().sorted().forEach(core::lockEnrollment);
         members.findActiveByEnrollments(selected.stream().map(Enrollment::getId).toList()).stream()
                 .map(m -> m.getGroup().getId()).distinct().sorted().forEach(core::lock);
@@ -92,7 +89,6 @@ public class EligibilityService {
             e.setEligibilityReason(reason);
             e.setEligibilityUpdatedBy(actor.getId());
             e.setEligibilityUpdatedAt(now);
-            String subject = e.getScope().getSubject().getName();
             if (change.eligibility() == Eligibility.INELIGIBLE) {
                 requests.cancelPendingOfEnrollment(e.getId(), JoinRequest.CancelReason.INELIGIBLE, now);
                 GroupMember member = members.findActiveByEnrollment(e.getId()).orElse(null);
@@ -101,11 +97,12 @@ public class EligibilityService {
                     core.remove(member, GroupMember.LeftReason.INELIGIBLE, NoGroupReason.INELIGIBLE, now, false);
                     touched.put(group.getId(), group);
                     notifier.publish(DomainEvent.of(DomainEventType.REMOVED_INELIGIBLE,
-                            "Bạn được xác định không đủ điều kiện môn " + subject + " và đã bị loại khỏi nhóm "
-                                    + group.getName(), e.getUser().getId())
+                            "Bạn được xác định không đủ điều kiện làm Capstone và đã bị loại khỏi "
+                                    + GroupCore.label(group), e.getUser().getId())
                             .about(group.getId(), e.getId()).withDetails(reason, null).by(actor.getId()));
                     notifier.publish(DomainEvent.of(DomainEventType.MEMBER_LEFT,
-                            e.getUser().getFullName() + " không đủ điều kiện và đã rời nhóm " + group.getName(),
+                            e.getUser().getFullName() + " không đủ điều kiện và đã rời "
+                                    + GroupCore.label(group),
                             core.activeMembers(group.getId()).stream().map(m -> m.getUser().getId()).toList())
                             .about(group.getId(), null).by(actor.getId()));
                 } else {
@@ -115,7 +112,7 @@ public class EligibilityService {
                 e.setNoGroupReason(null);
             }
             notifier.publish(DomainEvent.of(DomainEventType.ELIGIBILITY_CHANGED,
-                    "Điều kiện tham gia môn " + subject + " của bạn: " + label(change.eligibility()),
+                    "Điều kiện tham gia Capstone của bạn: " + label(change.eligibility()),
                     e.getUser().getId()).about(null, e.getId()).withDetails(reason, null).by(actor.getId()));
             audit.record("Enrollment", e.getId(), AuditAction.ELIGIBILITY_CHANGED, actor, e.getScope().semesterCode(),
                     Map.of("student", String.valueOf(e.getUser().getStudentCode()), "from", before.name(),

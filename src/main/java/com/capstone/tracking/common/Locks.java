@@ -43,9 +43,26 @@ public class Locks {
         return lock(type, id, sharedLockSupported() ? "for share" : "for update");
     }
 
+    /**
+     * The semester row (keyed by its code): held shared by every roster action of the semester and exclusively by the
+     * phase transitions (deadline lock, round 1 / round 2 finalization, closing), which therefore never interleave.
+     */
+    public com.capstone.tracking.semester.Semester readSemester(String code) {
+        return lock(com.capstone.tracking.semester.Semester.class, code, "code",
+                sharedLockSupported() ? "for share" : "for update");
+    }
+
+    public com.capstone.tracking.semester.Semester writeSemester(String code) {
+        return lock(com.capstone.tracking.semester.Semester.class, code, "code", "for update");
+    }
+
     private <T> T lock(Class<T> type, Object id, String clause) {
+        return lock(type, id, "id", clause);
+    }
+
+    private <T> T lock(Class<T> type, Object id, String idColumn, String clause) {
         String table = TABLES.computeIfAbsent(type, t -> t.getAnnotation(Table.class).name());
-        int rows = em.createNativeQuery("select 1 from " + table + " where id = :id " + clause)
+        int rows = em.createNativeQuery("select 1 from " + table + " where " + idColumn + " = :id " + clause)
                 .setParameter("id", id)
                 .getResultList().size();
         if (rows == 0) {

@@ -3,9 +3,6 @@ package com.capstone.tracking.roster.importing;
 import com.capstone.tracking.audit.AuditAction;
 import com.capstone.tracking.audit.AuditService;
 import com.capstone.tracking.common.exception.BadRequestException;
-import com.capstone.tracking.notification.DomainEvent;
-import com.capstone.tracking.notification.DomainEventType;
-import com.capstone.tracking.notification.Notifier;
 import com.capstone.tracking.roster.Eligibility;
 import com.capstone.tracking.roster.EligibilityService;
 import com.capstone.tracking.roster.Enrollment;
@@ -18,9 +15,6 @@ import com.capstone.tracking.roster.importing.ImportReport.RowError;
 import com.capstone.tracking.roster.importing.SpreadsheetReader.Line;
 import com.capstone.tracking.roster.importing.SpreadsheetReader.Table;
 import com.capstone.tracking.semester.Access;
-import com.capstone.tracking.subject.ScopePhase;
-import com.capstone.tracking.subject.Subject;
-import com.capstone.tracking.subject.SubjectRepository;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,8 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The training department's file of students who are not (or are) eligible (5.1, 5.2). Columns: student code,
- * optional subject code (blank = every subject of the student this semester), optional eligibility (blank = not
- * eligible) and reason. Rows of a finalized scope are kept apart, not written, and the Moderator is told (4.1).
+ * optional eligibility (blank = not eligible) and reason. It applies in every phase (4.1).
  */
 @Service
 @RequiredArgsConstructor
@@ -50,11 +43,9 @@ public class EligibilityImportService {
     private final UserRepository users;
     private final SemesterStudentRepository semesterStudents;
     private final EnrollmentRepository enrollments;
-    private final SubjectRepository subjects;
     private final ImportBatchRepository batches;
     private final EligibilityService eligibility;
     private final Access access;
-    private final Notifier notifier;
     private final AuditService audit;
     private final ObjectMapper objectMapper;
 
@@ -88,26 +79,12 @@ public class EligibilityImportService {
                 errors.add(new RowError(line.rowNumber(), code, "Không có trong danh sách sinh viên của học kỳ"));
                 continue;
             }
-            List<Enrollment> targets;
-            String subjectCode = line.get(SpreadsheetReader.SUBJECT);
-            if (subjectCode != null) {
-                Subject subject = subjects.findBySemesterCodeAndCodeIgnoreCase(semesterCode, subjectCode).orElse(null);
-                if (subject == null) {
-                    errors.add(new RowError(line.rowNumber(), code, "Không có môn " + subjectCode + " trong học kỳ"));
-                    continue;
-                }
-                targets = enrollments.findBySubjectIdAndUserId(subject.getId(), user.getId()).map(List::of).orElse(List.of());
-                if (targets.isEmpty()) {
-                    errors.add(new RowError(line.rowNumber(), code, "Sinh viên không thuộc môn " + subjectCode));
-                    continue;
-                }
-            } else {
-                targets = enrollments.findBySemesterStudentId(ss.getId());
-                if (targets.isEmpty()) {
-                    errors.add(new RowError(line.rowNumber(), code, "Sinh viên chưa thuộc môn nào của học kỳ"));
-                    continue;
-                }
+            Enrollment target = enrollments.findBySemesterStudentId(ss.getId()).orElse(null);
+            if (target == null) {
+                errors.add(new RowError(line.rowNumber(), code, "Sinh viên chưa được ghi nhận vào ghép nhóm của học kỳ"));
+                continue;
             }
+            List<Enrollment> targets = List.of(target);
             String reason = line.get(SpreadsheetReader.REASON);
             for (Enrollment e : targets) {
                 if (e.getEligibility() == value && Objects.equals(reason, e.getEligibilityReason())) {
@@ -121,11 +98,6 @@ public class EligibilityImportService {
             return new ImportReport(false, null, 0, changes.size(), unchanged, errors.size(), errors, List.of(), blocked);
         }
         eligibility.apply(changes, actor);
-        if (!blocked.isEmpty()) {
-            notifier.publish(DomainEvent.of(DomainEventType.FINALIZED_SCOPE_IMPORT_BLOCKED,
-                    blocked.size() + " dòng trong file điều kiện thuộc danh sách đã chốt và chưa được ghi. "
-                            + "Mở lại danh sách nếu cần cập nhật.", notifier.coordinators(semesterCode)).by(actor.getId()));
-        }
         ImportBatch batch = batches.save(ImportBatch.builder()
                 .kind(ImportBatch.Kind.ELIGIBILITY)
                 .semesterCode(semesterCode)

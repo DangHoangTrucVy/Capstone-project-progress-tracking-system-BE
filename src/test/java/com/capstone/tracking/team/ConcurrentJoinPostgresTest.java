@@ -18,22 +18,40 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 /**
- * 12: operations at the same moment must not put more than 5 students in a group, nor one student in two groups.
+ * 12: operations at the same moment must not put more than the maximum size in a room, nor one student in two rooms,
+ * nor give a room two Leaders.
  * Runs on PostgreSQL, where the row locks and partial unique indexes are real.
  */
 @PostgresTest
 class ConcurrentJoinPostgresTest extends TestSupport {
 
     @Test
-    void studentsCreatingGroupsAtOnceReceiveDifferentCodes() throws Exception {
+    void twoStudentsEnteringAnEmptyRoomAtOnceGiveItExactlyOneLeader() throws Exception {
         World w = world(2, 0);
+        UUID room = w.rooms().get(0);
         List<Integer> codes = race(
-                () -> postJson("/api/v1/subjects/" + w.subjectId() + "/groups", w.students().get(0), Map.of("name", "First"))
+                () -> postJson("/api/v1/rooms/" + room + "/join", w.students().get(0), Map.of())
                         .andReturn().getResponse().getStatus(),
-                () -> postJson("/api/v1/subjects/" + w.subjectId() + "/groups", w.students().get(1), Map.of("name", "Second"))
+                () -> postJson("/api/v1/rooms/" + room + "/join", w.students().get(1), Map.of())
                         .andReturn().getResponse().getStatus());
-        assertThat(codes).containsExactlyInAnyOrder(201, 201);
-        assertThat(groupRepository.findActiveByScope(w.scope().getId())).hasSize(2);
+        assertThat(codes).containsExactlyInAnyOrder(200, 200);
+        assertThat(memberRepository.countActive(room)).isEqualTo(2);
+        assertThat(memberRepository.findActive(room).stream().filter(m -> m.isLeader()).count()).isEqualTo(1);
+    }
+
+    @Test
+    void twoStudentsWalkingIntoTheLastSeatLetOnlyOneIn() throws Exception {
+        World w = world(6, 0);
+        List<User> s = w.students();
+        UUID room = createGroup(w, s.get(0), "Walk-in");
+        for (int i = 1; i <= 3; i++) {
+            join(room, s.get(0), s.get(i));
+        }
+        List<Integer> codes = race(
+                () -> postJson("/api/v1/rooms/" + room + "/join", s.get(4), Map.of()).andReturn().getResponse().getStatus(),
+                () -> postJson("/api/v1/rooms/" + room + "/join", s.get(5), Map.of()).andReturn().getResponse().getStatus());
+        assertThat(codes).containsExactlyInAnyOrder(200, 409);
+        assertThat(memberRepository.countActive(room)).isEqualTo(5);
     }
 
     @Test
@@ -44,8 +62,8 @@ class ConcurrentJoinPostgresTest extends TestSupport {
         for (int i = 1; i <= 3; i++) {
             join(group, s.get(0), s.get(i));
         }
-        UUID first = id(postJson("/api/v1/groups/" + group + "/applications", s.get(4), Map.of()).andExpect(status().isCreated()));
-        UUID second = id(postJson("/api/v1/groups/" + group + "/invitations", s.get(0), Map.of("studentId", s.get(5).getId()))
+        UUID first = requestToJoin(group, s.get(0), s.get(4));
+        UUID second = id(postJson("/api/v1/rooms/" + group + "/invitations", s.get(0), Map.of("studentId", s.get(5).getId()))
                 .andExpect(status().isCreated()));
 
         List<Integer> codes = race(
@@ -61,9 +79,9 @@ class ConcurrentJoinPostgresTest extends TestSupport {
         List<User> s = w.students();
         UUID g1 = createGroup(w, s.get(0), "One");
         UUID g2 = createGroup(w, s.get(1), "Two");
-        UUID i1 = id(postJson("/api/v1/groups/" + g1 + "/invitations", s.get(0), Map.of("studentId", s.get(2).getId()))
+        UUID i1 = id(postJson("/api/v1/rooms/" + g1 + "/invitations", s.get(0), Map.of("studentId", s.get(2).getId()))
                 .andExpect(status().isCreated()));
-        UUID i2 = id(postJson("/api/v1/groups/" + g2 + "/invitations", s.get(1), Map.of("studentId", s.get(2).getId()))
+        UUID i2 = id(postJson("/api/v1/rooms/" + g2 + "/invitations", s.get(1), Map.of("studentId", s.get(2).getId()))
                 .andExpect(status().isCreated()));
 
         List<Integer> codes = race(

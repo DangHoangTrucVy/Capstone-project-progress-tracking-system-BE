@@ -26,17 +26,17 @@ public interface LeaderTransferRepository extends JpaRepository<LeaderTransfer, 
             + "and t.status = com.capstone.tracking.team.LeaderTransfer.Status.PENDING")
     int cancelPendingOfGroup(@Param("groupId") UUID groupId, @Param("now") Instant now);
 
-    /** Finalizing (and reopening) a list voids the transfers proposed before it. */
+    /** The end of formation voids the transfers still waiting. */
     @Modifying
     @Query("update LeaderTransfer t set t.status = com.capstone.tracking.team.LeaderTransfer.Status.CANCELLED, "
-            + "t.respondedAt = :now where t.group.id in (select g.id from StudentGroup g where g.scope.id = :scopeId) "
+            + "t.respondedAt = :now where t.group.id in (select g.id from StudentGroup g where g.scope.semesterCode = :semester) "
             + "and t.status = com.capstone.tracking.team.LeaderTransfer.Status.PENDING")
-    int cancelPendingOfScope(@Param("scopeId") UUID scopeId, @Param("now") Instant now);
+    int cancelPendingOfSemester(@Param("semester") String semester, @Param("now") Instant now);
 
     /** Transfer-and-leave cannot happen once nobody may leave by themselves (the deadline). */
     @Modifying
     @Query("update LeaderTransfer t set t.status = com.capstone.tracking.team.LeaderTransfer.Status.CANCELLED, "
-            + "t.respondedAt = :now where t.group.id in (select g.id from StudentGroup g where g.scope.id = :scopeId) and t.leaveAfter = true "
+            + "t.respondedAt = :now where t.group.id in (select g.id from StudentGroup g where g.scope.semesterCode = :semester) and t.leaveAfter = true "
             + "and t.status = com.capstone.tracking.team.LeaderTransfer.Status.PENDING")
-    int cancelPendingLeavesOfScope(@Param("scopeId") UUID scopeId, @Param("now") Instant now);
+    int cancelPendingLeavesOfSemester(@Param("semester") String semester, @Param("now") Instant now);
 }

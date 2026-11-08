@@ -1,7 +1,7 @@
 package com.capstone.tracking.team;
 
 import com.capstone.tracking.common.BaseEntity;
-import com.capstone.tracking.subject.FormationScope;
+import com.capstone.tracking.semester.FormationScope;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -19,8 +19,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * A group of one formation scope (6). All members are of the scope's major. Open / Full are computed from the size and
- * the scope's phase ({@link GroupState}); Locked is the Leader's own flag and may hold together with Full (6.3).
+ * A room, which becomes a group (6, 7.6, 12: one entity, so members, requests and invites never have to be copied).
+ * The Moderator creates rooms of one major ahead of formation; students join them freely and the first one in is the
+ * Leader. A room has no code until it becomes a group: when the Moderator approves the Leader's finalize request, or
+ * when formation ends. An emptied room goes back to empty and is kept; empty rooms are closed when formation ends.
  */
 @Entity
 @Table(name = "student_groups")
@@ -31,22 +33,49 @@ import lombok.Setter;
 @Builder
 public class StudentGroup extends BaseEntity {
 
+    public enum FinalizeStatus {
+        NONE,
+        /** The Leader pressed "báo chốt"; waiting for the Moderator. Members can neither join nor leave meanwhile. */
+        REQUESTED,
+        /** The Moderator approved: the room is a group with a code; no member joins or leaves by themselves. */
+        APPROVED,
+        /** The Moderator sent the request back, with a note. */
+        RETURNED
+    }
+
+    public enum DissolveReason {
+        /** Kept for history: groups dissolved before v3.0. */
+        TOO_SMALL_AT_DEADLINE,
+        EMPTY,
+        MODERATOR,
+        /** The room was still empty when formation ended (7.6). */
+        CLOSED_EMPTY
+    }
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "scope_id", nullable = false)
     private FormationScope scope;
 
-    /** e.g. FA26-CAP-SE-007, unique across the system. */
-    @Column(nullable = false, unique = true, length = 40)
+    /** The group code, e.g. SP26-SE-001; null while it is still a room (7.6). */
+    @Column(unique = true, length = 40)
     private String code;
 
+    /** "Room 01", renamed freely by the Leader. */
     @Column(nullable = false, length = 100)
     private String name;
 
-    /** "Kỹ năng cần tuyển", searched by students looking for a group (8.2). */
+    /** The room's number in its major (Room 01 = 1). */
+    private Integer roomNo;
+
+    /** "Kỹ năng cần tuyển", searched by students looking for a room (8.2). */
     @Column(length = 500)
     private String wantedSkills;
 
-    /** The Leader locked the group: no new Apply (6.3). */
+    /** Below it the room is disbanded before round 1; the Moderator sets it per room (3.2). */
+    @Column(nullable = false)
+    private int minSize;
+
+    /** The Leader locked the room: joining takes a request the Leader accepts (6.2). */
     @Column(nullable = false)
     @Builder.Default
     private boolean locked = false;
@@ -54,13 +83,27 @@ public class StudentGroup extends BaseEntity {
     @Column(nullable = false)
     private UUID createdBy;
 
-    /** Finalization belongs to the group; it is independent of Full and Leader lock. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private FinalizeStatus finalizeStatus = FinalizeStatus.NONE;
+
+    private Instant finalizeRequestedAt;
+    private UUID finalizeRequestedBy;
+    private Instant finalizeDecidedAt;
+    private UUID finalizeDecidedBy;
+
+    @Column(length = 1000)
+    private String finalizeNote;
+
+    /** "Đã chốt": the room became a group. It belongs to the group, never to its students (7.6). */
     @Column(nullable = false)
     @Builder.Default
     private boolean finalized = false;
 
     private Instant finalizedAt;
 
+    /** Closed rooms (empty at the end of formation) and groups dissolved before v3.0; never shown again. */
     private Instant dissolvedAt;
 
     @Enumerated(EnumType.STRING)
@@ -71,11 +114,11 @@ public class StudentGroup extends BaseEntity {
         return dissolvedAt != null;
     }
 
-    public enum DissolveReason {
-        /** Fewer than the minimum size when the scope locked at its deadline (7.1). */
-        TOO_SMALL_AT_DEADLINE,
-        /** The last member left or was removed (6.4). */
-        EMPTY,
-        MODERATOR
+    public boolean isApproved() {
+        return finalizeStatus == FinalizeStatus.APPROVED;
+    }
+
+    public boolean isFinalizeRequested() {
+        return finalizeStatus == FinalizeStatus.REQUESTED;
     }
 }

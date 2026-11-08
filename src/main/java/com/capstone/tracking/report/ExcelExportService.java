@@ -4,8 +4,6 @@ import com.capstone.tracking.common.VnTime;
 import com.capstone.tracking.roster.Eligibility;
 import com.capstone.tracking.roster.Enrollment;
 import com.capstone.tracking.roster.NoGroupReason;
-import com.capstone.tracking.subject.FormationScope;
-import com.capstone.tracking.subject.ScopeRules;
 import com.capstone.tracking.team.GroupMember;
 import com.capstone.tracking.user.User;
 import java.io.ByteArrayOutputStream;
@@ -32,10 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The handover file (10): two sheets, one student per row, no merged cells. "Danh sách nhóm" lists every member of
- * every current group, "Chưa có nhóm" the students without one (the ineligible included). Each sheet starts with the
- * semester, subject, major, export time and the finalize state ("Đã chốt lúc …" / "Chưa chốt", "Đã mở lại lúc …",
- * "Thay đổi gần nhất sau chốt: …"). Codes and phone numbers are text (leading zeros kept); headers have a filter and
- * stay frozen. Profiles (skills, strengths...) are never exported.
+ * every room with members (the group code is empty while the room is not a group yet), "Chưa có nhóm" the students
+ * without a room (the ineligible included). Each sheet starts with the semester, major, export time and the current
+ * phase. Exported at any time with the current data; the official file is the one exported once formation ended.
+ * Codes and phone numbers are text (leading zeros kept); headers have a filter and stay frozen. Profiles (skills,
+ * strengths...) are never exported.
  */
 @Service
 @RequiredArgsConstructor
@@ -51,41 +50,40 @@ public class ExcelExportService {
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").withZone(VnTime.ZONE);
 
     private final Snapshot snapshot;
-    private final ScopeRules rules;
     private final com.capstone.tracking.notification.Notifier notifier;
 
     public record ExcelFile(String fileName, byte[] content) {}
 
-    public record SmallGroup(UUID id, String code, String name, String majorCode, int size, boolean finalized) {}
+    public record SmallGroup(UUID id, String code, String name, String majorCode, int size, int minSize, boolean finalized) {}
     public record ExportCheck(boolean canExport, java.time.Instant takenAt, List<SmallGroup> groupsUnderMinimum,
                               List<String> warnings) {}
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    public ExportCheck check(String semesterCode, UUID subjectId, UUID majorId, User viewer) {
-        return checkAndNotify(snapshot.take(semesterCode, subjectId, majorId, viewer, rules::deadline), viewer);
+    public ExportCheck check(String semesterCode, UUID majorId, User viewer) {
+        return checkAndNotify(snapshot.take(semesterCode, majorId, viewer), viewer);
     }
 
     private ExportCheck checkAndNotify(Snapshot.Data data, User viewer) {
-        List<SmallGroup> small = data.scopes().stream().flatMap(s -> s.groups().stream()
-                .filter(g -> g.members().size() < s.scope().getSubject().getMinGroupSize())
-                .map(g -> new SmallGroup(g.group().getId(), g.group().getCode(), g.group().getName(),
-                        s.scope().getMajor().getCode(), g.members().size(), g.group().isFinalized()))).toList();
+        List<SmallGroup> small = data.scopes().stream().flatMap(s -> s.rooms().stream()
+                .filter(r -> r.size() > 0 && r.size() < r.room().getMinSize())
+                .map(r -> new SmallGroup(r.room().getId(), r.room().getCode(), r.room().getName(),
+                        s.scope().getMajor().getCode(), r.size(), r.room().getMinSize(), r.room().isFinalized()))).toList();
         List<String> warnings = small.isEmpty() ? List.of()
-                : List.of(small.size() + " nhóm dưới 3 người; vẫn có thể xuất Excel");
+                : List.of(small.size() + " Room/nhóm dưới sĩ số tối thiểu; vẫn có thể xuất Excel");
         if (!small.isEmpty()) {
             notifier.publish(com.capstone.tracking.notification.DomainEvent.of(
                     com.capstone.tracking.notification.DomainEventType.EXPORT_SMALL_GROUPS,
                     "Chuẩn bị xuất Excel học kỳ " + data.semester().getCode() + ": " + warnings.get(0),
                     notifier.coordinators(data.semester().getCode())).by(viewer.getId())
-                    .withDetails(small.stream().map(g -> g.code() + " (" + g.size() + ")")
+                    .withDetails(small.stream().map(g -> (g.code() == null ? g.name() : g.code()) + " (" + g.size() + ")")
                             .collect(java.util.stream.Collectors.joining(", ")), null));
         }
         return new ExportCheck(true, data.takenAt(), small, warnings);
     }
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    public ExcelFile export(String semesterCode, UUID subjectId, UUID majorId, User viewer) {
-        Snapshot.Data data = snapshot.take(semesterCode, subjectId, majorId, viewer, rules::deadline);
+    public ExcelFile export(String semesterCode, UUID majorId, User viewer) {
+        Snapshot.Data data = snapshot.take(semesterCode, majorId, viewer);
         checkAndNotify(data, viewer);
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles styles = new Styles(wb);
@@ -107,9 +105,13 @@ public class ExcelExportService {
         writeColumns(sheet.createRow(r++), styles, GROUP_HEADERS);
         List<Snapshot.ScopeData> scopes = sortedScopes(data);
         for (Snapshot.ScopeData s : scopes) {
-            List<Snapshot.GroupData> groups = new ArrayList<>(s.groups());
-            groups.sort(Comparator.comparing(g -> g.group().getCode()));
-            for (Snapshot.GroupData g : groups) {
+            // Ngành -> Mã nhóm (rooms without a code after the groups, by room number) -> Leader, then student code.
+            List<Snapshot.RoomData> groups = new ArrayList<>(s.rooms().stream().filter(rd -> rd.size() > 0).toList());
+            groups.sort(Comparator.comparing((Snapshot.RoomData rd) -> rd.room().getCode() == null)
+                    .thenComparing(rd -> rd.room().getCode() == null ? "" : rd.room().getCode())
+                    .thenComparing(rd -> rd.room().getRoomNo() == null ? Integer.MAX_VALUE : rd.room().getRoomNo())
+                    .thenComparing(rd -> rd.room().getName()));
+            for (Snapshot.RoomData g : groups) {
                 List<GroupMember> members = new ArrayList<>(g.members());
                 members.sort(Comparator.comparing((GroupMember m) -> !m.isLeader())
                         .thenComparing(m -> nullToEmpty(m.getUser().getStudentCode())));
@@ -118,10 +120,10 @@ public class ExcelExportService {
                     int c = 0;
                     text(row, c++, data.semester().getCode(), styles);
                     text(row, c++, s.scope().getMajor().getName(), styles);
-                    text(row, c++, g.group().getCode(), styles);
-                    text(row, c++, g.group().getName(), styles);
-                    row.createCell(c++).setCellValue(g.members().size());
-                    text(row, c++, g.state(), styles);
+                    text(row, c++, g.room().getCode(), styles);
+                    text(row, c++, g.room().getName(), styles);
+                    row.createCell(c++).setCellValue(g.size());
+                    text(row, c++, g.status().label(), styles);
                     text(row, c++, m.getUser().getStudentCode(), styles);
                     text(row, c++, m.getUser().getFullName(), styles);
                     text(row, c++, m.getUser().getEmail(), styles);
@@ -167,21 +169,9 @@ public class ExcelExportService {
         lines.add("Ngành: " + (data.majorId() == null ? "Tất cả"
                 : data.scopes().isEmpty() ? "" : data.scopes().get(0).scope().getMajor().getName()));
         lines.add("Thời điểm xuất: " + VnTime.format(data.takenAt()));
-        for (Snapshot.ScopeData s : sortedScopes(data)) {
-            String prefix = data.scopes().size() == 1 ? "" : s.scope().getSubject().getCode() + " / "
-                    + s.scope().getMajor().getCode() + ": ";
-            lines.add(prefix + finalizeState(s.scope()));
-        }
+        lines.add("Giai đoạn: " + data.semester().getPhase().label()
+                + (data.semester().isClosed() ? " (file chính thức)" : " (chưa kết thúc ghép nhóm)"));
         return lines;
-    }
-
-    private static String finalizeState(FormationScope scope) {
-        StringBuilder state = new StringBuilder(scope.getFinalizedAt() != null
-                ? "Đã chốt lúc " + VnTime.format(scope.getFinalizedAt()) : "Chưa chốt");
-        if (scope.getFinalizedAt() == null && scope.getReopenedAt() != null) {
-            state.append("; Đã mở lại lúc ").append(VnTime.format(scope.getReopenedAt()));
-        }
-        return state.toString();
     }
 
     private static String fileName(Snapshot.Data data) {
@@ -195,8 +185,7 @@ public class ExcelExportService {
 
     private static List<Snapshot.ScopeData> sortedScopes(Snapshot.Data data) {
         return data.scopes().stream()
-                .sorted(Comparator.comparing((Snapshot.ScopeData s) -> s.scope().getMajor().getName())
-                        .thenComparing(s -> s.scope().getSubject().getCode()))
+                .sorted(Comparator.comparing((Snapshot.ScopeData s) -> s.scope().getMajor().getName()))
                 .toList();
     }
 
@@ -251,10 +240,10 @@ public class ExcelExportService {
             return "";
         }
         return switch (reason) {
-            case GROUP_DISSOLVED -> "Nhóm bị giải tán";
+            case GROUP_DISSOLVED -> "Room bị giải tán";
             case INELIGIBLE -> "Không đủ điều kiện";
             case REMOVED_BY_MODERATOR -> "Moderator đưa ra khỏi nhóm";
-            case LEFT_GROUP -> "Đã rời nhóm";
+            case LEFT_GROUP -> "Đã rời Room";
         };
     }
 

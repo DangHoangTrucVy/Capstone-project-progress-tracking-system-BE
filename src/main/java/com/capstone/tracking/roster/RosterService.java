@@ -1,24 +1,13 @@
 package com.capstone.tracking.roster;
 
-import com.capstone.tracking.common.exception.ApiException;
 import com.capstone.tracking.common.exception.BadRequestException;
 import com.capstone.tracking.common.exception.ConflictException;
 import com.capstone.tracking.common.exception.ResourceNotFoundException;
-import com.capstone.tracking.major.Major;
-import com.capstone.tracking.major.MajorRepository;
 import com.capstone.tracking.semester.Access;
-import com.capstone.tracking.subject.FormationScopeRepository;
-import com.capstone.tracking.subject.ScopePhase;
-import com.capstone.tracking.subject.Subject;
-import com.capstone.tracking.subject.SubjectRepository;
-import com.capstone.tracking.team.GroupCore;
+import com.capstone.tracking.semester.FormationScopeRepository;
 import com.capstone.tracking.team.GroupMember;
 import com.capstone.tracking.team.GroupMemberRepository;
-import com.capstone.tracking.team.GroupState;
-import com.capstone.tracking.team.GroupViews;
 import com.capstone.tracking.team.StudentGroup;
-import com.capstone.tracking.team.StudentGroupRepository;
-import com.capstone.tracking.team.dto.GroupResponse;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
@@ -31,13 +20,12 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The list management screen (4.3), by semester, subject and major: all students, groups, students without a group
- * (with the reason); search, filters, paging and editing a student's details. Admin and the semester's Moderator.
+ * The student tabs of the semester screen (4.3): all students and those without a group (with the reason); search,
+ * filters, paging and editing a student's contact details. Admin and the semester's Moderator.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,95 +34,73 @@ public class RosterService {
 
     private final EnrollmentRepository enrollments;
     private final SemesterStudentRepository semesterStudents;
-    private final SubjectRepository subjects;
     private final FormationScopeRepository scopes;
-    private final MajorRepository majors;
     private final UserRepository users;
-    private final StudentGroupRepository groups;
     private final GroupMemberRepository members;
-    private final GroupCore core;
-    private final GroupViews views;
-    private final RosterSync sync;
     private final Access access;
-    private final com.capstone.tracking.common.Locks locks;
 
     public record StudentRow(UUID enrollmentId, UUID semesterStudentId, UUID userId, String studentCode,
-                             String fullName, String email, String phone, String majorCode, String majorName,
-                             int currentTerm, Eligibility eligibility, String eligibilityReason, boolean hasGroup,
-                             UUID groupId, String groupCode, String groupName, boolean leader,
+                             String fullName, String email, String phone, UUID majorId, String majorCode,
+                             String majorName, int currentTerm, Eligibility eligibility, String eligibilityReason,
+                             boolean hasGroup, UUID roomId, String groupCode, String roomName, boolean leader,
                              NoGroupReason noGroupReason) {}
+
+    public record MajorRow(UUID id, String code, String name, long students) {}
 
     public record StudentUpdate(@jakarta.validation.constraints.Size(max = 255) String fullName,
                                 @jakarta.validation.constraints.Email String email,
-                                @jakarta.validation.constraints.Size(max = 20) String phone,
-                                @io.swagger.v3.oas.annotations.media.Schema(hidden = true) UUID majorId,
-                                @io.swagger.v3.oas.annotations.media.Schema(hidden = true) Integer currentTerm) {}
+                                @jakarta.validation.constraints.Size(max = 20) String phone) {}
 
-    public Page<StudentRow> students(UUID subjectId, UUID majorId, Boolean hasGroup, Eligibility eligibility, String q,
-                                     Pageable pageable, User viewer) {
-        Subject subject = subject(subjectId);
-        access.requireModerator(subject.getSemesterCode(), viewer);
+    public Page<StudentRow> students(String semesterCode, UUID majorId, Boolean hasGroup, Eligibility eligibility,
+                                     String q, Pageable pageable, User viewer) {
+        access.requireModerator(semesterCode, viewer);
         String like = q == null || q.isBlank() ? "%" : "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
-        Page<Enrollment> page = enrollments.search(subjectId, majorId, eligibility, hasGroup, like, pageable);
+        Page<Enrollment> page = enrollments.search(semesterCode, majorId, eligibility, hasGroup, like, pageable);
         Map<UUID, GroupMember> memberships = page.isEmpty() ? Map.of()
                 : members.findActiveByEnrollments(page.map(Enrollment::getId).toList()).stream()
                         .collect(Collectors.toMap(m -> m.getEnrollment().getId(), Function.identity()));
         return page.map(e -> row(e, memberships.get(e.getId())));
     }
 
-    /** The groups tab, with the "below the minimum size" filter of 7.1. */
-    public List<GroupResponse> groups(UUID subjectId, UUID majorId, GroupState state, Integer maxSize, String q,
-                                      User viewer) {
-        Subject subject = subject(subjectId);
-        access.requireModerator(subject.getSemesterCode(), viewer);
-        String query = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
-        return views.views(groups.findActiveBySubject(subjectId).stream()
-                        .filter(g -> majorId == null || g.getScope().getMajor().getId().equals(majorId))
-                        .filter(g -> query.isEmpty() || g.getName().toLowerCase(Locale.ROOT).contains(query)
-                                || g.getCode().toLowerCase(Locale.ROOT).contains(query))
-                        .toList(), viewer).stream()
-                .filter(g -> state == null || g.state() == state || (state == GroupState.FULL && g.full())
-                        || (state == GroupState.LOCKED && g.locked()))
-                .filter(g -> maxSize == null || g.size() <= maxSize)
+    public List<MajorRow> majors(String semesterCode, User viewer) {
+        access.requireModerator(semesterCode, viewer);
+        return scopes.findBySemester(semesterCode).stream()
+                .map(s -> new MajorRow(s.getMajor().getId(), s.getMajor().getCode(), s.getMajor().getName(),
+                        enrollments.countByScopeId(s.getId())))
                 .toList();
     }
 
-    /**
-     * Edits a student's details. Contact details always; major and term only while every scope concerned is still
-     * being prepared (3.3: no change of major once formation started).
-     */
+    /** Edits a student's contact details in every phase. Major and term never change by hand (3.3). */
     @Transactional
     public StudentRow update(UUID semesterStudentId, StudentUpdate update, User viewer) {
         SemesterStudent ss = semesterStudents.findById(semesterStudentId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Student", semesterStudentId));
         access.requireModerator(ss.getSemesterCode(), viewer);
-        scopes.findBySemester(ss.getSemesterCode()).stream().map(com.capstone.tracking.subject.FormationScope::getId).sorted()
-                .forEach(id -> locks.write(com.capstone.tracking.subject.FormationScope.class, id));
         User user = ss.getUser();
         if (update.fullName() != null && !update.fullName().isBlank()) {
             user.setFullName(update.fullName().trim());
         }
         if (update.email() != null && !update.email().equalsIgnoreCase(user.getEmail())) {
+            if (update.email().isBlank()) {
+                throw new BadRequestException("The email is required");
+            }
             String email = update.email().trim().toLowerCase(Locale.ROOT);
             users.findByEmailIgnoreCase(email).ifPresent(other -> {
                 throw new ConflictException(other.getRole() == Role.STUDENT
-                        ? "This email belongs to another student" : "This email belongs to a lecturer or Admin account");
+                        ? "This email belongs to another student" : "This email belongs to a Moderator or Admin account");
             });
             user.setEmail(email);
         }
         if (update.phone() != null) {
             user.setPhone(update.phone().isBlank() ? null : update.phone().trim());
         }
-        boolean majorChange = update.majorId() != null && !update.majorId().equals(ss.getMajor().getId());
-        boolean termChange = update.currentTerm() != null && update.currentTerm() != ss.getCurrentTerm();
-        if (majorChange || termChange) {
-            throw new BadRequestException("The major cannot change; the imported formation term must be 8");
+        Enrollment e = enrollments.findBySemesterStudentId(ss.getId()).orElse(null);
+        if (e == null) {
+            return new StudentRow(null, ss.getId(), user.getId(), user.getStudentCode(), user.getFullName(),
+                    user.getEmail(), user.getPhone(), ss.getMajor().getId(), ss.getMajor().getCode(),
+                    ss.getMajor().getName(), ss.getCurrentTerm(), null, null, false, null, null, null, false, null);
         }
-        return enrollments.findBySemesterStudentId(ss.getId()).stream().findFirst()
-                .map(e -> row(e, core.membershipOf(e.getId())))
-                .orElse(new StudentRow(null, ss.getId(), user.getId(), user.getStudentCode(), user.getFullName(),
-                        user.getEmail(), user.getPhone(), ss.getMajor().getCode(), ss.getMajor().getName(),
-                        ss.getCurrentTerm(), null, null, false, null, null, null, false, null));
+        return row(e, members.findActiveByEnrollment(e.getId()).orElse(null));
     }
 
     private StudentRow row(Enrollment e, GroupMember m) {
@@ -142,13 +108,10 @@ public class RosterService {
         SemesterStudent ss = e.getSemesterStudent();
         StudentGroup g = m == null ? null : m.getGroup();
         return new StudentRow(e.getId(), ss.getId(), u.getId(), u.getStudentCode(), u.getFullName(), u.getEmail(),
-                u.getPhone(), ss.getMajor().getCode(), ss.getMajor().getName(), ss.getCurrentTerm(), e.getEligibility(),
-                e.getEligibilityReason(), g != null, g == null ? null : g.getId(), g == null ? null : g.getCode(),
-                g == null ? null : g.getName(), m != null && m.isLeader(),
+                u.getPhone(), ss.getMajor().getId(), ss.getMajor().getCode(), ss.getMajor().getName(),
+                ss.getCurrentTerm(), e.getEligibility(), e.getEligibilityReason(), g != null,
+                g == null ? null : g.getId(), g == null ? null : g.getCode(), g == null ? null : g.getName(),
+                m != null && m.isLeader(),
                 g == null ? (e.isIneligible() ? NoGroupReason.INELIGIBLE : e.getNoGroupReason()) : null);
-    }
-
-    private Subject subject(UUID subjectId) {
-        return subjects.findById(subjectId).orElseThrow(() -> ResourceNotFoundException.of("Subject", subjectId));
     }
 }

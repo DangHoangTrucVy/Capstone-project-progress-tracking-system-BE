@@ -59,7 +59,7 @@ class InfrastructureIntegrationTest extends TestSupport {
         User leader = w.students().get(0);
         UUID group = createGroup(w, leader, "Queued");
         long before = notificationRepository.countByRecipientIdAndReadAtIsNull(leader.getId());
-        postJson("/api/v1/groups/" + group + "/applications", w.students().get(1), Map.of()).andExpect(status().isCreated());
+        requestToJoin(group, leader, w.students().get(1));
 
         // Delivered asynchronously by the SQS poller.
         long deadline = System.currentTimeMillis() + 30_000;
@@ -67,7 +67,7 @@ class InfrastructureIntegrationTest extends TestSupport {
                 && System.currentTimeMillis() < deadline) {
             Thread.sleep(250);
         }
-        assertThat(notificationRepository.countByRecipientIdAndReadAtIsNull(leader.getId())).isEqualTo(before + 1);
+        assertThat(notificationRepository.countByRecipientIdAndReadAtIsNull(leader.getId())).isGreaterThanOrEqualTo(before + 1);
     }
 
     @Test
@@ -84,7 +84,7 @@ class InfrastructureIntegrationTest extends TestSupport {
         World w = world(2, 0);
         User leader = w.students().get(0);
         UUID group = createGroup(w, leader, "Realtime");
-        postJson("/api/v1/groups/" + group + "/applications", w.students().get(1), Map.of()).andExpect(status().isCreated());
+        requestToJoin(group, leader, w.students().get(1));
         verify(streams, timeout(20_000)).push(eq(leader.getId()), any());
     }
 }

@@ -72,8 +72,8 @@ public class UserService {
     @Transactional
     public User update(UUID id, UserUpdateRequest request) {
         User user = getById(id);
-        enrollments.findByUserId(id).stream().map(e -> e.getScope().getId()).distinct().sorted()
-                .forEach(scopeId -> locks.read(com.capstone.tracking.subject.FormationScope.class, scopeId));
+        enrollments.findByUserId(id).stream().map(e -> e.getScope().semesterCode()).distinct().sorted()
+                .forEach(locks::readSemester);
         if (request.email() != null && !request.email().equalsIgnoreCase(user.getEmail())) {
             String email = request.email().trim().toLowerCase(Locale.ROOT);
             if (userRepository.existsByEmailIgnoreCase(email)) {

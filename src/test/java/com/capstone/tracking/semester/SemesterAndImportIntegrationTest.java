@@ -5,8 +5,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.capstone.tracking.TestSupport;
+import com.capstone.tracking.major.Major;
 import com.capstone.tracking.roster.Eligibility;
-import com.capstone.tracking.subject.ScopePhase;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** Semesters (3.1), Moderator (3.6), subjects and scopes (3.2), imports (4.1, 4.2) and eligibility files (5). */
+/** Semesters (3.1), Moderator (3.8), rules (3.2), phases (3.5, 3.6), imports (4.1, 4.2) and eligibility files (5). */
 class SemesterAndImportIntegrationTest extends TestSupport {
 
     @Test
@@ -36,11 +36,14 @@ class SemesterAndImportIntegrationTest extends TestSupport {
         postJson("/api/v1/semesters", admin, body).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value(code))
                 .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.phase").value("OPENING"))
+                .andExpect(jsonPath("$.rules.maxGroupSize").value(5))
+                .andExpect(jsonPath("$.rules.defaultMinRoomSize").value(3))
                 .andExpect(jsonPath("$.studentCount").value(0));
         postJson("/api/v1/semesters", admin, body).andExpect(status().isConflict());
 
         // A deadline closer than the configured 10 minutes is refused.
-        putJson("/api/v1/semesters/" + code, admin, Map.of("defaultDeadline", Instant.now().plus(Duration.ofMinutes(5)).toString()))
+        putJson("/api/v1/semesters/" + code + "/deadline", admin, Map.of("deadline", Instant.now().plus(Duration.ofMinutes(5)).toString()))
                 .andExpect(status().isBadRequest());
 
         // The Moderator is a lecturer from the imported list; then they edit the timeline, not the dates.
@@ -49,8 +52,12 @@ class SemesterAndImportIntegrationTest extends TestSupport {
                 .andExpect(status().isBadRequest());
         putJson("/api/v1/semesters/" + code + "/moderator", admin, Map.of("lecturerId", lecturer.getId().toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.moderator.id").value(lecturer.getId().toString()));
-        putJson("/api/v1/semesters/" + code, lecturer, Map.of("defaultDeadline", Instant.now().plus(Duration.ofDays(9)).toString()))
+        putJson("/api/v1/semesters/" + code + "/deadline", lecturer, Map.of("deadline", Instant.now().plus(Duration.ofDays(9)).toString()))
                 .andExpect(status().isOk());
+        putJson("/api/v1/semesters/" + code + "/rules", lecturer, Map.of("maxGroupSize", 6, "defaultMinRoomSize", 4))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.maxGroupSize").value(6));
+        putJson("/api/v1/semesters/" + code + "/rules", lecturer, Map.of("defaultMinRoomSize", 7))
+                .andExpect(status().isBadRequest());
         putJson("/api/v1/semesters/" + code, lecturer, Map.of("name", "Renamed")).andExpect(status().isForbidden());
 
         // Empty, so it may be deleted.
@@ -58,48 +65,35 @@ class SemesterAndImportIntegrationTest extends TestSupport {
     }
 
     @Test
-    void aSubjectCreatesOneScopePerMajorOfItsTermAndOpensOnTheCommonDate() throws Exception {
-        World w = world(3, 2);
-        JsonNode subject = body(getAs("/api/v1/subjects/" + w.subjectId(), w.moderator()).andExpect(status().isOk()));
-        assertThat(subject.get("scopes").size()).isEqualTo(2);
-        assertThat(w.scope().getPhase()).isEqualTo(ScopePhase.OPEN);
+    void importCreatesOneScopePerMajorAndFormationStartsOnlyWithStudentsDeadlineAndRooms() throws Exception {
+        World w = openingWorld(3, 2);
         assertThat(enrollmentRepository.countByScopeId(w.scope().getId())).isEqualTo(3);
         getAs("/api/v1/semesters/" + w.code(), w.admin()).andExpect(jsonPath("$.studentCount").value(5))
-                .andExpect(jsonPath("$.subjectCount").value(1));
-
+                .andExpect(jsonPath("$.majorCount").value(2)).andExpect(jsonPath("$.phase").value("OPENING"));
+        // Students only view in OPENING.
+        postJson("/api/v1/rooms/" + w.rooms().get(0) + "/join", w.students().get(0), Map.of())
+                .andExpect(status().isConflict());
+        // A major with students but no room blocks the start.
+        Major third = major();
+        enrol(w.semester(), third, 1);
+        JsonNode check = body(getAs("/api/v1/semesters/" + w.code() + "/phase-check", w.moderator()).andExpect(status().isOk()));
+        assertThat(check.get("canStartForming").asBoolean()).isFalse();
+        assertThat(check.get("majorsWithoutRooms").size()).isEqualTo(1);
+        postJson("/api/v1/semesters/" + w.code() + "/start-formation", w.moderator(), Map.of())
+                .andExpect(status().isConflict());
+        // The room plan suggests ceil(1 / 3) = 1 room; creating without a count creates the missing ones.
+        postJson("/api/v1/semesters/" + w.code() + "/rooms", w.moderator(), Map.of("majorId", third.getId()))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$[0].name").value("Room 01"));
         // Another lecturer is not this semester's Moderator.
         User other = user("not-moderator", Role.LECTURER);
-        postJson("/api/v1/semesters/" + w.code() + "/subjects", other,
-                Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isMethodNotAllowed());
-        // v2.9: no other subject or second Capstone configuration can be created.
-        postJson("/api/v1/semesters/" + w.code() + "/subjects", w.moderator(),
-                Map.of("code", "EXE", "name", "Khởi nghiệp", "targetTerm", 7)).andExpect(status().isMethodNotAllowed());
-        postJson("/api/v1/semesters/" + w.code() + "/subjects", w.moderator(),
-                Map.of("code", "CAP", "name", "Capstone Project", "targetTerm", 8)).andExpect(status().isMethodNotAllowed());
-        // A subject whose scopes opened cannot be deleted.
-        deleteAs("/api/v1/subjects/" + w.subjectId(), w.moderator()).andExpect(status().isMethodNotAllowed());
-    }
-
-    @Test
-    void aScopeWithoutModeratorOrDeadlineDoesNotOpen() throws Exception {
-        World w = world(1, 0);
-        // A scope that never opened cannot lock itself when the deadline has already passed.
-        Semester s = semesterRepository.findById(w.code()).orElseThrow();
-        s.setDefaultDeadline(Instant.now().minusSeconds(60));
-        semesterRepository.save(s);
-        UUID scopeId = w.scope().getId();
-        var preparing = scopeRepository.findById(scopeId).orElseThrow();
-        preparing.setPhase(ScopePhase.PREPARING);
-        preparing.setOpenedAt(null);
-        scopeRepository.save(preparing);
-        scopeService.tick(scopeId);
-        assertThat(scopeRepository.findById(scopeId).orElseThrow().getPhase()).isEqualTo(ScopePhase.PREPARING);
-        assertThat(scopeRepository.findById(scopeId).orElseThrow().getOpenBlockedNotifiedAt()).isNotNull();
-        // A new own deadline lets it open at the next tick.
-        putJson("/api/v1/scopes/" + scopeId + "/deadline", w.moderator(),
-                Map.of("deadline", Instant.now().plus(Duration.ofDays(5)).toString())).andExpect(status().isOk());
-        scopeService.tick(scopeId);
-        assertThat(scopeRepository.findById(scopeId).orElseThrow().getPhase()).isEqualTo(ScopePhase.OPEN);
+        postJson("/api/v1/semesters/" + w.code() + "/start-formation", other, Map.of()).andExpect(status().isForbidden());
+        postJson("/api/v1/semesters/" + w.code() + "/start-formation", w.moderator(), Map.of())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phase").value("FORMING"));
+        // Once formation started, the maximum size only grows.
+        putJson("/api/v1/semesters/" + w.code() + "/rules", w.moderator(), Map.of("maxGroupSize", 4))
+                .andExpect(status().isConflict());
+        // Old subject endpoints are gone.
+        getAs("/api/v1/semesters/" + w.code() + "/subjects", w.moderator()).andExpect(status().isNotFound());
     }
 
     @Test
@@ -144,7 +138,7 @@ class SemesterAndImportIntegrationTest extends TestSupport {
     }
 
     @Test
-    void onceAScopeOpenedOnlyContactDetailsMayChange() throws Exception {
+    void onceFormationStartedOnlyContactDetailsMayChange() throws Exception {
         World w = world(1, 0);
         User s = w.students().get(0);
         String header = "MSSV,Họ tên,Email,Số điện thoại,Kỳ,Ngành\n";
@@ -153,24 +147,28 @@ class SemesterAndImportIntegrationTest extends TestSupport {
                 + s.getStudentCode() + ",Tên Mới," + s.getEmail() + ",0900000000,8," + w.otherMajor().getCode() + "\n"
                 + "NEW" + suffix + ",Người Mới,new" + suffix + "@fpt.edu.vn,,8," + w.major().getCode() + "\n"));
         assertThat(report.get("errorRows").asInt()).isEqualTo(2);
-        assertThat(report.get("errors").toString()).contains("không đổi ngành hoặc kỳ học", "không thêm sinh viên mới");
+        assertThat(report.get("errors").toString()).contains("Không đổi ngành", "không thêm sinh viên mới");
         upload(url, w.admin(), "f.csv", header + s.getStudentCode() + ",Tên Mới," + s.getEmail() + ",0900000000,8,"
                 + w.major().getCode() + "\n").andExpect(status().isOk());
         assertThat(userRepository.findById(s.getId()).orElseThrow().getFullName()).isEqualTo("Tên Mới");
     }
 
     @Test
-    void theIneligibilityFileFlagsStudentsPerSubject() throws Exception {
+    void theIneligibilityFileFlagsStudentsAndTakesThemOutOfTheirRoom() throws Exception {
         World w = world(2, 0);
         User flagged = w.students().get(0);
-        String csv = "MSSV,Môn,Lý do\n" + flagged.getStudentCode() + ",CAP,Nợ môn\nNOPE" + suffix + ",,x\n";
+        UUID room = createGroup(w, flagged, "Flagged room");
+        String csv = "MSSV,Lý do\n" + flagged.getStudentCode() + ",Nợ môn\nNOPE" + suffix + ",x\n";
         String url = "/api/v1/semesters/" + w.code() + "/imports/eligibility";
         JsonNode preview = body(upload(url + "/preview", w.admin(), "e.csv", csv).andExpect(status().isOk()));
         assertThat(preview.get("updatedRows").asInt()).isEqualTo(1);
         assertThat(preview.get("errorRows").asInt()).isEqualTo(1);
         upload(url, w.admin(), "e.csv", csv).andExpect(status().isOk());
-        assertThat(enrollmentRepository.findBySubjectIdAndUserId(w.subjectId(), flagged.getId()).orElseThrow()
+        assertThat(enrollmentRepository.findBySemesterAndUser(w.code(), flagged.getId()).orElseThrow()
                 .getEligibility()).isEqualTo(Eligibility.INELIGIBLE);
+        // Out of the room; the room went back to empty and is kept.
+        assertThat(memberRepository.countActive(room)).isZero();
+        assertThat(groupRepository.findById(room).orElseThrow().isDissolved()).isFalse();
         // The Moderator does not import files; only the Admin does.
         upload(url, w.moderator(), "e.csv", csv).andExpect(status().isForbidden());
     }

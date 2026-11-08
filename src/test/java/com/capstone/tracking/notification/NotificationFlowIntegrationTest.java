@@ -24,8 +24,9 @@ class NotificationFlowIntegrationTest extends TestSupport {
         User applicant = w.students().get(1);
         UUID group = createGroup(w, leader, "Notif team");
         long applicantUnread = body(getAs("/api/v1/notifications/unread-count", applicant)).get("unread").asLong();
-        UUID request = id(postJson("/api/v1/groups/" + group + "/applications", applicant, Map.of("message", "Cho em vào"))
-                .andExpect(status().isCreated()));
+        postJson("/api/v1/rooms/" + group + "/lock", leader, Map.of()).andExpect(status().isOk());
+        UUID request = UUID.fromString(body(postJson("/api/v1/rooms/" + group + "/join", applicant,
+                Map.of("message", "Cho em vào")).andExpect(status().isOk())).get("request").get("id").asText());
 
         getAs("/api/v1/notifications", leader).andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].type").value("APPLICATION_RECEIVED"))
@@ -48,7 +49,7 @@ class NotificationFlowIntegrationTest extends TestSupport {
         User leader = w.students().get(0);
         User applicant = w.students().get(1);
         UUID group = createGroup(w, leader, "Read team");
-        postJson("/api/v1/groups/" + group + "/applications", applicant, Map.of()).andExpect(status().isCreated());
+        requestToJoin(group, leader, applicant);
         String id = body(getAs("/api/v1/notifications", leader)).get("content").get(0).get("id").asText();
 
         mockMvc.perform(put("/api/v1/notifications/" + id + "/read").header("Authorization", bearer(applicant)))
