@@ -1,0 +1,98 @@
+@startuml SD15-finalize-request
+!include _vp-style.iuml
+mainframe **sd** SD15 Leader asks to finalize the room, Moderator approves or returns it
+
+actor Leader as L
+actor Moderator as M
+boundary ":RoomScreen" as UI
+control ":RoomController" as RC
+control ":GroupService" as GS
+participant ":GroupCore" as CORE
+entity ":StudentGroup" as ROOM
+entity ":FormationScope" as FS
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+L -> UI : clickRequestFinalize()
+activate UI
+UI -> RC : POST /api/v1/rooms/{roomId}/finalize-request
+activate RC
+RC -> GS : requestFinalize(roomId, leader)
+activate GS
+GS -> GS : lock semester FOR SHARE, requireBeforeDeadline
+GS -> CORE : lock(roomId), requireLeader(room, leader)
+GS -> CORE : size(roomId)
+activate CORE
+CORE --> GS : size
+deactivate CORE
+break room finalized / request already pending / size < room.minSize
+  GS --> UI : 409 ROOM_FINALIZED | FINALIZE_PENDING | BELOW_MINIMUM
+end
+GS -> ROOM : setFinalizeStatus(REQUESTED), requestedAt, requestedBy
+GS -> N : publish(ROOM_FINALIZE_REQUESTED -> Moderator)
+GS --> RC : room
+deactivate GS
+RC --> UI : 200 RoomResponse (FINALIZE_REQUESTED)
+deactivate RC
+deactivate UI
+
+opt Leader withdraws before the answer
+  L -> UI : cancelFinalizeRequest()
+  activate UI
+  UI -> RC : DELETE /api/v1/rooms/{roomId}/finalize-request
+  activate RC
+  RC -> GS : cancelFinalize(roomId, leader)
+  activate GS
+  GS -> ROOM : setFinalizeStatus(NONE)
+  GS --> RC : room
+  deactivate GS
+  RC --> UI : 200 RoomResponse
+  deactivate RC
+  deactivate UI
+end
+
+M -> UI : openFinalizeRequests(semester)
+activate UI
+UI -> RC : GET /api/v1/semesters/{code}/finalize-requests
+activate RC
+RC --> UI : rooms waiting for approval
+deactivate RC
+M -> UI : decide(room, approve, note)
+UI -> RC : POST /api/v1/rooms/{roomId}/finalize-decision {approve, note}
+activate RC
+RC -> GS : decideFinalize(roomId, approve, note, moderator)
+activate GS
+GS -> GS : requireModerator, lock semester, requireNotClosed
+GS -> CORE : lock(roomId)
+break room already finalized
+  GS --> UI : 409 ROOM_FINALIZED
+end
+alt approve
+  break size < minSize or size > maxGroupSize
+    GS --> UI : 409 INVALID_SIZE
+  end
+  GS -> CORE : finalizeRoom(room, moderator, now)
+  activate CORE
+  CORE -> FS : lock FOR UPDATE, groupSeq = groupSeq + 1
+  CORE -> ROOM : setCode("<SEM>-<MAJOR>-<nnn>"),\nsetFinalized(true), finalizeStatus = APPROVED
+  CORE --> GS : done
+  deactivate CORE
+  GS -> AU : record(ROOM_FINALIZED, code, size)
+else return
+  break no finalize request waiting
+    GS --> UI : 409 NO_FINALIZE_REQUEST
+  end
+  GS -> ROOM : setFinalizeStatus(RETURNED), note
+end
+GS -> N : publish(ROOM_FINALIZE_DECIDED -> members)
+GS --> RC : room
+deactivate GS
+RC --> UI : 200 RoomResponse (FINALIZED with code | RETURNED)
+deactivate RC
+UI --> M : decision saved
+deactivate UI
+note right of FS
+  Codes follow approval order and
+  are never reused.
+end note
+@enduml

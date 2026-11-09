@@ -1,0 +1,82 @@
+@startuml SD10-join-room
+!include _vp-style.iuml
+mainframe **sd** SD10 Join a room before the deadline (Student)
+
+actor Student as S
+boundary ":RoomListScreen" as UI
+control ":RoomController" as RC
+control ":GroupService" as GS
+participant ":StudentGate" as SG
+participant ":SemesterGuard" as GD
+participant ":GroupCore" as CORE
+control ":JoinRequestService" as JS
+entity ":StudentGroup" as ROOM
+participant ":Notifier" as N
+
+S -> UI : openRooms(semester)
+activate UI
+UI -> RC : GET /api/v1/semesters/{code}/rooms
+activate RC
+RC --> UI : rooms of my major (status, size, minSize, locked)
+deactivate RC
+S -> UI : clickJoin(room, message)
+UI -> RC : POST /api/v1/rooms/{roomId}/join {message}
+activate RC
+RC -> GS : join(roomId, message, student)
+activate GS
+GS -> GS : lock semester FOR SHARE
+GS -> SG : requireCanAct(semester, student)
+activate SG
+SG --> GS : enrollment
+deactivate SG
+GS -> GD : requireBeforeDeadline(semester)
+activate GD
+GD --> GS : ok
+deactivate GD
+break other major / already in a room / room finalized /\nfinalize request pending / room full / not eligible / deadline passed
+  GS --> UI : 409 OTHER_MAJOR | ALREADY_IN_GROUP | ROOM_FINALIZED |\nFINALIZE_PENDING | GROUP_FULL | NOT_ELIGIBLE | NOT_BEFORE_DEADLINE
+end
+GS -> CORE : lockEnrollment(id), lock(roomId)
+GS -> CORE : size(roomId)
+activate CORE
+CORE --> GS : size
+deactivate CORE
+alt size > 0 and room locked by the Leader
+  GS -> JS : createApply(room, enrollment, message, semester)
+  activate JS
+  break pending requests >= maxPendingRequests / already asked
+    JS --> UI : 409 TOO_MANY_REQUESTS | DUPLICATE_REQUEST
+  end
+  create entity ":JoinRequest" as JR
+  JS -> JR : <<create>> APPLY, expiresAt = now + requestTtlMinutes
+  JS -> N : publish(APPLICATION_RECEIVED -> Leader)
+  JS --> GS : request
+  deactivate JS
+  GS --> RC : JoinOutcome(joined = false, request)
+  RC --> UI : 200 JoinResponse (waiting for the Leader)
+else size = 0 (empty room)
+  GS -> CORE : enroll(room, enrollment, leader = true)
+  activate CORE
+  CORE -> CORE : cancel my other pending requests
+  CORE --> GS : member (Leader)
+  deactivate CORE
+  GS -> N : publish(BECAME_LEADER -> student)
+  GS --> RC : JoinOutcome(joined = true, leader = true)
+  RC --> UI : 200 JoinResponse (you are the Leader)
+else open room
+  GS -> CORE : enroll(room, enrollment, leader = false)
+  activate CORE
+  opt room becomes full
+    CORE -> CORE : cancel its pending APPLY requests
+  end
+  CORE --> GS : member
+  deactivate CORE
+  GS -> N : publish(MEMBER_JOINED -> other members)
+  GS --> RC : JoinOutcome(joined = true)
+  deactivate GS
+  RC --> UI : 200 JoinResponse (joined)
+  deactivate RC
+end
+UI --> S : room status updated
+deactivate UI
+@enduml

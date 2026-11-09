@@ -1,0 +1,72 @@
+@startuml SD06-import-students
+!include _vp-style.iuml
+mainframe **sd** SD06 Import the student list of a semester: preview then confirm (Admin)
+
+actor Admin as A
+boundary ":ImportScreen" as UI
+control ":ImportController" as IC
+control ":StudentImportService" as IS
+participant ":SpreadsheetReader" as SR
+entity ":UserRepository" as UR
+entity ":MajorRepository" as MR
+entity ":SemesterStudentRepository" as SSR
+participant ":RosterSync" as RS
+participant ":EligibilityService" as ES
+entity ":ImportBatchRepository" as IBR
+participant ":AuditService" as AU
+
+A -> UI : chooseFile(students.xlsx)
+activate UI
+UI -> IC : POST /api/v1/semesters/{code}/imports/students/preview (multipart)
+activate IC
+IC -> IS : process(code, fileName, bytes, commit = false, admin)
+activate IS
+IS -> SR : read(bytes)
+activate SR
+SR --> IS : table
+deactivate SR
+break a required column is missing (student code, name, email, term, major)
+  IS --> UI : 400 BAD_REQUEST
+end
+loop each row
+  IS -> IS : validate code, email, term, major,\nduplicates in the file, existing accounts
+  opt semester is no longer OPENING and the row is a new student
+    IS -> IS : add row error (only contact details may change)
+  end
+end
+IS --> IC : ImportReport(preview: new, updated, unchanged, errors, newMajors)
+deactivate IS
+IC --> UI : 200 ImportReport
+deactivate IC
+UI --> A : preview table with the row errors
+
+A -> UI : confirmImport()
+UI -> IC : POST /api/v1/semesters/{code}/imports/students (multipart)
+activate IC
+IC -> IS : process(code, fileName, bytes, commit = true, admin)
+activate IS
+IS -> IS : lock semester FOR UPDATE, validate again
+break no row can be imported
+  IS --> UI : 400 BAD_REQUEST
+end
+opt new majors in the file
+  IS -> MR : save(major)
+end
+loop each valid row
+  IS -> UR : saveAndFlush(user: STUDENT, code, email, name)
+  IS -> SSR : saveAndFlush(semesterStudent: major, term)
+  IS -> RS : syncStudent(semesterStudent)
+  activate RS
+  RS --> IS : enrollment
+  deactivate RS
+end
+IS -> ES : apply(eligibility decisions in the file)
+IS -> IBR : save(ImportBatch: created, updated, errors)
+IS -> AU : record(IMPORT_STUDENTS)
+IS --> IC : ImportReport(committed)
+deactivate IS
+IC --> UI : 200 ImportReport
+deactivate IC
+UI --> A : import result
+deactivate UI
+@enduml

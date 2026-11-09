@@ -1,0 +1,69 @@
+@startuml SD20-statistics-and-export
+!include _vp-style.iuml
+mainframe **sd** SD20 View statistics and export the group list to Excel (Moderator, Admin)
+
+actor "Moderator / Admin" as M
+boundary ":ReportScreen" as UI
+control ":ReportController" as RC
+control ":StatisticsService" as STS
+control ":ExcelExportService" as EX
+participant ":Snapshot" as SN
+database ":PostgreSQL" as DB
+participant ":Notifier" as N
+
+M -> UI : openReports(semester, major)
+activate UI
+UI -> RC : GET /api/v1/semesters/{code}/statistics?majorId=
+activate RC
+RC -> STS : compute(code, majorId, viewer)
+activate STS
+STS -> DB : count students, rooms by status,\ngroups, students without a group
+activate DB
+DB --> STS : counts
+deactivate DB
+STS --> RC : Statistics
+deactivate STS
+RC --> UI : 200 Statistics
+deactivate RC
+UI --> M : dashboard
+
+M -> UI : clickExport()
+UI -> RC : GET /api/v1/semesters/{code}/export-check?majorId=
+activate RC
+RC -> EX : check(code, majorId, viewer)
+activate EX
+EX -> SN : take(code, majorId, viewer)
+activate SN
+SN -> DB : read rooms, members, students\n(REPEATABLE READ)
+activate DB
+DB --> SN : rows
+deactivate DB
+SN --> EX : Snapshot.Data
+deactivate SN
+opt rooms or groups below their minimum
+  EX -> N : publish(EXPORT_SMALL_GROUPS -> Moderator)
+end
+EX --> RC : ExportCheck(canExport, groupsUnderMinimum, warnings)
+deactivate EX
+RC --> UI : 200 ExportCheck
+deactivate RC
+UI --> M : warnings (export still allowed)
+
+M -> UI : confirmExport()
+UI -> RC : GET /api/v1/semesters/{code}/export?majorId=
+activate RC
+RC -> EX : export(code, majorId, viewer)
+activate EX
+EX -> SN : take(code, majorId, viewer)
+activate SN
+SN --> EX : Snapshot.Data
+deactivate SN
+EX -> EX : writeGroups(sheet "Danh sách nhóm")\nmajor -> group code -> Leader first
+EX -> EX : writeNoGroup(sheet "Chưa có nhóm")
+EX --> RC : ExcelFile(fileName, bytes)
+deactivate EX
+RC --> UI : 200 application/vnd.openxmlformats (attachment)
+deactivate RC
+UI --> M : download .xlsx
+deactivate UI
+@enduml

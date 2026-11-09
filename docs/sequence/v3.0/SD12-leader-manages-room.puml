@@ -1,0 +1,80 @@
+@startuml SD12-leader-manages-room
+!include _vp-style.iuml
+mainframe **sd** SD12 Leader renames, locks / unlocks the room and removes a member
+
+actor Leader as L
+boundary ":RoomScreen" as UI
+control ":RoomController" as RC
+control ":GroupService" as GS
+participant ":SemesterGuard" as GD
+participant ":GroupCore" as CORE
+control ":JoinRequestService" as JS
+entity ":StudentGroup" as ROOM
+participant ":Notifier" as N
+
+L -> UI : editRoom(name, wantedSkills)
+activate UI
+UI -> RC : PUT /api/v1/rooms/{roomId} {name, wantedSkills}
+activate RC
+RC -> GS : update(roomId, request, leader)
+activate GS
+GS -> GD : requireBeforeDeadline(semester)
+GS -> CORE : lock(roomId), requireLeader(room, leader)
+break not the Leader / room finalized / changes minSize
+  GS --> UI : 403 MODERATOR_ONLY | 409 ROOM_FINALIZED
+end
+GS -> ROOM : setName(name), setWantedSkills(skills)
+GS --> RC : room
+deactivate GS
+RC --> UI : 200 RoomResponse
+deactivate RC
+
+alt lock the room
+  L -> UI : clickLock()
+  UI -> RC : POST /api/v1/rooms/{roomId}/lock
+  activate RC
+  RC -> GS : setLocked(roomId, true, leader)
+  activate GS
+  GS -> GD : requireBeforeDeadline(semester)
+  GS -> CORE : lock(roomId), requireLeader(room, leader)
+  GS -> ROOM : setLocked(true)
+  GS --> RC : room
+  deactivate GS
+  RC --> UI : 200 RoomResponse (LOCKED: joining needs a request)
+  deactivate RC
+else unlock the room
+  L -> UI : clickUnlock()
+  UI -> RC : POST /api/v1/rooms/{roomId}/unlock
+  activate RC
+  RC -> GS : setLocked(roomId, false, leader)
+  activate GS
+  GS -> ROOM : setLocked(false)
+  GS -> JS : cancelApplies(room, ROOM_UNAVAILABLE)
+  GS --> RC : room
+  deactivate GS
+  RC --> UI : 200 RoomResponse (OPEN)
+  deactivate RC
+end
+
+L -> UI : removeMember(member)
+UI -> RC : DELETE /api/v1/rooms/{roomId}/members/{userId}
+activate RC
+RC -> GS : kick(roomId, userId, leader)
+activate GS
+GS -> GD : requireBeforeDeadline(semester)
+GS -> CORE : lockEnrollment(member), lock(roomId), requireLeader(room, leader)
+break room finalized / finalize request pending / Leader removes themselves
+  GS --> UI : 409 ROOM_FINALIZED | FINALIZE_PENDING | 400
+end
+GS -> CORE : remove(member, KICKED)
+activate CORE
+CORE --> GS : done
+deactivate CORE
+GS -> N : publish(MEMBER_KICKED -> removed student)
+GS --> RC : done
+deactivate GS
+RC --> UI : 204 No Content
+deactivate RC
+UI --> L : member list updated
+deactivate UI
+@enduml

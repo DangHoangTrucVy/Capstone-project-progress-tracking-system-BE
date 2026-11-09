@@ -1,0 +1,128 @@
+@startuml SD17-moderator-coordination
+!include _vp-style.iuml
+mainframe **sd** SD17 Moderator coordinates rooms: add, move, remove, appoint Leader, merge, disband
+
+actor Moderator as M
+boundary ":RoomManagementScreen" as UI
+control ":RoomController" as RMC
+control ":ModerationController" as MC
+control ":ModerationService" as MS
+participant ":GroupCore" as CORE
+entity ":StudentGroup" as ROOM
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+M -> UI : openRooms(semester, filter)
+activate UI
+UI -> RMC : GET /api/v1/semesters/{code}/rooms?majorId=
+activate RMC
+RMC --> UI : rooms (status, size, minSize, below minimum)
+deactivate RMC
+
+alt add a student without a room
+  M -> UI : add(room, student)
+  UI -> MC : POST /api/v1/rooms/{roomId}/moderation/add {studentUserId}
+  activate MC
+  MC -> MS : addMember(roomId, studentId, moderator)
+  activate MS
+  MS -> MS : requireModerator, lock semester (shared), requireNotClosed
+  break finalized room outside SUPPLEMENT / other major /\nnot eligible / already in a room / room full
+    MS --> UI : 409 ROOM_FINALIZED | OTHER_MAJOR | NOT_ELIGIBLE |\nALREADY_IN_GROUP | GROUP_FULL
+  end
+  MS -> CORE : enroll(room, enrollment)
+  MS -> N : publish(ADDED_BY_MODERATOR -> student)
+  MS -> N : publish(ROOM_CHANGED_BY_MODERATOR -> members)
+  MS --> MC : member
+  deactivate MS
+  MC --> UI : 200 RoomResponse
+  deactivate MC
+else move a student to another room
+  M -> UI : move(student, targetRoom)
+  UI -> MC : POST /api/v1/rooms/{targetId}/moderation/move {studentUserId}
+  activate MC
+  MC -> MS : move(targetId, studentId, moderator)
+  activate MS
+  MS -> CORE : lock(both rooms in id order)
+  break student has no room / target full
+    MS --> UI : 409 NO_GROUP | GROUP_FULL
+  end
+  MS -> CORE : remove(member, MOVED)
+  MS -> CORE : enroll(target, enrollment)
+  MS -> N : publish(MOVED_BY_MODERATOR -> student, both rooms)
+  MS --> MC : member
+  deactivate MS
+  MC --> UI : 200 RoomResponse
+  deactivate MC
+else remove a student (reason required)
+  M -> UI : remove(room, student, reason)
+  UI -> MC : POST /api/v1/rooms/{roomId}/moderation/remove {studentUserId, reason}
+  activate MC
+  MC -> MS : removeMember(roomId, studentId, reason, moderator)
+  activate MS
+  MS -> CORE : remove(member, REMOVED_BY_MODERATOR)
+  MS -> N : publish(REMOVED_BY_MODERATOR -> student)
+  MS --> MC : done
+  deactivate MS
+  MC --> UI : 200 RoomResponse
+  deactivate MC
+else appoint a Leader directly
+  M -> UI : appointLeader(room, member)
+  UI -> MC : POST /api/v1/rooms/{roomId}/moderation/leader {studentUserId}
+  activate MC
+  MC -> MS : appointLeader(roomId, userId, moderator)
+  activate MS
+  MS -> CORE : saveMember(old Leader off, new Leader on)
+  MS -> N : publish(LEADER_CHANGED -> members)
+  MS --> MC : room
+  deactivate MS
+  MC --> UI : 200 RoomResponse
+  deactivate MC
+else merge a room into another
+  M -> UI : merge(targetRoom, sourceRoom)
+  UI -> MC : POST /api/v1/rooms/{targetId}/moderation/merge {sourceRoomId}
+  activate MC
+  MC -> MS : merge(targetId, sourceId, moderator)
+  activate MS
+  break membership changed / target + source > maxGroupSize
+    MS --> UI : 409 GROUP_CHANGED | GROUP_FULL
+  end
+  loop each member of the source room
+    MS -> CORE : remove(member, MOVED), enroll(target, member)
+  end
+  MS -> CORE : settle(source): back to EMPTY
+  MS -> N : publish(MOVED_BY_MODERATOR -> target members)
+  MS --> MC : target room
+  deactivate MS
+  MC --> UI : 200 RoomResponse
+  deactivate MC
+else disband rooms below their minimum
+  M -> UI : disband(roomIds | allBelowMinimum, majorId, reason)
+  UI -> MC : POST /api/v1/semesters/{code}/rooms/disband
+  activate MC
+  MC -> MS : disband(code, roomIds, allBelowMinimum, majorId, reason, moderator)
+  activate MS
+  loop each selected room (in id order)
+    MS -> CORE : lock(roomId)
+    break room is a finalized group
+      MS --> UI : 409 ROOM_FINALIZED
+    end
+    MS -> CORE : disband(room, moderator, reason)
+    activate CORE
+    CORE -> ROOM : members leave (GROUP_DISSOLVED),\nrequests closed, unlocked, back to EMPTY
+    CORE -> N : publish(GROUP_DISSOLVED -> former members)
+    CORE --> MS : students moved out
+    deactivate CORE
+    MS -> AU : record(GROUP_DISSOLVED)
+  end
+  MS --> MC : DisbandResult(rooms, students)
+  deactivate MS
+  MC --> UI : 200 DisbandResult
+  deactivate MC
+end
+UI --> M : room list refreshed
+deactivate UI
+note right of ROOM
+  Rooms are never deleted: a disbanded
+  room becomes EMPTY and can be reused.
+end note
+@enduml

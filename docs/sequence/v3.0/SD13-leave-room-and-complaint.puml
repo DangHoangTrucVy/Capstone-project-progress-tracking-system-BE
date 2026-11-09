@@ -1,0 +1,122 @@
+@startuml SD13-leave-room-and-complaint
+!include _vp-style.iuml
+mainframe **sd** SD13 Leave a room, Leader decision, complaint and Moderator decision
+
+actor Member as S
+actor Leader as L
+actor Moderator as M
+boundary ":RoomScreen" as UI
+control ":RoomController" as RMC
+control ":GroupService" as GS
+control ":RequestController" as RC
+control ":LeaveRequestService" as LS
+participant ":GroupCore" as CORE
+entity ":LeaveRequest" as LR
+participant ":Notifier" as N
+
+S -> UI : clickLeave(reason)
+activate UI
+UI -> RMC : POST /api/v1/rooms/{roomId}/leave {reason}
+activate RMC
+RMC -> GS : leave(roomId, reason, member)
+activate GS
+GS -> GS : lock semester, enrollment, room
+break not a member / semester CLOSED / formation not started
+  GS --> UI : 403 NOT_MEMBER | 409 SEMESTER_CLOSED | NOT_BEFORE_DEADLINE
+end
+alt before the deadline, room not finalized and not locked
+  GS -> CORE : remove(member, LEFT)
+  activate CORE
+  CORE -> CORE : settle(room): next Leader or room back to EMPTY
+  CORE --> GS : done
+  deactivate CORE
+  GS -> N : publish(MEMBER_LEFT -> remaining members)
+  GS --> RMC : LeaveOutcome(left = true)
+  RMC --> UI : 200 LeaveResponse (left)
+else before the deadline, room locked by the Leader
+  break the member is the Leader
+    GS --> UI : 409 LEADER_MUST_TRANSFER
+  end
+  GS -> LR : <<create>> status PENDING_LEADER
+  GS -> N : publish(LEAVE_REQUESTED -> Leader)
+  GS --> RMC : LeaveOutcome(left = false, request)
+  RMC --> UI : 200 LeaveResponse (waiting for the Leader)
+else after the deadline, or room already finalized
+  GS -> LR : <<create>> status PENDING_MODERATOR, complaint = true
+  GS -> N : publish(COMPLAINT_RECEIVED -> Moderator)
+  GS --> RMC : LeaveOutcome(left = false, request)
+  deactivate GS
+  RMC --> UI : 200 LeaveResponse (waiting for the Moderator)
+  deactivate RMC
+end
+deactivate UI
+
+opt request waits for the Leader
+  L -> UI : decideLeave(request, approve, note)
+  activate UI
+  UI -> RC : POST /api/v1/leave-requests/{id}/leader-decision {approve, note}
+  activate RC
+  RC -> LS : leaderDecide(id, approve, note, leader)
+  activate LS
+  break not PENDING_LEADER / deadline passed
+    LS --> UI : 409 REQUEST_CLOSED | NOT_BEFORE_DEADLINE
+  end
+  alt approve
+    LS -> LR : setStatus(APPROVED)
+    LS -> CORE : remove(member, LEAVE_APPROVED)
+    LS -> N : publish(MEMBER_LEFT -> members)
+  else reject
+    LS -> LR : setStatus(REJECTED)
+  end
+  LS -> N : publish(LEAVE_DECIDED -> member)
+  LS --> RC : request
+  deactivate LS
+  RC --> UI : 200 LeaveRequestResponse
+  deactivate RC
+  deactivate UI
+
+  opt Leader rejected: the member complains
+    S -> UI : complain(request, reason)
+    activate UI
+    UI -> RC : POST /api/v1/leave-requests/{id}/complaint {reason}
+    activate RC
+    RC -> LS : escalate(id, reason, member)
+    activate LS
+    break cannot complain / no longer a member / another request open
+      LS --> UI : 409 CANNOT_COMPLAIN | NOT_MEMBER | LEAVE_REQUEST_OPEN
+    end
+    LS -> LR : <<create>> PENDING_MODERATOR, complaint = true
+    LS -> N : publish(COMPLAINT_RECEIVED -> Moderator)
+    LS --> RC : request
+    deactivate LS
+    RC --> UI : 200 LeaveRequestResponse
+    deactivate RC
+    deactivate UI
+  end
+end
+
+opt request waits for the Moderator
+  M -> UI : openComplaints(semester)
+  activate UI
+  UI -> RC : GET /api/v1/semesters/{code}/complaints
+  activate RC
+  RC --> UI : open leave requests and complaints
+  deactivate RC
+  M -> UI : decide(request, approve, note)
+  UI -> RC : POST /api/v1/leave-requests/{id}/moderator-decision {approve, note}
+  activate RC
+  RC -> LS : moderatorDecide(id, approve, note, moderator)
+  activate LS
+  LS -> LR : setStatus(APPROVED | REJECTED), decisionNote
+  opt approve
+    LS -> CORE : remove(member, LEAVE_APPROVED)
+    LS -> N : publish(MEMBER_LEFT -> members)
+  end
+  LS -> N : publish(LEAVE_DECIDED -> member, Leader)
+  LS --> RC : request
+  deactivate LS
+  RC --> UI : 200 LeaveRequestResponse
+  deactivate RC
+  deactivate UI
+end
+@enduml
