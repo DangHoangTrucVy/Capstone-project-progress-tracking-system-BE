@@ -23,10 +23,9 @@ class OpenApiDocsIntegrationTest extends TestSupport {
         JsonNode paths = paths();
         for (String[] op : new String[][] {
                 {"/api/v1/semesters", "post", "SemesterResponse"},
-                {"/api/v1/subjects/{subjectId}/groups", "post", "GroupResponse"},
-                {"/api/v1/groups/{groupId}/applications", "post", "JoinRequestResponse"},
-                {"/api/v1/groups/{groupId}/invitations", "post", "JoinRequestResponse"},
-                {"/api/v1/scopes/{scopeId}/groups", "post", "GroupResponse"}}) {
+                {"/api/v1/semesters/{semester}/rooms", "post", "RoomResponse"},
+                {"/api/v1/rooms/{groupId}/invitations", "post", "JoinRequestResponse"},
+                {"/api/v1/rooms/{groupId}/leader-transfers", "post", "TransferResponse"}}) {
             JsonNode responses = paths.get(op[0]).get(op[1]).get("responses");
             assertThat(responses.has("201")).as(op[0]).isTrue();
             assertThat(responses.has("200")).as(op[0]).isFalse();
@@ -41,7 +40,7 @@ class OpenApiDocsIntegrationTest extends TestSupport {
     @DisplayName("Error answers are documented with the ErrorResponse body; public sign-in has no 401/403 from the token")
     void errorResponses() throws Exception {
         JsonNode paths = paths();
-        JsonNode invite = paths.get("/api/v1/groups/{groupId}/invitations").get("post").get("responses");
+        JsonNode invite = paths.get("/api/v1/rooms/{groupId}/invitations").get("post").get("responses");
         for (String code : new String[] {"400", "401", "403", "404", "409"}) {
             assertThat(invite.has(code)).as(code).isTrue();
             assertThat(invite.get(code).toString()).as(code).contains("#/components/schemas/ErrorResponse");
@@ -65,19 +64,16 @@ class OpenApiDocsIntegrationTest extends TestSupport {
         var w = world(1, 0);
         JsonNode paths = paths();
         assertThat(paths.get("/api/v1/users").has("post")).isFalse();
-        assertThat(paths.get("/api/v1/semesters/{semester}/subjects").has("post")).isFalse();
-        assertThat(paths.get("/api/v1/subjects/{subjectId}/groups").has("get")).isFalse();
-        assertThat(paths.has("/api/v1/subjects/{subjectId}/students")).isFalse();
-        assertThat(paths.get("/api/v1/subjects/{subjectId}").has("delete")).isFalse();
+        assertThat(paths.has("/api/v1/semesters/{semester}/subjects")).isFalse();
+        assertThat(paths.has("/api/v1/subjects/{subjectId}/groups")).isFalse();
+        assertThat(paths.has("/api/v1/scopes/{scopeId}/finalize")).isFalse();
+        assertThat(paths.has("/api/v1/groups/{groupId}/applications")).isFalse();
         assertThat(paths.has("/api/v1/semesters/{semester}/students")).isTrue();
-        assertThat(paths.has("/api/v1/semesters/{semester}/groups")).isTrue();
+        assertThat(paths.has("/api/v1/semesters/{semester}/rooms")).isTrue();
+        assertThat(paths.has("/api/v1/semesters/{semester}/finalize-round1")).isTrue();
+        assertThat(paths.has("/api/v1/rooms/{roomId}/join")).isTrue();
         postJson("/api/v1/users", w.admin(), java.util.Map.of()).andExpect(status().isMethodNotAllowed());
-        getAs("/api/v1/subjects/" + w.subjectId() + "/students", w.admin()).andExpect(status().isNotFound());
-        getAs("/api/v1/subjects/" + w.subjectId() + "/groups", w.admin()).andExpect(status().isMethodNotAllowed());
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                .delete("/api/v1/subjects/" + w.subjectId()).with(
-                        org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(w.admin())))
-                .andExpect(status().isMethodNotAllowed());
+        getAs("/api/v1/subjects/" + java.util.UUID.randomUUID() + "/students", w.admin()).andExpect(status().isNotFound());
     }
 
     @Test

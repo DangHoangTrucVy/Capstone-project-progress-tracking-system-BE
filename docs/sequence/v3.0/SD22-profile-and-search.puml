@@ -1,0 +1,63 @@
+@startuml SD22-profile-and-search
+!include _vp-style.iuml
+mainframe **sd** SD22 Update my profile and search rooms / teammates (Student)
+
+actor Student as S
+boundary ":ProfileScreen" as UI
+control ":ProfileController" as PC
+control ":RoomController" as RC
+control ":SearchService" as SS
+entity ":User" as USR
+entity ":StudentGroupRepository" as GR
+entity ":EnrollmentRepository" as ER
+
+S -> UI : openProfile()
+activate UI
+UI -> PC : GET /api/v1/me/profile
+activate PC
+PC --> UI : UserResponse
+deactivate PC
+S -> UI : edit(phone, skills, strengths, weaknesses, profilePrivate)
+UI -> PC : PUT /api/v1/me/profile
+activate PC
+break field not allowed for this role / too long
+  PC --> UI : 400 | 403
+end
+PC -> USR : update profile fields
+PC --> UI : 200 UserResponse
+deactivate PC
+
+alt search rooms with free seats
+  S -> UI : searchRooms(keyword, skill, available)
+  UI -> RC : GET /api/v1/semesters/{code}/rooms/search?q=&skill=&available=
+  activate RC
+  RC -> SS : rooms(code, q, skill, available, student)
+  activate SS
+  SS -> GR : findActiveByScope(my major)
+  activate GR
+  GR --> SS : rooms
+  deactivate GR
+  SS -> SS : filter by name, wanted skills,\nfree seats, not finalized
+  SS --> RC : RoomResponse[]
+  deactivate SS
+  RC --> UI : 200 RoomResponse[]
+  deactivate RC
+else search teammates (students without a room)
+  S -> UI : searchCandidates(keyword, skill)
+  UI -> RC : GET /api/v1/semesters/{code}/candidates?q=&skill=
+  activate RC
+  RC -> SS : candidates(code, majorId, q, skill, viewer)
+  activate SS
+  SS -> ER : students of my major without a room, eligible
+  activate ER
+  ER --> SS : enrollments
+  deactivate ER
+  SS -> SS : hide private profiles' details
+  SS --> RC : ProfileView[]
+  deactivate SS
+  RC --> UI : 200 ProfileView[]
+  deactivate RC
+end
+UI --> S : results
+deactivate UI
+@enduml

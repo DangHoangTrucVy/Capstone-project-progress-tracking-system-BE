@@ -8,13 +8,13 @@ import com.capstone.tracking.notification.DomainEvent;
 import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.notification.Notifier;
 import com.capstone.tracking.roster.Enrollment;
-import com.capstone.tracking.roster.EnrollmentRepository;
 import com.capstone.tracking.roster.NoGroupReason;
-import com.capstone.tracking.subject.FormationScope;
-import com.capstone.tracking.subject.ScopePhase;
-import com.capstone.tracking.subject.ScopeRules;
+import com.capstone.tracking.semester.FormationScope;
+import com.capstone.tracking.semester.Semester;
+import com.capstone.tracking.semester.SemesterPhase;
+import com.capstone.tracking.semester.SemesterRepository;
 import com.capstone.tracking.team.GroupMember.LeftReason;
-import com.capstone.tracking.team.StudentGroup.DissolveReason;
+import com.capstone.tracking.team.StudentGroup.FinalizeStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -25,10 +25,10 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The membership rules every flow shares: joining (capacity, one group per subject), leaving, the automatic Leader
- * choice (6.5) and dissolving. Callers hold the group's row lock (and the student's enrollment lock when a student
- * joins or leaves), so concurrent operations cannot overfill a group or put a student in two groups (12); the
- * database's partial unique indexes back both rules.
+ * The membership rules every flow shares: joining (capacity from the semester's rules, one room per student), leaving,
+ * the automatic Leader choice (6.7), disbanding a room back to empty (7.1) and issuing group codes (7.6). Callers hold
+ * the semester (shared), the student's enrollment and the room's row locks, so concurrent operations cannot overfill a
+ * room or put a student in two rooms (12); the database's partial unique indexes back both rules.
  */
 @Component
 @RequiredArgsConstructor
@@ -40,8 +40,7 @@ public class GroupCore {
     private final JoinRequestRepository requests;
     private final LeaveRequestRepository leaveRequests;
     private final LeaderTransferRepository transfers;
-    private final EnrollmentRepository enrollments;
-    private final ScopeRules rules;
+    private final SemesterRepository semesters;
     private final Notifier notifier;
     private final Locks locks;
 
@@ -49,19 +48,25 @@ public class GroupCore {
 
     @Transactional(propagation = Propagation.SUPPORTS)
     public StudentGroup get(UUID groupId) {
-        return groups.findById(groupId).orElseThrow(() -> ResourceNotFoundException.of("Group", groupId));
+        StudentGroup group = groups.findById(groupId).orElseThrow(() -> ResourceNotFoundException.of("Room", groupId));
+        return group;
     }
 
     public StudentGroup lock(UUID groupId) {
         StudentGroup group = locks.write(StudentGroup.class, groupId);
         if (group.isDissolved()) {
-            throw new ApiException(HttpStatus.CONFLICT, "GROUP_DISSOLVED", "This group has been dissolved");
+            throw new ApiException(HttpStatus.CONFLICT, "ROOM_CLOSED", "This room has been closed");
         }
         return group;
     }
 
     public Enrollment lockEnrollment(UUID enrollmentId) {
         return locks.write(Enrollment.class, enrollmentId);
+    }
+
+    @Transactional(propagation = Propagation.SUPPORTS)
+    public Semester semesterOf(StudentGroup group) {
+        return semesters.findById(group.getScope().semesterCode()).orElseThrow();
     }
 
     @Transactional(propagation = Propagation.SUPPORTS)
@@ -79,7 +84,7 @@ public class GroupCore {
         return members.findActive(groupId).stream().filter(GroupMember::isLeader).findFirst().orElse(null);
     }
 
-    /** The student's current group in the subject of this enrollment, or null. */
+    /** The student's current room in the semester of this enrollment, or null. */
     @Transactional(propagation = Propagation.SUPPORTS)
     public StudentGroup groupOf(UUID enrollmentId) {
         return members.findActiveByEnrollment(enrollmentId).map(GroupMember::getGroup).orElse(null);
@@ -102,67 +107,82 @@ public class GroupCore {
 
     public GroupMember requireLeader(StudentGroup group, UUID userId) {
         GroupMember member = members.findActiveInGroup(group.getId(), userId)
-                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "NOT_LEADER", "You are not a member of this group"));
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "NOT_LEADER", "You are not a member of this room"));
         if (!member.isLeader()) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "NOT_LEADER", "Only the group's Leader may do this");
+            throw new ApiException(HttpStatus.FORBIDDEN, "NOT_LEADER", "Only the room's Leader may do this");
         }
         return member;
     }
 
-    /** What students see of the group (6.3). */
+    /** What everyone sees of the room (6.3). */
     @Transactional(propagation = Propagation.SUPPORTS)
-    public GroupState state(StudentGroup group, long size, Instant now) {
+    public RoomStatus status(StudentGroup group, long size, Semester semester, Instant now) {
         if (group.isDissolved()) {
-            return GroupState.DISSOLVED;
+            return RoomStatus.CLOSED;
         }
-        boolean beforeDeadline = rules.isOpen(group.getScope(), now)
-                || group.getScope().getPhase() == ScopePhase.PREPARING;
-        if (group.isLocked() || !beforeDeadline) {
-            return GroupState.LOCKED;
+        if (group.isApproved()) {
+            return RoomStatus.FINALIZED;
         }
-        return size >= group.getScope().getSubject().getMaxGroupSize() ? GroupState.FULL : GroupState.OPEN;
+        if (size == 0) {
+            return RoomStatus.EMPTY;
+        }
+        if (group.isFinalizeRequested()) {
+            return RoomStatus.FINALIZE_REQUESTED;
+        }
+        if (semester.getPhase() != SemesterPhase.OPENING && !semester.isBeforeDeadline(now)) {
+            return RoomStatus.DEADLINE_LOCKED;
+        }
+        if (group.isLocked()) {
+            return RoomStatus.LOCKED;
+        }
+        return size >= semester.getMaxGroupSize() ? RoomStatus.FULL : RoomStatus.OPEN;
     }
 
     // ------------------------------------------------------------------ joining
 
     /**
-     * Adds the student to the group. Re-checks capacity and "no group in this subject" under the locks the caller
-     * holds; every other open Apply/Invite of the student in this subject is then cancelled (6.2).
+     * Adds the student to the room; the first student in an empty room is its Leader (6.2). Re-checks capacity and "no
+     * room yet in this semester" under the locks the caller holds; every other open request and invite of the student
+     * is then cancelled (6.2).
      */
-    public GroupMember enroll(StudentGroup group, Enrollment enrollment, boolean leader, Instant now) {
+    public GroupMember enroll(StudentGroup group, Enrollment enrollment, boolean leader, Semester semester, Instant now) {
         if (enrollment.isIneligible()) {
             throw new ApiException(HttpStatus.CONFLICT, "NOT_ELIGIBLE", "The student is not eligible for Capstone");
         }
         if (!enrollment.getScope().getId().equals(group.getScope().getId())) {
-            throw new ApiException(HttpStatus.CONFLICT, "OTHER_MAJOR",
-                    "A group only takes students of its own major and subject");
+            throw new ApiException(HttpStatus.CONFLICT, "OTHER_MAJOR", "A room only takes students of its own major");
         }
         if (members.findActiveByEnrollment(enrollment.getId()).isPresent()) {
             throw new ApiException(HttpStatus.CONFLICT, "ALREADY_IN_GROUP",
-                    "The student already belongs to a group in this subject");
+                    "The student already belongs to a room in this semester");
         }
-        int max = group.getScope().getSubject().getMaxGroupSize();
-        if (members.countActive(group.getId()) >= max) {
-            throw new ApiException(HttpStatus.CONFLICT, "GROUP_FULL", "The group is full (" + max + " members)");
+        int max = semester.getMaxGroupSize();
+        long size = members.countActive(group.getId());
+        if (size >= max) {
+            throw new ApiException(HttpStatus.CONFLICT, "GROUP_FULL", "The room is full (" + max + " members)");
         }
         GroupMember member = members.saveAndFlush(GroupMember.builder()
                 .group(group)
                 .enrollment(enrollment)
                 .user(enrollment.getUser())
-                .leader(leader)
+                .leader(leader || size == 0)
                 .joinedAt(now)
                 .build());
         enrollment.setNoGroupReason(null);
         requests.cancelPendingOfEnrollment(enrollment.getId(), JoinRequest.CancelReason.JOINED_ANOTHER_GROUP, now);
+        if (members.countActive(group.getId()) >= max) {
+            // A full room takes no more requests to join (6.2); invites are re-checked when answered.
+            requests.cancelPendingOfGroup(group.getId(), JoinRequest.Type.APPLY, JoinRequest.CancelReason.ROOM_UNAVAILABLE, now);
+        }
         return member;
     }
 
     // ------------------------------------------------------------------ leaving
 
     /**
-     * Takes the member out of the group. With {@code settle}, a group left without a Leader gets one (6.5) and an empty
-     * group is dissolved; bulk removals pass false and call {@link #settle} once everyone is out (6.5: "loại hết trước
-     * rồi mới chọn Leader").
+     * Takes the member out of the room. With {@code settle}, a room left without a Leader gets one (6.7) and an empty
+     * room goes back to empty; bulk removals pass false and call {@link #settle} once everyone is out (6.7: "loại hết
+     * trước rồi mới chọn").
      */
     public void remove(GroupMember member, LeftReason reason, NoGroupReason noGroupReason, Instant now, boolean settle) {
         if (!member.isActive()) {
@@ -182,14 +202,14 @@ public class GroupCore {
         }
     }
 
-    /** Gives a group without a Leader the earliest-joined member as Leader (6.5), or dissolves it when empty. */
+    /** Gives a room without a Leader the earliest-joined member as Leader (6.7), or resets it when empty. */
     public void settle(StudentGroup group, Instant now) {
         if (group.isDissolved()) {
             return;
         }
         List<GroupMember> active = members.findActive(group.getId());
         if (active.isEmpty()) {
-            dissolve(group, DissolveReason.EMPTY, null, now);
+            reset(group, now);
             return;
         }
         if (active.stream().anyMatch(GroupMember::isLeader)) {
@@ -200,22 +220,19 @@ public class GroupCore {
         next.setLeader(true);
         members.saveAndFlush(next);
         notifier.publish(DomainEvent.of(DomainEventType.BECAME_LEADER,
-                "Bạn đã tự động trở thành Leader của nhóm " + group.getName() + " (" + group.getCode() + ")",
-                next.getUser().getId()).about(group.getId(), null));
+                "Bạn đã tự động trở thành trưởng nhóm của " + label(group), next.getUser().getId())
+                .about(group.getId(), null));
         notifier.publish(DomainEvent.of(DomainEventType.LEADER_CHANGED,
-                next.getUser().getFullName() + " là Leader mới của nhóm " + group.getName(),
+                next.getUser().getFullName() + " là trưởng nhóm mới của " + label(group),
                 active.stream().map(m -> m.getUser().getId()).filter(id -> !id.equals(next.getUser().getId())).toList())
                 .about(group.getId(), null));
     }
 
     /**
-     * Dissolves the group: every member leaves (becoming "chưa có nhóm"), its open requests, leave requests and
-     * complaints are closed (7.1), and the members are told.
+     * Disbands the room (7.1): every member leaves (becoming "chưa có nhóm"), its open requests, leave requests and
+     * complaints are closed, the members are told, and the room goes back to empty; it is not deleted.
      */
-    public void dissolve(StudentGroup group, DissolveReason reason, UUID actorId, Instant now) {
-        if (group.isDissolved()) {
-            return;
-        }
+    public int disband(StudentGroup group, UUID actorId, String why, Instant now) {
         List<GroupMember> active = members.findActive(group.getId());
         for (GroupMember m : active) {
             m.setLeftAt(now);
@@ -224,26 +241,65 @@ public class GroupCore {
             m.getEnrollment().setNoGroupReason(NoGroupReason.GROUP_DISSOLVED);
         }
         members.saveAllAndFlush(active);
-        requests.cancelPendingOfGroup(group.getId(), JoinRequest.CancelReason.GROUP_DISSOLVED, now);
-        leaveRequests.closeOpenOfGroup(group.getId(), now);
-        transfers.cancelPendingOfGroup(group.getId(), now);
-        group.setFinalized(false);
-        group.setFinalizedAt(null);
-        group.setDissolvedAt(now);
-        group.setDissolvedReason(reason);
-        groups.saveAndFlush(group);
+        reset(group, now);
         if (!active.isEmpty()) {
-            String why = switch (reason) {
-                case TOO_SMALL_AT_DEADLINE -> " vì có dưới " + group.getScope().getSubject().getMinGroupSize()
-                        + " thành viên khi tới deadline";
-                case MODERATOR -> " bởi Moderator";
-                case EMPTY -> "";
-            };
             notifier.publish(DomainEvent.of(DomainEventType.GROUP_DISSOLVED,
-                    "Nhóm " + group.getName() + " (" + group.getCode() + ") đã bị giải tán" + why
+                    label(group) + " đã bị giải tán" + (why == null ? "" : " " + why)
                             + ". Bạn được chuyển vào danh sách chưa có nhóm.",
                     active.stream().map(m -> m.getUser().getId()).toList()).about(group.getId(), null).by(actorId));
         }
+        return active.size();
+    }
+
+    /** An empty room: unlocked, no finalize request, no open request; the code (if any) stays, never reused. */
+    private void reset(StudentGroup group, Instant now) {
+        requests.cancelPendingOfGroup(group.getId(), JoinRequest.CancelReason.GROUP_DISSOLVED, now);
+        leaveRequests.closeOpenOfGroup(group.getId(), now);
+        transfers.cancelPendingOfGroup(group.getId(), now);
+        group.setLocked(false);
+        group.setFinalizeStatus(FinalizeStatus.NONE);
+        group.setFinalizeRequestedAt(null);
+        group.setFinalizeRequestedBy(null);
+        group.setFinalized(false);
+        group.setFinalizedAt(null);
+        groups.saveAndFlush(group);
+    }
+
+    /** An empty room when formation ends is closed: it does not become a group (7.6). */
+    public void close(StudentGroup group, Instant now) {
+        group.setDissolvedAt(now);
+        group.setDissolvedReason(StudentGroup.DissolveReason.CLOSED_EMPTY);
+        groups.saveAndFlush(group);
+    }
+
+    // ------------------------------------------------------------------ becoming a group (7.6)
+
+    /**
+     * The room becomes a group: approved, "Đã chốt", with the next code of its major in the order groups are finalized,
+     * e.g. SP26-SE-001. The scope row is locked while the number is taken, so two approvals never share a number.
+     */
+    public void finalizeRoom(StudentGroup group, UUID actorId, Instant now) {
+        if (group.getCode() == null) {
+            FormationScope scope = locks.write(FormationScope.class, group.getScope().getId());
+            String prefix = scope.semesterCode() + "-" + scope.getMajor().getCode() + "-";
+            String code;
+            do {
+                scope.setGroupSeq(scope.getGroupSeq() + 1);
+                code = prefix + String.format("%03d", scope.getGroupSeq());
+            } while (groups.existsByCode(code));
+            if (code.length() > 40) {
+                throw new ConflictException("Group code too long: " + code);
+            }
+            group.setCode(code);
+        }
+        group.setFinalizeStatus(FinalizeStatus.APPROVED);
+        group.setFinalizeDecidedAt(now);
+        group.setFinalizeDecidedBy(actorId);
+        group.setFinalized(true);
+        group.setFinalizedAt(now);
+        group.setLocked(false);
+        groups.saveAndFlush(group);
+        requests.cancelPendingOfGroup(group.getId(), JoinRequest.Type.APPLY, JoinRequest.CancelReason.ROOM_UNAVAILABLE, now);
     }
 
     // ------------------------------------------------------------------ helpers
@@ -252,17 +308,8 @@ public class GroupCore {
         return members.saveAndFlush(member);
     }
 
-    /** A short, unique group code: <semester>-<subject>-<major>-<n>. */
-    public String nextCode(FormationScope scope) {
-        String prefix = scope.semesterCode() + "-" + scope.getSubject().getCode() + "-" + scope.getMajor().getCode() + "-";
-        long n = groups.countAllInScope(scope.getId()) + 1;
-        String code;
-        do {
-            code = prefix + String.format("%03d", n++);
-        } while (groups.existsByCode(code));
-        if (code.length() > 40) {
-            throw new ConflictException("Group code too long: " + code);
-        }
-        return code;
+    /** "Room 03" or "nhóm SP26-SE-001 (Room 03)" in messages. */
+    public static String label(StudentGroup group) {
+        return group.getCode() == null ? group.getName() : "nhóm " + group.getCode() + " (" + group.getName() + ")";
     }
 }

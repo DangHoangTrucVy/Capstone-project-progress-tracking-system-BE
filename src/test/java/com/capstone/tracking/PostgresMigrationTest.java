@@ -31,9 +31,14 @@ class PostgresMigrationTest {
         List<String> versions = jdbc.queryForList(
                 "select version from flyway_schema_history where success and version is not null order by installed_rank",
                 String.class);
-        assertThat(versions).contains("1", "2", "8", "17", "18", "19", "20", "21", "22", "2000", "2001");
-        assertThat(jdbc.queryForObject("select request_ttl_minutes from subjects where semester_code='FA26'", Integer.class))
-                .isEqualTo(15);
+        assertThat(versions).contains("1", "2", "8", "17", "18", "19", "20", "21", "22", "23", "2003");
+        assertThat(jdbc.queryForObject("select phase from semesters where code='FA26'", String.class)).isEqualTo("FORMING");
+        assertThat(jdbc.queryForObject("select request_ttl_minutes from semesters where code='FA26'", Integer.class))
+                .isEqualTo(2880);
+        assertThat(jdbc.queryForObject("select count(*) from information_schema.tables where table_name = 'subjects'",
+                Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from student_groups g join formation_scopes f on f.id = g.scope_id "
+                + "where f.semester_code = 'FA26'", Integer.class)).isEqualTo(7);
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where not success", Integer.class))
                 .isZero();
     }
@@ -53,7 +58,7 @@ class PostgresMigrationTest {
 
     @Test
     void theDatabaseKeepsOneGroupPerStudentAndOneLeaderPerGroup() {
-        // se180002 is a member of Team Alpha: a second open membership in the same subject is refused.
+        // se180002 is a member of Team Alpha: a second open membership in the same semester is refused.
         assertThatThrownBy(() -> jdbc.update("""
                 insert into group_members (id, group_id, enrollment_id, user_id, is_leader, joined_at, created_at, updated_at)
                 values (gen_random_uuid(), '78000000-0000-0000-0000-000000000002', '77000000-0000-0000-0000-000000000002',
@@ -75,15 +80,18 @@ class PostgresMigrationTest {
     }
 
     @Test
-    void theDatabaseRefusesOtherSubjectsAndASecondCapstoneInASemester() {
-        assertThatThrownBy(() -> jdbc.update("update subjects set code = 'EXE' where semester_code = 'FA26'"))
+    void theDatabaseChecksTheSemesterRulesAndKeepsGroupCodesUnique() {
+        assertThatThrownBy(() -> jdbc.update("update semesters set default_min_room_size = 6 where code = 'FA26'"))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> jdbc.update("update subjects set max_group_size = 6 where semester_code = 'FA26'"))
+        assertThatThrownBy(() -> jdbc.update("update semesters set phase = 'LOCKED' where code = 'FA26'"))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> jdbc.update("""
-                insert into subjects (id, semester_code, code, name, target_term, created_by, created_at, updated_at)
-                select gen_random_uuid(), semester_code, code, name, target_term, created_by, now(), now()
-                from subjects where semester_code = 'FA26'"""))
+        assertThatThrownBy(() -> jdbc.update("update student_groups set finalize_status = 'MAYBE' "
+                + "where id = '78000000-0000-0000-0000-000000000001'"))
                 .isInstanceOf(DataIntegrityViolationException.class);
+        jdbc.update("update student_groups set code = 'FA26-SE-900' where id = '78000000-0000-0000-0000-000000000004'");
+        assertThatThrownBy(() -> jdbc.update("update student_groups set code = 'FA26-SE-900' "
+                + "where id = '78000000-0000-0000-0000-000000000005'"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        jdbc.update("update student_groups set code = null where id = '78000000-0000-0000-0000-000000000004'");
     }
 }

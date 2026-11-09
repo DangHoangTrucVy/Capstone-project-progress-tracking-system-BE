@@ -1,0 +1,69 @@
+@startuml SD04-create-semester-assign-moderator
+!include _vp-style.iuml
+mainframe **sd** SD04 Create a semester and assign its Moderator (Admin)
+
+actor Admin as A
+boundary ":SemesterScreen" as UI
+control ":SemesterController" as SC
+control ":SemesterService" as SS
+control ":PhaseService" as PS
+entity ":SemesterRepository" as SR
+entity ":UserRepository" as UR
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+A -> UI : fillSemester(code, name, startDate, endDate, formationOpensAt, deadline)
+activate UI
+UI -> SC : POST /api/v1/semesters
+activate SC
+SC -> SS : create(request, admin)
+activate SS
+SS -> SS : validate code (SP26 | SU26 | FA26), dates
+SS -> SR : existsById(code)
+activate SR
+SR --> SS : exists
+deactivate SR
+break invalid code or dates / semester exists
+  SS --> UI : 400 BAD_REQUEST | 409 CONFLICT
+end
+opt deadline given
+  SS -> PS : requireNotice(deadline, now)
+  activate PS
+  PS --> SS : ok
+  deactivate PS
+end
+create entity ":Semester" as SEM
+SS -> SEM : <<create>> phase = OPENING, default rules
+SS -> SR : saveAndFlush(semester)
+SS --> SC : semester
+deactivate SS
+SC --> UI : 201 SemesterResponse
+deactivate SC
+
+A -> UI : chooseModerator(lecturerId)
+UI -> SC : PUT /api/v1/semesters/{code}/moderator {lecturerId}
+activate SC
+SC -> SS : assignModerator(code, lecturerId, admin)
+activate SS
+SS -> SR : lock semester FOR UPDATE
+SS -> UR : findById(lecturerId)
+activate UR
+UR --> SS : lecturer
+deactivate UR
+break not an active LECTURER account
+  SS --> UI : 400 BAD_REQUEST
+end
+SS -> SEM : setModeratorId(lecturerId)
+SS -> AU : record(MODERATOR_ASSIGNED)
+opt Moderator changed
+  SS -> N : publish(MODERATOR_ASSIGNED -> lecturer)
+end
+SS --> SC : semester
+deactivate SS
+SC --> UI : 200 SemesterResponse
+deactivate SC
+UI --> A : semester with its Moderator
+deactivate UI
+
+ref over N : SD21 Deliver notifications (web + email)
+@enduml

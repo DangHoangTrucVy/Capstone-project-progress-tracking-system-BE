@@ -1,0 +1,61 @@
+@startuml SD09-start-formation
+!include _vp-style.iuml
+mainframe **sd** SD09 Check the phase and start group formation (Moderator)
+
+actor Moderator as M
+boundary ":SemesterDashboard" as UI
+control ":SemesterController" as SC
+control ":PhaseService" as PS
+entity ":Semester" as SEM
+entity ":EnrollmentRepository" as ER
+entity ":StudentGroupRepository" as GR
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+M -> UI : openSemester(code)
+activate UI
+UI -> SC : GET /api/v1/semesters/{code}/phase-check
+activate SC
+SC -> PS : check(code, moderator)
+activate PS
+PS -> GR : findActiveBySemester(code)
+activate GR
+GR --> PS : rooms
+deactivate GR
+PS -> ER : countBySemester(code), findWithoutGroupInSemester(code)
+activate ER
+ER --> PS : students, studentsWithoutGroup
+deactivate ER
+PS -> PS : build startBlockers, round1Blockers,\nround2Blockers, warnings
+PS --> SC : PhaseCheck
+deactivate PS
+SC --> UI : 200 PhaseCheck
+deactivate SC
+UI --> M : checklist (canStartForming, blockers)
+
+M -> UI : clickStartFormation()
+UI -> SC : POST /api/v1/semesters/{code}/start-formation
+activate SC
+SC -> PS : startForming(code, moderator)
+activate PS
+PS -> SEM : lock FOR UPDATE
+PS -> PS : check(semester, now)
+break phase is not OPENING / no students / no deadline or it has passed /\na major with students has no room
+  PS --> UI : 409 CANNOT_START (list of blockers)
+end
+PS -> SEM : setPhase(FORMING), setFormingStartedAt(now)
+PS -> AU : record(FORMING_STARTED)
+PS -> ER : findBySemester(code)
+activate ER
+ER --> PS : enrollments
+deactivate ER
+PS -> N : publish(FORMING_STARTED -> all students, deadline)
+PS --> SC : semester
+deactivate PS
+SC --> UI : 200 SemesterResponse (phase FORMING)
+deactivate SC
+UI --> M : formation is open until the deadline
+deactivate UI
+
+ref over N : SD21 Deliver notifications (web + email)
+@enduml

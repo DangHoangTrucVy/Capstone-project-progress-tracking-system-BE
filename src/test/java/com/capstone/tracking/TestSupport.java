@@ -12,16 +12,18 @@ import com.capstone.tracking.major.MajorRepository;
 import com.capstone.tracking.notification.email.EmailOutboxDispatcher;
 import com.capstone.tracking.notification.email.EmailSender;
 import com.capstone.tracking.roster.EnrollmentRepository;
+import com.capstone.tracking.roster.RosterSync;
 import com.capstone.tracking.roster.SemesterStudent;
 import com.capstone.tracking.roster.SemesterStudentRepository;
 import com.capstone.tracking.security.JwtTokenProvider;
+import com.capstone.tracking.semester.FormationScope;
+import com.capstone.tracking.semester.FormationScopeRepository;
+import com.capstone.tracking.semester.PhaseService;
 import com.capstone.tracking.semester.Semester;
 import com.capstone.tracking.semester.SemesterRepository;
-import com.capstone.tracking.subject.FormationScope;
-import com.capstone.tracking.subject.FormationScopeRepository;
-import com.capstone.tracking.subject.ScopeService;
 import com.capstone.tracking.team.GroupMemberRepository;
 import com.capstone.tracking.team.JoinRequestRepository;
+import com.capstone.tracking.team.StudentGroup;
 import com.capstone.tracking.team.StudentGroupRepository;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
@@ -47,10 +49,11 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Base of the integration tests: HTTP helpers acting as a given user, and {@link #world} to build a semester with a
- * Moderator, a subject and two majors of students whose scopes are open.
+ * Base of the integration tests: HTTP helpers acting as a given user, and {@link #world} to build a semester in the
+ * FORMING phase with a Moderator, two majors of students and the rooms the Moderator created for them (v3.0).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -71,8 +74,9 @@ public abstract class TestSupport {
     @Autowired protected StudentGroupRepository groupRepository;
     @Autowired protected GroupMemberRepository memberRepository;
     @Autowired protected JoinRequestRepository joinRequestRepository;
-    @Autowired protected ScopeService scopeService;
-    @Autowired protected com.capstone.tracking.subject.SubjectService subjectService;
+    @Autowired protected PhaseService phaseService;
+    @Autowired protected RosterSync rosterSync;
+    @Autowired protected TransactionTemplate tx;
     @Autowired protected EmailOutboxDispatcher emailOutboxDispatcher;
     @MockBean protected EmailSender emailSender;
 
@@ -93,39 +97,59 @@ public abstract class TestSupport {
 
     // ------------------------------------------------------------------ the world
 
-    /** A semester with its Moderator, the subject CAP (term 8) and two majors; both scopes are open. */
-    public record World(Semester semester, User admin, User moderator, Major major, Major otherMajor, UUID subjectId,
-                        FormationScope scope, FormationScope otherScope, List<User> students, List<User> others) {
+    /**
+     * A semester in FORMING (deadline in 7 days) with its Moderator and two majors; the main major has
+     * {@code ceil(students / 3)} rooms (at least 2), the other major at least one.
+     */
+    public record World(Semester semester, User admin, User moderator, Major major, Major otherMajor,
+                        FormationScope scope, FormationScope otherScope, List<User> students, List<User> others,
+                        List<UUID> rooms, List<UUID> otherRooms) {
         public String code() {
             return semester.getCode();
         }
     }
 
     protected World world(int students, int otherMajorStudents) throws Exception {
+        World w = openingWorld(students, otherMajorStudents);
+        postJson("/api/v1/semesters/" + w.code() + "/start-formation", w.moderator(), Map.of())
+                .andExpect(status().isOk());
+        return refresh(w);
+    }
+
+    /** The same world, still in OPENING (rooms created, formation not started). */
+    protected World openingWorld(int students, int otherMajorStudents) throws Exception {
         User admin = user("admin", Role.ADMIN);
         User moderator = user("moderator", Role.LECTURER);
         Semester semester = new Semester(freeSemesterCode(), "Test semester", LocalDate.now().minusDays(30),
                 LocalDate.now().plusDays(60));
         semester.setFormationOpensAt(Instant.now().minus(Duration.ofHours(1)));
-        semester.setDefaultDeadline(Instant.now().plus(Duration.ofDays(7)));
+        semester.setDeadline(Instant.now().plus(Duration.ofDays(7)));
         semester.setModeratorId(moderator.getId());
+        semester.setRequestTtlMinutes(2880);
         semester = semesterRepository.save(semester);
         Major major = major();
         Major otherMajor = major();
         List<User> a = enrol(semester, major, students);
         List<User> b = enrol(semester, otherMajor, otherMajorStudents);
-        UUID subjectId = subjectService.create(semester.getCode(),
-                new com.capstone.tracking.subject.SubjectService.SubjectRequest("CAP", "Capstone Project", 8, null),
-                moderator).getId();
-        FormationScope scope = scopeRepository.findBySubjectIdAndMajorId(subjectId, major.getId()).orElseThrow();
-        FormationScope other = scopeRepository.findBySubjectIdAndMajorId(subjectId, otherMajor.getId()).orElse(null);
-        scopeService.tick(scope.getId());
-        if (other != null) {
-            scopeService.tick(other.getId());
-        }
-        return new World(semester, admin, moderator, major, otherMajor, subjectId,
-                scopeRepository.findById(scope.getId()).orElseThrow(),
-                other == null ? null : scopeRepository.findById(other.getId()).orElseThrow(), a, b);
+        FormationScope scope = scopeRepository.findBySemesterCodeAndMajorId(semester.getCode(), major.getId()).orElse(null);
+        FormationScope other = scopeRepository.findBySemesterCodeAndMajorId(semester.getCode(), otherMajor.getId()).orElse(null);
+        List<UUID> rooms = students == 0 ? List.of() : createRooms(semester.getCode(), moderator, major, Math.max(2, (students + 2) / 3));
+        List<UUID> otherRooms = otherMajorStudents == 0 ? List.of()
+                : createRooms(semester.getCode(), moderator, otherMajor, Math.max(1, (otherMajorStudents + 2) / 3));
+        return new World(semester, admin, moderator, major, otherMajor, scope, other, a, b, rooms, otherRooms);
+    }
+
+    protected World refresh(World w) {
+        return new World(semesterRepository.findById(w.code()).orElseThrow(), w.admin(), w.moderator(), w.major(),
+                w.otherMajor(), w.scope(), w.otherScope(), w.students(), w.others(), w.rooms(), w.otherRooms());
+    }
+
+    protected List<UUID> createRooms(String semester, User moderator, Major major, int count) throws Exception {
+        JsonNode created = body(postJson("/api/v1/semesters/" + semester + "/rooms", moderator,
+                Map.of("majorId", major.getId(), "count", count)).andExpect(status().isCreated()));
+        List<UUID> ids = new ArrayList<>();
+        created.forEach(r -> ids.add(UUID.fromString(r.get("id").asText())));
+        return ids;
     }
 
     protected Major major() {
@@ -137,20 +161,20 @@ public abstract class TestSupport {
         List<User> list = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             User s = student("st" + COUNTER.incrementAndGet());
-            semesterStudentRepository.save(SemesterStudent.builder().semesterCode(semester.getCode()).user(s)
-                    .major(major).currentTerm(8).build());
+            tx.executeWithoutResult(t -> rosterSync.syncStudent(semesterStudentRepository.save(SemesterStudent.builder()
+                    .semesterCode(semester.getCode()).user(s).major(major).currentTerm(8).build())));
             list.add(s);
         }
         return list;
     }
 
-    /** Moves the scope past its deadline and runs the automatic transition (3.4). */
-    protected FormationScope passDeadline(FormationScope scope) {
-        FormationScope s = scopeRepository.findById(scope.getId()).orElseThrow();
-        s.setDeadlineOverride(Instant.now().minusSeconds(1));
-        scopeRepository.save(s);
-        scopeService.tick(scope.getId());
-        return scopeRepository.findById(scope.getId()).orElseThrow();
+    /** The deadline passes and the scheduler locks the rooms (7.1). */
+    protected Semester passDeadline(World w) {
+        Semester s = semesterRepository.findById(w.code()).orElseThrow();
+        s.setDeadline(Instant.now().minusSeconds(1));
+        semesterRepository.save(s);
+        phaseService.tick(w.code());
+        return semesterRepository.findById(w.code()).orElseThrow();
     }
 
     protected synchronized String freeSemesterCode() {
@@ -165,19 +189,45 @@ public abstract class TestSupport {
         throw new IllegalStateException("No free semester code left");
     }
 
-    // ------------------------------------------------------------------ groups
+    // ------------------------------------------------------------------ rooms
 
-    /** The student creates a group in the world's subject; returns its id. */
-    protected UUID createGroup(World w, User leader, String name) throws Exception {
-        return id(postJson("/api/v1/subjects/" + w.subjectId() + "/groups", leader, Map.of("name", name))
-                .andExpect(status().isCreated()));
+    /** The student walks into the room (an empty room makes them its Leader). */
+    protected JsonNode joinRoom(UUID roomId, User student) throws Exception {
+        return body(postJson("/api/v1/rooms/" + roomId + "/join", student, Map.of()).andExpect(status().isOk()));
     }
 
-    /** Applies and has the Leader accept: the student joins. */
-    protected void join(UUID groupId, User leader, User student) throws Exception {
-        UUID request = id(postJson("/api/v1/groups/" + groupId + "/applications", student, Map.of())
-                .andExpect(status().isCreated()));
-        postJson("/api/v1/requests/" + request + "/accept", leader, Map.of()).andExpect(status().isOk());
+    /** The Leader takes the next empty room of the world's major and renames it; returns the room id. */
+    protected UUID createGroup(World w, User leader, String name) throws Exception {
+        for (UUID room : w.rooms()) {
+            if (memberRepository.countActive(room) == 0) {
+                JsonNode joined = joinRoom(room, leader);
+                if (!joined.get("leader").asBoolean()) {
+                    throw new IllegalStateException("Expected to be the Leader of an empty room");
+                }
+                putJson("/api/v1/rooms/" + room, leader, Map.of("name", name)).andExpect(status().isOk());
+                return room;
+            }
+        }
+        throw new IllegalStateException("No empty room left in the world");
+    }
+
+    /** Adds the student to the Leader's room: walks in when it is open, else asks and has the Leader accept. */
+    protected void join(UUID roomId, User leader, User student) throws Exception {
+        JsonNode outcome = joinRoom(roomId, student);
+        if (!outcome.get("joined").asBoolean()) {
+            UUID request = UUID.fromString(outcome.get("request").get("id").asText());
+            postJson("/api/v1/requests/" + request + "/accept", leader, Map.of()).andExpect(status().isOk());
+        }
+    }
+
+    /** The Leader locks the room and the student asks to join; returns the request id. */
+    protected UUID requestToJoin(UUID roomId, User leader, User student) throws Exception {
+        StudentGroup room = groupRepository.findById(roomId).orElseThrow();
+        if (!room.isLocked()) {
+            postJson("/api/v1/rooms/" + roomId + "/lock", leader, Map.of()).andExpect(status().isOk());
+        }
+        JsonNode outcome = joinRoom(roomId, student);
+        return UUID.fromString(outcome.get("request").get("id").asText());
     }
 
     // ------------------------------------------------------------------ HTTP

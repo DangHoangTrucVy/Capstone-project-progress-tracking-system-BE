@@ -1,0 +1,65 @@
+@startuml SD08-create-rooms
+!include _vp-style.iuml
+mainframe **sd** SD08 Create rooms for each major (Moderator)
+
+actor Moderator as M
+boundary ":RoomManagementScreen" as UI
+control ":RoomController" as RC
+control ":GroupService" as GS
+participant ":Access" as AC
+participant ":SemesterGuard" as SG
+entity ":FormationScope" as FS
+entity ":StudentGroupRepository" as GR
+participant ":AuditService" as AU
+
+M -> UI : openRoomPlan(semester)
+activate UI
+UI -> RC : GET /api/v1/semesters/{code}/rooms/plan
+activate RC
+RC -> GS : plan(code, moderator)
+activate GS
+loop each major of the semester
+  GS -> GS : students = eligible + undecided\nsuggested = ceil(students / defaultMinRoomSize)
+end
+GS --> RC : RoomPlan[] (students, rooms, suggestedRooms, missingRooms)
+deactivate GS
+RC --> UI : 200 RoomPlan[]
+deactivate RC
+UI --> M : plan per major
+
+M -> UI : createRooms(majorId, count, minSize)
+UI -> RC : POST /api/v1/semesters/{code}/rooms {majorId, count, minSize}
+activate RC
+RC -> GS : createRooms(code, request, moderator)
+activate GS
+GS -> AC : requireModerator(code, user)
+activate AC
+AC --> GS : ok
+deactivate AC
+GS -> SG : requireBeforeRound1(semester)
+activate SG
+SG --> GS : ok
+deactivate SG
+break minSize outside 1..maxGroupSize / count outside 1..200
+  GS --> UI : 400 BAD_REQUEST
+end
+GS -> FS : lock FOR UPDATE (semester + major)
+loop i = 1 .. count (missingRooms when no count is given)
+  GS -> FS : roomSeq = roomSeq + 1
+  create entity ":StudentGroup" as ROOM
+  GS -> ROOM : <<create>> name = "Room nn", roomNo, minSize
+  GS -> GR : save(room)
+end
+GS -> AU : record(ROOMS_CREATED, major, count, minSize)
+GS --> RC : rooms
+deactivate GS
+RC --> UI : 201 RoomResponse[] (status EMPTY)
+deactivate RC
+UI --> M : new empty rooms
+deactivate UI
+note over ROOM
+  A room has no group code yet. The code
+  <semester>-<major>-<nnn> is issued only
+  when the Moderator approves it (SD15).
+end note
+@enduml

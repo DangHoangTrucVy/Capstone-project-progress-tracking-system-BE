@@ -1,0 +1,117 @@
+@startuml SD11-invite-and-answer-requests
+!include _vp-style.iuml
+mainframe **sd** SD11 Invite a student and answer join requests / invites (Leader, Student)
+
+actor Leader as L
+actor Student as S
+boundary ":RoomScreen" as UI
+control ":RoomController" as RMC
+control ":RequestController" as RC
+control ":JoinRequestService" as JS
+participant ":StudentGate" as SG
+participant ":GroupCore" as CORE
+entity ":JoinRequest" as JR
+participant ":Notifier" as N
+
+group Leader invites a student
+  L -> UI : searchCandidates(skill, keyword)
+  activate UI
+  UI -> RMC : GET /api/v1/semesters/{code}/candidates?skill=&q=
+  activate RMC
+  RMC --> UI : students of my major without a room
+  deactivate RMC
+  L -> UI : clickInvite(student, message)
+  UI -> RC : POST /api/v1/rooms/{roomId}/invitations {studentUserId | studentCode}
+  activate RC
+  RC -> JS : invite(roomId, studentId, code, message, leader)
+  activate JS
+  JS -> JS : lock semester FOR SHARE, student's enrollment, room
+  JS -> CORE : requireLeader(room, leader)
+  break not the Leader / deadline passed (outside SUPPLEMENT) / other major /\nnot eligible / student already in a room / room full / already invited
+    JS --> UI : 403 | 409
+  end
+  JS -> JR : <<create>> INVITE, expiresAt = now + TTL\n(null in the SUPPLEMENT phase)
+  JS -> N : publish(INVITE_RECEIVED -> student)
+  JS --> RC : request
+  deactivate JS
+  RC --> UI : 201 JoinRequestResponse
+  deactivate RC
+  deactivate UI
+end
+
+group Answer a request
+  alt Leader accepts an APPLY, or the student accepts an INVITE
+    L -> UI : accept(request)
+    activate UI
+    UI -> RC : POST /api/v1/requests/{requestId}/accept
+    activate RC
+    RC -> JS : accept(requestId, user)
+    activate JS
+    JS -> JS : lock semester, enrollment, request, room
+    break not addressed to this user / not PENDING / expired /\ndeadline passed (not a SUPPLEMENT invite) / room finalized / room full
+      JS --> UI : 403 | 409 REQUEST_CLOSED | NOT_BEFORE_DEADLINE | GROUP_FULL
+    end
+    JS -> SG : requireCanAct(enrollment)
+    JS -> CORE : enroll(room, enrollment)
+    activate CORE
+    CORE --> JS : member
+    deactivate CORE
+    JS -> JR : setStatus(ACCEPTED), setRespondedAt(now)
+    alt APPLY
+      JS -> N : publish(APPLICATION_ACCEPTED -> student)
+    else INVITE
+      JS -> N : publish(INVITE_ACCEPTED -> Leader)
+      opt SUPPLEMENT phase
+        JS -> N : publish(SUPPLEMENT_JOINED -> Moderator)
+      end
+    end
+    JS -> N : publish(MEMBER_JOINED -> members)
+    JS --> RC : member
+    deactivate JS
+    RC --> UI : 200 JoinRequestResponse (ACCEPTED)
+    deactivate RC
+    deactivate UI
+  else reject (Leader or invited student)
+    S -> UI : reject(request, reason)
+    activate UI
+    UI -> RC : POST /api/v1/requests/{requestId}/reject {reason}
+    activate RC
+    RC -> JS : reject(requestId, reason, user)
+    activate JS
+    JS -> JR : setStatus(REJECTED)
+    JS -> N : publish(APPLICATION_REJECTED | INVITE_DECLINED)
+    JS --> RC : request
+    deactivate JS
+    RC --> UI : 200 JoinRequestResponse (REJECTED)
+    deactivate RC
+    deactivate UI
+  else withdraw (the sender)
+    S -> UI : withdraw(request)
+    activate UI
+    UI -> RC : POST /api/v1/requests/{requestId}/withdraw
+    activate RC
+    RC -> JS : withdraw(requestId, user)
+    activate JS
+    JS -> JR : setStatus(WITHDRAWN)
+    JS --> RC : request
+    deactivate JS
+    RC --> UI : 200 JoinRequestResponse (WITHDRAWN)
+    deactivate RC
+    deactivate UI
+  end
+end
+
+opt members like an applicant to help the Leader decide
+  L -> UI : like(request)
+  activate UI
+  UI -> RC : PUT /api/v1/requests/{requestId}/like
+  activate RC
+  RC -> JS : like(requestId, true, member)
+  activate JS
+  JS --> RC : likes
+  deactivate JS
+  RC --> UI : 200 {likes}
+  deactivate RC
+  deactivate UI
+end
+@enduml

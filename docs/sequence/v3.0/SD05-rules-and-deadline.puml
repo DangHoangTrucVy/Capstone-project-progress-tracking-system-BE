@@ -1,0 +1,95 @@
+@startuml SD05-rules-and-deadline
+!include _vp-style.iuml
+mainframe **sd** SD05 Configure the semester rules and the common deadline (Moderator)
+
+actor Moderator as M
+boundary ":SemesterSettingsScreen" as UI
+control ":SemesterController" as SC
+control ":SemesterService" as SS
+control ":PhaseService" as PS
+entity ":Semester" as SEM
+entity ":StudentGroupRepository" as GR
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+group Change the rules
+  M -> UI : openRules(semester)
+  activate UI
+  UI -> SC : GET /api/v1/semesters/{code}/rules
+  activate SC
+  SC --> UI : Rules(maxGroupSize, defaultMinRoomSize,\nmaxPendingRequests, requestTtlMinutes)
+  deactivate SC
+  M -> UI : editRules(values, applyMinToRooms)
+  UI -> SC : PUT /api/v1/semesters/{code}/rules
+  activate SC
+  SC -> SS : updateRules(code, request, moderator)
+  activate SS
+  SS -> SEM : lock FOR UPDATE
+  break phase = CLOSED
+    SS --> UI : 409 SEMESTER_CLOSED
+  end
+  SS -> GR : findActiveBySemester(code)
+  activate GR
+  GR --> SS : rooms
+  deactivate GR
+  opt maxGroupSize changed
+    break formation started and the maximum decreases
+      SS --> UI : 409 MAX_ONLY_INCREASES
+    end
+    SS -> SEM : setMaxGroupSize(max)
+  end
+  opt defaultMinRoomSize changed
+    break round 1 already finalized
+      SS --> UI : 409 AFTER_ROUND1
+    end
+    SS -> SEM : setDefaultMinRoomSize(min)
+    opt applyMinToRooms
+      SS -> GR : setMinSize(min) on every room not finalized
+    end
+  end
+  SS -> SEM : setMaxPendingRequests(n), setRequestTtlMinutes(t)
+  SS -> AU : record(RULES_CHANGED, changes)
+  SS --> SC : semester
+  deactivate SS
+  SC --> UI : 200 Rules
+  deactivate SC
+  deactivate UI
+end
+
+group Set or extend the deadline
+  M -> UI : pickDeadline(dateTime)
+  activate UI
+  UI -> SC : PUT /api/v1/semesters/{code}/deadline {deadline}
+  activate SC
+  SC -> PS : setDeadline(code, deadline, moderator)
+  activate PS
+  PS -> SEM : lock FOR UPDATE
+  break phase is SUPPLEMENT or CLOSED
+    PS --> UI : 409 AFTER_ROUND1
+  end
+  PS -> PS : requireNotice(deadline, now)
+  break deadline too close / before the opening date
+    PS --> UI : 400 BAD_REQUEST
+  end
+  PS -> SEM : setDeadline(deadline), setRoomsLockedAt(null)
+  alt rooms were already locked by the old deadline
+    PS -> AU : record(DEADLINE_EXTENDED)
+    PS -> N : publish(SCOPE_EXTENDED -> all students)
+  else first deadline or a change before it
+    PS -> AU : record(DEADLINE_CHANGED)
+    opt phase = FORMING or a deadline existed
+      PS -> N : publish(DEADLINE_CHANGED -> all students)
+    end
+  end
+  PS --> SC : semester
+  deactivate PS
+  SC --> UI : 200 SemesterResponse
+  deactivate SC
+  UI --> M : new deadline shown
+  deactivate UI
+end
+note right of PS
+  Extending after the deadline re-opens
+  every Room until the new deadline.
+end note
+@enduml

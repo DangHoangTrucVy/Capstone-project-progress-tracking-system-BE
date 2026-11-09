@@ -1,0 +1,65 @@
+@startuml SD18-finalize-round1-supplement
+!include _vp-style.iuml
+mainframe **sd** SD18 Finalize round 1 and open the supplement phase (Moderator)
+
+actor Moderator as M
+boundary ":SemesterDashboard" as UI
+control ":SemesterController" as SC
+control ":PhaseService" as PS
+entity ":Semester" as SEM
+entity ":EnrollmentRepository" as ER
+participant ":GroupCore" as CORE
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+M -> UI : clickFinalizeRound1(skipSupplement)
+activate UI
+UI -> SC : POST /api/v1/semesters/{code}/finalize-round1 {skipSupplement}
+activate SC
+SC -> PS : finalizeRound1(code, skipSupplement, moderator)
+activate PS
+PS -> SEM : lock FOR UPDATE
+opt deadline passed but the scheduler has not locked the rooms yet
+  PS -> PS : lockRooms(semester, now)
+  ref over PS : SD16 Lock the rooms at the deadline
+end
+PS -> PS : check(semester, now)
+break not FORMING / deadline not passed / rooms below minimum /\nopen complaints / finalize requests waiting
+  PS --> UI : 409 CANNOT_FINALIZE (list of blockers)
+end
+break skipSupplement and students without a group remain
+  PS --> UI : 409 STUDENTS_LEFT
+end
+PS -> SEM : setRound1FinalizedAt(now), setRound1FinalizedBy(moderator)
+PS -> AU : record(ROUND1_FINALIZED)
+alt skipSupplement (nobody is left without a group)
+  ref over PS, N : SD19 close(): formation ends
+else open the supplement phase
+  PS -> SEM : setPhase(SUPPLEMENT)
+  PS -> N : publish(SUPPLEMENT_OPENED -> all students)
+  PS -> ER : findWithoutGroupInSemester(code)
+  activate ER
+  ER --> PS : students without a group
+  deactivate ER
+  loop each major with students left
+    PS -> CORE : leaderOf(room) for rooms with 0 < size < maxGroupSize
+    activate CORE
+    CORE --> PS : Leaders
+    deactivate CORE
+    PS -> N : publish(STUDENTS_NEED_GROUP -> those Leaders, names)
+    PS -> N : publish(STUDENTS_NEED_GROUP -> students left)
+  end
+end
+PS --> SC : semester
+deactivate PS
+SC --> UI : 200 SemesterResponse (SUPPLEMENT | CLOSED)
+deactivate SC
+UI --> M : round 1 finalized
+deactivate UI
+
+note over UI, N
+  In the SUPPLEMENT phase only Leaders of rooms below the maximum invite (SD11);
+  supplement invites never expire, and every accepted invite notifies the Moderator.
+  The Moderator can still add or move students (SD17).
+end note
+@enduml

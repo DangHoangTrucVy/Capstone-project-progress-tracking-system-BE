@@ -1,0 +1,74 @@
+@startuml SD02-login-google
+!include _vp-style.iuml
+mainframe **sd** SD02 Login with Google (Student)
+
+actor Student as S
+boundary ":LoginScreen" as UI
+participant "Google Identity\nServices" as G
+control ":AuthController" as AC
+control ":AuthService" as AS
+participant ":GoogleTokenVerifier" as GV
+entity ":UserRepository" as UR
+entity ":SemesterStudentRepository" as SSR
+participant ":JwtTokenProvider" as JWT
+
+S -> UI : openLoginPage()
+activate UI
+UI -> AC : GET /api/v1/auth/google/config
+activate AC
+AC --> UI : clientId
+deactivate AC
+S -> UI : clickSignInWithGoogle()
+UI -> G : requestIdToken(clientId)
+activate G
+G --> UI : idToken
+deactivate G
+UI -> AC : POST /api/v1/auth/google {idToken}
+activate AC
+AC -> AS : googleLogin(request)
+activate AS
+AS -> GV : verify(idToken)
+activate GV
+GV --> AS : GoogleIdentity(email, name, pictureUrl)
+deactivate GV
+AS -> UR : findByEmailIgnoreCase(email)
+activate UR
+UR --> AS : user
+deactivate UR
+break no account
+  AS --> UI : 403 NOT_ON_LIST
+end
+break role is ADMIN or LECTURER
+  AS --> UI : 403 PASSWORD_LOGIN_REQUIRED
+end
+break email ends with @fpt.edu.vn
+  AS --> UI : 403 STUDENT_GOOGLE_EMAIL_REQUIRED
+end
+break account suspended / inactive
+  AS --> UI : 403 ACCOUNT_LOCKED
+end
+AS -> SSR : existsByUserId(userId)
+activate SSR
+SSR --> AS : onSomeList
+deactivate SSR
+break not on any semester list
+  AS --> UI : 403 NOT_ON_LIST
+end
+opt user has no avatar
+  AS -> AS : setAvatarUrl(pictureUrl)
+end
+AS -> JWT : generateAccessToken(id, email, STUDENT)
+activate JWT
+JWT --> AS : accessToken
+deactivate JWT
+AS --> AC : LoginResponse
+deactivate AS
+AC --> UI : 200 LoginResponse
+deactivate AC
+UI -> AC : GET /api/v1/me/semesters
+activate AC
+AC --> UI : my semesters, room and phase
+deactivate AC
+UI --> S : student home
+deactivate UI
+@enduml

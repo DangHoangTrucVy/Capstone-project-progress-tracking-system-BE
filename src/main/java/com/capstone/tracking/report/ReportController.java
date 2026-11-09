@@ -43,12 +43,11 @@ public class ReportController {
     private final AuditService audit;
     private final Access access;
 
-    @Operation(summary = "Prepare Excel export: notify the assigned Moderator about groups below 3; export stays allowed")
+    @Operation(summary = "Prepare Excel export: notify the Moderator about rooms/groups below their minimum; export stays allowed")
     @GetMapping("/export-check")
     public ExcelExportService.ExportCheck exportCheck(@PathVariable String semester,
-            @RequestParam(required = false) UUID subjectId, @RequestParam(required = false) UUID majorId,
-            @AuthenticationPrincipal User currentUser) {
-        return export.check(semester, subjectId, majorId, currentUser);
+            @RequestParam(required = false) UUID majorId, @AuthenticationPrincipal User currentUser) {
+        return export.check(semester, majorId, currentUser);
     }
 
     public record AuditEntry(UUID id, String entityName, UUID entityId, String action, UUID performedBy,
@@ -61,16 +60,15 @@ public class ReportController {
         }
     }
 
-    @Operation(summary = "Statistics of the semester, a subject or one major (Admin, Moderator)")
+    @Operation(summary = "Statistics of the semester or one major (Admin, Moderator)")
     @GetMapping("/statistics")
     public StatisticsService.Statistics statistics(@PathVariable String semester,
-                                                   @RequestParam(required = false) UUID subjectId,
                                                    @RequestParam(required = false) UUID majorId,
                                                    @AuthenticationPrincipal User currentUser) {
-        return statistics.compute(semester, subjectId, majorId, currentUser);
+        return statistics.compute(semester, majorId, currentUser);
     }
 
-    @Operation(summary = "Export the handover list (Excel: Danh sách nhóm, Chưa có nhóm) by major, subject or semester",
+    @Operation(summary = "Export the handover list (Excel: Danh sách nhóm, Chưa có nhóm) for the semester or one major, at any time",
             description = "Returns the .xlsx file itself, not JSON; errors are JSON.")
     @ApiResponse(responseCode = "200", description = "The Excel file",
             headers = @Header(name = "Content-Disposition",
@@ -79,10 +77,9 @@ public class ReportController {
                     schema = @Schema(type = "string", format = "binary")))
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(@PathVariable String semester,
-                                         @RequestParam(required = false) UUID subjectId,
                                          @RequestParam(required = false) UUID majorId,
                                          @AuthenticationPrincipal User currentUser) {
-        ExcelExportService.ExcelFile file = export.export(semester, subjectId, majorId, currentUser);
+        ExcelExportService.ExcelFile file = export.export(semester, majorId, currentUser);
         return ResponseEntity.ok()
                 .contentType(XLSX)
                 .header(HttpHeaders.CONTENT_DISPOSITION,

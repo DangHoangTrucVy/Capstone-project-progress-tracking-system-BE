@@ -1,0 +1,89 @@
+@startuml SD14-leader-transfer
+!include _vp-style.iuml
+mainframe **sd** SD14 Transfer the Leader role (Leader, Member)
+
+actor Leader as L
+actor "New Leader\n(member)" as T
+boundary ":RoomScreen" as UI
+control ":RequestController" as RC
+control ":LeaderTransferService" as TS
+participant ":GroupCore" as CORE
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+L -> UI : transferLeader(member, leaveAfter)
+activate UI
+UI -> RC : POST /api/v1/rooms/{roomId}/leader-transfers {toUserId, leaveAfter}
+activate RC
+RC -> TS : propose(roomId, toUserId, leaveAfter, leader)
+activate TS
+TS -> CORE : lock(roomId), requireLeader(room, leader)
+break phase OPENING / semester CLOSED / not a member /\nleaveAfter after the deadline or in a finalized room / a transfer is pending
+  TS --> UI : 409 NOT_STARTED | SEMESTER_CLOSED | NOT_BEFORE_DEADLINE |\nROOM_FINALIZED | TRANSFER_PENDING | 400
+end
+create entity ":LeaderTransfer" as LT2
+TS -> LT2 : <<create>> PENDING (from, to, leaveAfter, afterFinalize)
+TS -> N : publish(LEADER_TRANSFER_REQUESTED -> new Leader)
+TS --> RC : transfer
+deactivate TS
+RC --> UI : 201 TransferResponse
+deactivate RC
+deactivate UI
+
+alt the member accepts
+  T -> UI : accept(transfer)
+  activate UI
+  UI -> RC : POST /api/v1/leader-transfers/{id}/accept
+  activate RC
+  RC -> TS : answer(id, accept = true, member)
+  activate TS
+  TS -> TS : lock semester, Leader's enrollment, transfer, room
+  break transfer not PENDING / room changed
+    TS --> UI : 409 REQUEST_CLOSED | TRANSFER_STALE
+  end
+  TS -> CORE : saveMember(old Leader: leader = false)
+  TS -> CORE : saveMember(new Leader: leader = true)
+  TS -> LT2 : setStatus(ACCEPTED)
+  opt leaveAfter
+    TS -> CORE : remove(old Leader, LEFT)
+    TS -> N : publish(LEADER_TRANSFER_ANSWERED -> old Leader)
+  end
+  opt room finalized or round 1 already finalized
+    TS -> AU : record(LEADER_TRANSFERRED_AFTER_FINALIZE)
+    TS -> N : publish(LEADER_CHANGED_AFTER_FINALIZE -> Moderator)
+  end
+  TS -> N : publish(LEADER_CHANGED -> members)
+  TS --> RC : transfer
+  deactivate TS
+  RC --> UI : 200 TransferResponse (ACCEPTED)
+  deactivate RC
+  deactivate UI
+else the member declines
+  T -> UI : decline(transfer)
+  activate UI
+  UI -> RC : POST /api/v1/leader-transfers/{id}/decline
+  activate RC
+  RC -> TS : answer(id, accept = false, member)
+  activate TS
+  TS -> LT2 : setStatus(DECLINED)
+  TS -> N : publish(LEADER_TRANSFER_ANSWERED -> Leader)
+  TS --> RC : transfer
+  deactivate TS
+  RC --> UI : 200 TransferResponse (DECLINED)
+  deactivate RC
+  deactivate UI
+else the Leader cancels
+  L -> UI : cancel(transfer)
+  activate UI
+  UI -> RC : POST /api/v1/leader-transfers/{id}/cancel
+  activate RC
+  RC -> TS : cancel(id, leader)
+  activate TS
+  TS -> LT2 : setStatus(CANCELLED)
+  TS --> RC : transfer
+  deactivate TS
+  RC --> UI : 200 TransferResponse (CANCELLED)
+  deactivate RC
+  deactivate UI
+end
+@enduml

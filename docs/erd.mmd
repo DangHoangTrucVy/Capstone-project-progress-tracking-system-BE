@@ -1,5 +1,6 @@
-%% ERD - Website ghép nhóm (Team Formation Website), revised requirement supplied 21/10/2026
-%% Active domain from migrations V1-V20 (PostgreSQL); inactive compatibility columns and deferred audit omitted.
+%% ERD - Website ghép nhóm (Team Formation Website), requirement v3.0 (08/11/2026)
+%% Active domain from migrations V1-V23 (PostgreSQL); inactive compatibility columns and deferred audit omitted.
+%% The semester is the central entity (phase, deadline, rules). A room and a group are the same STUDENT_GROUPS row.
 %% Every table except semesters and the
 %% infrastructure tables also has created_at / updated_at, left out for readability. Actor columns (*_by) reference
 %% USERS; only business relationships are drawn as lines, the others are marked "FK users".
@@ -9,12 +10,11 @@ erDiagram
     SEMESTERS ||--o{ SEMESTER_STUDENTS : "student list"
     USERS ||--o{ SEMESTER_STUDENTS : "user_id"
     MAJORS ||--o{ SEMESTER_STUDENTS : "major_id"
-    SEMESTERS ||--o| SUBJECTS : "one Capstone per semester"
-    SUBJECTS ||--o{ FORMATION_SCOPES : "one per major"
+    SEMESTERS ||--o{ FORMATION_SCOPES : "one per major"
     MAJORS ||--o{ FORMATION_SCOPES : "major_id"
     FORMATION_SCOPES ||--o{ ENROLLMENTS : "scope_id"
     SEMESTER_STUDENTS ||--o| ENROLLMENTS : "Capstone enrollment"
-    FORMATION_SCOPES ||--o{ STUDENT_GROUPS : "scope_id"
+    FORMATION_SCOPES ||--o{ STUDENT_GROUPS : "rooms of the major"
     STUDENT_GROUPS ||--o{ GROUP_MEMBERS : "group_id"
     ENROLLMENTS ||--o{ GROUP_MEMBERS : "at most 1 open"
     STUDENT_GROUPS ||--o{ JOIN_REQUESTS : "group_id"
@@ -47,9 +47,21 @@ erDiagram
         varchar name
         date start_date
         date end_date
-        timestamp formation_opens_at "common opening date"
-        timestamp default_deadline "common deadline"
+        timestamp formation_opens_at "opening date (display)"
+        timestamp deadline "one common deadline"
         uuid moderator_id FK
+        varchar phase "OPENING|FORMING|SUPPLEMENT|CLOSED"
+        int max_group_size "rule, default 5"
+        int default_min_room_size "rule, default 3"
+        int max_pending_requests "rule, default 3"
+        int request_ttl_minutes "rule, default 2880"
+        timestamp forming_started_at
+        timestamp rooms_locked_at "locked by the deadline"
+        timestamp round1_finalized_at
+        uuid round1_finalized_by "FK users"
+        timestamp round2_finalized_at
+        uuid round2_finalized_by "FK users"
+        timestamp closed_at
     }
     MAJORS {
         uuid id PK
@@ -63,40 +75,17 @@ erDiagram
         uuid major_id FK
         int current_term "ky hoc hien tai"
     }
-    SUBJECTS {
-        uuid id PK
-        varchar semester_code FK,UK "one per semester"
-        varchar code "CAP only"
-        varchar name "Capstone Project only"
-        int target_term
-        int min_group_size "3"
-        int max_group_size "5"
-        int request_ttl_hours "48"
-        uuid created_by "FK users"
-    }
     FORMATION_SCOPES {
         uuid id PK
-        uuid subject_id FK "UK(subject_id, major_id)"
+        varchar semester_code FK "UK(semester_code, major_id)"
         uuid major_id FK
-        varchar phase "PREPARING|OPEN|LOCKED|FINALIZED"
-        timestamp deadline_override "null = common deadline"
-        timestamp opened_at
-        timestamp locked_at
-        timestamp finalized_at
-        uuid finalized_by "FK users"
-        timestamp previous_finalized_at
-        timestamp reopened_at
-        uuid reopened_by "FK users"
-        varchar reopen_reason
-        varchar last_change_after_finalize
-        timestamp last_change_after_finalize_at
-        timestamp open_blocked_notified_at
+        int room_seq "last Room number"
+        int group_seq "last group number, never reused"
     }
     ENROLLMENTS {
         uuid id PK
-        uuid subject_id FK "UK(subject_id, user_id)"
         uuid scope_id FK
-        uuid semester_student_id FK
+        uuid semester_student_id FK "UK"
         uuid user_id FK
         varchar eligibility "UNDECIDED|ELIGIBLE|INELIGIBLE"
         varchar eligibility_reason
@@ -107,15 +96,23 @@ erDiagram
     STUDENT_GROUPS {
         uuid id PK
         uuid scope_id FK
-        varchar code UK "FA26-CAP-SE-001"
+        varchar code UK "null while a room; SP26-SE-001 once a group"
+        int room_no "Room 01, Room 02..."
         varchar name
         varchar wanted_skills
+        int min_size "per room, set by the Moderator"
         boolean locked "Leader lock"
-        boolean finalized "group finalization, independent of size and lock"
+        varchar finalize_status "NONE|REQUESTED|APPROVED|RETURNED"
+        timestamp finalize_requested_at
+        uuid finalize_requested_by "FK users"
+        timestamp finalize_decided_at
+        uuid finalize_decided_by "FK users"
+        varchar finalize_note
+        boolean finalized "Đã chốt: the room became a group"
         timestamp finalized_at
-        uuid created_by "FK users"
-        timestamp dissolved_at
-        varchar dissolved_reason "TOO_SMALL_AT_DEADLINE|EMPTY|MODERATOR"
+        uuid created_by "FK users (Moderator)"
+        timestamp dissolved_at "closed empty room"
+        varchar dissolved_reason "CLOSED_EMPTY (old: TOO_SMALL_AT_DEADLINE|EMPTY|MODERATOR)"
     }
     GROUP_MEMBERS {
         uuid id PK
@@ -138,7 +135,7 @@ erDiagram
         varchar reject_reason
         varchar cancel_reason
         uuid created_by "FK users"
-        timestamp expires_at
+        timestamp expires_at "null: supplement invite, never expires"
         timestamp responded_at
     }
     APPLICATION_LIKES {

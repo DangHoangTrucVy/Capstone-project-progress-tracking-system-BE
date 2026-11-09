@@ -45,7 +45,18 @@ public enum DomainEventType {
     EXPORT_SMALL_GROUPS(true),
     FINALIZED_SCOPE_IMPORT_BLOCKED(true),
     LEADER_CHANGED_AFTER_FINALIZE(true),
-    MODERATOR_ASSIGNED(true);
+    MODERATOR_ASSIGNED(true),
+    // ---- v3.0: rooms, finalize requests and semester phases (6.4, 7, 8.3)
+    ROOM_FINALIZE_REQUESTED(true),
+    ROOM_FINALIZE_DECIDED(true),
+    ROOM_CHANGED_BY_MODERATOR(true),
+    FORMING_STARTED(true),
+    SUPPLEMENT_OPENED(true),
+    FORMATION_CLOSED(true),
+    /** Supplement phase: rooms below the maximum hear who still needs a group, and those students hear it too. */
+    STUDENTS_NEED_GROUP(true),
+    /** Supplement phase: a student accepted an invite; the Moderator is told. */
+    SUPPLEMENT_JOINED(true);
 
     private final boolean emailed;
 

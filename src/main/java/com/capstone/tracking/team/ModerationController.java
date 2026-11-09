@@ -1,17 +1,13 @@
 package com.capstone.tracking.team;
 
-import com.capstone.tracking.team.dto.GroupResponse;
+import com.capstone.tracking.team.dto.RoomResponse;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.net.URI;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,7 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@Tag(name = "Moderation", description = "The assigned Moderator arranges groups in every phase, including finalized groups (7.1)")
+@Tag(name = "Moderation", description = "The Moderator arranges rooms in every phase until formation ends, locked rooms "
+        + "included (7.2)")
 @SecurityRequirement(name = "bearerAuth")
 public class ModerationController {
 
@@ -34,62 +31,55 @@ public class ModerationController {
 
     public record RemoveBody(UUID userId, String reason) {}
 
-    public record DissolveBody(List<UUID> groupIds, String reason) {}
+    public record DisbandBody(List<UUID> roomIds, boolean allBelowMinimum, UUID majorId, String reason) {}
 
-    public record MergeBody(UUID sourceGroupId) {}
+    public record MergeBody(UUID sourceRoomId) {}
 
-    @Operation(summary = "Merge another group into this group, including locked groups (maximum 5)")
-    @PostMapping("/groups/{groupId}/moderation/merge")
-    public GroupResponse merge(@PathVariable UUID groupId, @RequestBody MergeBody body,
-                               @AuthenticationPrincipal User currentUser) {
-        return views.view(moderation.merge(groupId, body.sourceGroupId(), currentUser), currentUser);
+    @Operation(summary = "Put a student without a room into this room (locked rooms too; into an empty room as its Leader; "
+            + "finalized groups only in the supplement phase)")
+    @PostMapping("/rooms/{roomId}/moderation/add")
+    public RoomResponse add(@PathVariable UUID roomId, @RequestBody StudentBody body,
+                            @AuthenticationPrincipal User currentUser) {
+        moderation.addMember(roomId, body.userId(), currentUser);
+        return views.view(core.get(roomId), currentUser);
     }
 
-    @Operation(summary = "Appoint a current member as Leader directly (Moderator)")
-    @PostMapping("/groups/{groupId}/moderation/leader")
-    public GroupResponse appoint(@PathVariable UUID groupId, @RequestBody StudentBody body,
-                                 @AuthenticationPrincipal User currentUser) {
-        return views.view(moderation.appointLeader(groupId, body.userId(), currentUser), currentUser);
-    }
-
-    @Operation(summary = "Put a student without a group into this group (locked groups too, up to 5)")
-    @PostMapping("/groups/{groupId}/moderation/add")
-    public GroupResponse add(@PathVariable UUID groupId, @RequestBody StudentBody body,
+    @Operation(summary = "Move a student from their room into this room")
+    @PostMapping("/rooms/{roomId}/moderation/move")
+    public RoomResponse move(@PathVariable UUID roomId, @RequestBody StudentBody body,
                              @AuthenticationPrincipal User currentUser) {
-        moderation.addMember(groupId, body.userId(), currentUser);
-        return views.view(core.get(groupId), currentUser);
+        moderation.move(roomId, body.userId(), currentUser);
+        return views.view(core.get(roomId), currentUser);
     }
 
-    @Operation(summary = "Move a student from their group into this group")
-    @PostMapping("/groups/{groupId}/moderation/move")
-    public GroupResponse move(@PathVariable UUID groupId, @RequestBody StudentBody body,
-                              @AuthenticationPrincipal User currentUser) {
-        moderation.move(groupId, body.userId(), currentUser);
-        return views.view(core.get(groupId), currentUser);
+    @Operation(summary = "Take a student out of this room or group (finalized groups too), with a required reason")
+    @PostMapping("/rooms/{roomId}/moderation/remove")
+    public RoomResponse remove(@PathVariable UUID roomId, @RequestBody RemoveBody body,
+                               @AuthenticationPrincipal User currentUser) {
+        moderation.removeMember(roomId, body.userId(), body.reason(), currentUser);
+        return views.view(core.get(roomId), currentUser);
     }
 
-    @Operation(summary = "Take a student out of this group, with a reason")
-    @PostMapping("/groups/{groupId}/moderation/remove")
-    public GroupResponse remove(@PathVariable UUID groupId, @RequestBody RemoveBody body,
+    @Operation(summary = "Appoint a current member as Leader directly")
+    @PostMapping("/rooms/{roomId}/moderation/leader")
+    public RoomResponse appoint(@PathVariable UUID roomId, @RequestBody StudentBody body,
                                 @AuthenticationPrincipal User currentUser) {
-        moderation.removeMember(groupId, body.userId(), body.reason(), currentUser);
-        return views.view(core.get(groupId), currentUser);
+        return views.view(moderation.appointLeader(roomId, body.userId(), currentUser), currentUser);
     }
 
-    @Operation(summary = "Create a group of students without one and appoint its Leader")
-    @ApiResponse(responseCode = "201", description = "Created")
-    @PostMapping("/scopes/{scopeId}/groups")
-    public ResponseEntity<GroupResponse> create(@PathVariable UUID scopeId,
-                                                @RequestBody ModerationService.CreateGroupRequest body,
-                                                @AuthenticationPrincipal User currentUser) {
-        StudentGroup group = moderation.createGroup(scopeId, body, currentUser);
-        return ResponseEntity.created(URI.create("/api/v1/groups/" + group.getId()))
-                .body(views.view(core.get(group.getId()), currentUser));
+    @Operation(summary = "Merge another room into this room (up to the maximum size); the source goes back to empty")
+    @PostMapping("/rooms/{roomId}/moderation/merge")
+    public RoomResponse merge(@PathVariable UUID roomId, @RequestBody MergeBody body,
+                              @AuthenticationPrincipal User currentUser) {
+        return views.view(moderation.merge(roomId, body.sourceRoomId(), currentUser), currentUser);
     }
 
-    @Operation(summary = "Dissolve the given groups at once (e.g. all groups below 3 members)")
-    @PostMapping("/moderation/dissolve")
-    public Map<String, Integer> dissolve(@RequestBody DissolveBody body, @AuthenticationPrincipal User currentUser) {
-        return Map.of("dissolved", moderation.dissolve(body.groupIds(), body.reason(), currentUser));
+    @Operation(summary = "Disband rooms back to empty: the given roomIds, or allBelowMinimum=true for every unfinalized "
+            + "room with members below its minimum (optionally one major)")
+    @PostMapping("/semesters/{semester}/rooms/disband")
+    public ModerationService.DisbandResult disband(@PathVariable String semester, @RequestBody DisbandBody body,
+                                                   @AuthenticationPrincipal User currentUser) {
+        return moderation.disband(semester, body.roomIds(), body.allBelowMinimum(), body.majorId(), body.reason(),
+                currentUser);
     }
 }

@@ -1,0 +1,78 @@
+@startuml SD07-eligibility
+!include _vp-style.iuml
+mainframe **sd** SD07 Import eligibility and change a student's eligibility (Admin, Moderator)
+
+actor Admin as A
+actor Moderator as M
+boundary ":RosterScreen" as UI
+control ":ImportController" as IC
+control ":EligibilityImportService" as EIS
+control ":RosterController" as RC
+control ":EligibilityService" as ES
+entity ":Enrollment" as EN
+participant ":GroupCore" as CORE
+participant ":Notifier" as N
+
+alt import a file of decisions (Admin)
+  A -> UI : chooseFile(eligibility.xlsx)
+  activate UI
+  UI -> IC : POST /semesters/{code}/imports/eligibility/preview
+  activate IC
+  IC -> EIS : process(code, file, commit = false, admin)
+  activate EIS
+  EIS --> IC : ImportReport(preview)
+  deactivate EIS
+  IC --> UI : 200 preview
+  deactivate IC
+  A -> UI : confirm()
+  UI -> IC : POST /semesters/{code}/imports/eligibility
+  activate IC
+  IC -> EIS : process(code, file, commit = true, admin)
+  activate EIS
+  EIS -> ES : apply(changes, admin)
+  activate ES
+  ES --> EIS : changed count
+  deactivate ES
+  EIS --> IC : ImportReport(committed)
+  deactivate EIS
+  IC --> UI : 200 ImportReport
+  deactivate IC
+  deactivate UI
+else change one student (Moderator)
+  M -> UI : setEligibility(student, value, reason)
+  activate UI
+  UI -> RC : PUT /api/v1/enrollments/{id}/eligibility {eligibility, reason}
+  activate RC
+  RC -> ES : change(enrollmentId, eligibility, reason, moderator)
+  activate ES
+  break no reason given
+    ES --> UI : 400 BAD_REQUEST
+  end
+  ES -> ES : apply([change], moderator)
+  ES --> RC : enrollment
+  deactivate ES
+  RC --> UI : 204 No Content
+  deactivate RC
+  deactivate UI
+end
+
+group apply(changes) in EligibilityService
+  ES -> ES : lock semesters (shared), enrollments, rooms
+  loop each change
+    ES -> EN : setEligibility(value, reason, updatedBy, updatedAt)
+    opt value = INELIGIBLE
+      ES -> ES : cancel the student's pending requests
+      opt student is in a room
+        ES -> CORE : remove(member, INELIGIBLE)
+        ES -> N : publish(REMOVED_INELIGIBLE -> student)
+        ES -> N : publish(MEMBER_LEFT -> room members)
+      end
+    end
+    ES -> N : publish(ELIGIBILITY_CHANGED -> student)
+  end
+  ES -> CORE : settle(touched rooms)
+  activate CORE
+  CORE --> ES : new Leader chosen or room back to EMPTY
+  deactivate CORE
+end
+@enduml

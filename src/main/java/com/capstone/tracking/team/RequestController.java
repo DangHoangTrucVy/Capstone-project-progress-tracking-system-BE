@@ -1,7 +1,5 @@
 package com.capstone.tracking.team;
 
-import com.capstone.tracking.common.exception.ResourceNotFoundException;
-import com.capstone.tracking.subject.SubjectRepository;
 import com.capstone.tracking.team.LeaderTransferService.TransferResponse;
 import com.capstone.tracking.team.dto.JoinRequestResponse;
 import com.capstone.tracking.team.dto.LeaveRequestResponse;
@@ -30,17 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@Tag(name = "Requests", description = "Apply / Invite and Likes (6.2, 8.2), leave requests and complaints (6.4), "
-        + "Leader transfer (6.4)")
+@Tag(name = "Requests", description = "Requests to join locked rooms, invites (6.2, 7.4), Likes (8.2), leave requests "
+        + "and complaints (6.5), Leader transfer (6.6)")
 @SecurityRequirement(name = "bearerAuth")
 public class RequestController {
 
     private final JoinRequestService joinRequests;
     private final LeaveRequestService leaveRequests;
     private final LeaderTransferService transfers;
-    private final SubjectRepository subjects;
-
-    public record MessageBody(String message) {}
 
     public record InviteBody(UUID studentId, String studentCode, String message) {}
 
@@ -52,19 +47,10 @@ public class RequestController {
 
     // ------------------------------------------------------------------ Apply / Invite
 
-    @Operation(summary = "Apply to a group (student; at most 3 pending applications)")
+    @Operation(summary = "Leader invites a student of the same major without a room: before the deadline, or in the "
+            + "supplement phase (no expiry, rooms below the maximum size)")
     @ApiResponse(responseCode = "201", description = "Created")
-    @PostMapping("/groups/{groupId}/applications")
-    public ResponseEntity<JoinRequestResponse> apply(@PathVariable UUID groupId, @RequestBody(required = false) MessageBody body,
-                                                     @AuthenticationPrincipal User currentUser) {
-        JoinRequest saved = joinRequests.apply(groupId, body == null ? null : body.message(), currentUser);
-        return ResponseEntity.created(URI.create("/api/v1/requests/" + saved.getId()))
-                .body(joinRequests.get(saved.getId(), currentUser));
-    }
-
-    @Operation(summary = "Invite a student of the same major without a group (Leader)")
-    @ApiResponse(responseCode = "201", description = "Created")
-    @PostMapping("/groups/{groupId}/invitations")
+    @PostMapping("/rooms/{groupId}/invitations")
     public ResponseEntity<JoinRequestResponse> invite(@PathVariable UUID groupId, @RequestBody InviteBody body,
                                                       @AuthenticationPrincipal User currentUser) {
         JoinRequest saved = joinRequests.invite(groupId, body.studentId(), body.studentCode(), body.message(), currentUser);
@@ -72,32 +58,26 @@ public class RequestController {
                 .body(joinRequests.get(saved.getId(), currentUser));
     }
 
-    @Operation(summary = "The group's applications and invitations (members, Moderator)")
-    @GetMapping("/groups/{groupId}/requests")
+    @Operation(summary = "The room's requests to join and invitations (members, Moderator)")
+    @GetMapping("/rooms/{groupId}/requests")
     public List<JoinRequestResponse> forGroup(@PathVariable UUID groupId, @AuthenticationPrincipal User currentUser) {
         return joinRequests.forGroup(groupId, currentUser);
     }
 
-    @Operation(summary = "My applications and invitations in a subject")
-    @GetMapping("/subjects/{subjectId}/my-requests")
-    public List<JoinRequestResponse> mine(@PathVariable UUID subjectId, @AuthenticationPrincipal User currentUser) {
-        return joinRequests.mine(subjectId, currentUser);
-    }
-
-    @Operation(summary = "Get an application or invitation (with the applicant's profile while it is pending)")
+    @Operation(summary = "Get a request to join or an invitation (with the student's profile while it is pending)")
     @GetMapping("/requests/{requestId}")
     public JoinRequestResponse get(@PathVariable UUID requestId, @AuthenticationPrincipal User currentUser) {
         return joinRequests.get(requestId, currentUser);
     }
 
-    @Operation(summary = "Accept: the Leader accepts an application or the student an invitation; the student joins now")
+    @Operation(summary = "Accept: the Leader accepts a request to join or the student an invitation; the student joins now")
     @PostMapping("/requests/{requestId}/accept")
     public JoinRequestResponse accept(@PathVariable UUID requestId, @AuthenticationPrincipal User currentUser) {
         joinRequests.accept(requestId, currentUser);
         return joinRequests.get(requestId, currentUser);
     }
 
-    @Operation(summary = "Reject: the Leader refuses an application (with a reason) or the student declines an invitation")
+    @Operation(summary = "Reject: the Leader refuses a request (with a reason) or the student declines an invitation")
     @PostMapping("/requests/{requestId}/reject")
     public JoinRequestResponse reject(@PathVariable UUID requestId, @RequestBody(required = false) ReasonBody body,
                                       @AuthenticationPrincipal User currentUser) {
@@ -105,14 +85,14 @@ public class RequestController {
         return joinRequests.get(requestId, currentUser);
     }
 
-    @Operation(summary = "Withdraw: the applicant takes back an application, the Leader an invitation")
+    @Operation(summary = "Withdraw: the student takes back a request, the Leader an invitation")
     @PostMapping("/requests/{requestId}/withdraw")
     public JoinRequestResponse withdraw(@PathVariable UUID requestId, @AuthenticationPrincipal User currentUser) {
         joinRequests.withdraw(requestId, currentUser);
         return joinRequests.get(requestId, currentUser);
     }
 
-    @Operation(summary = "Like an applicant (members of the group; advice only)")
+    @Operation(summary = "Like a candidate who asked to join (members of the room; advice only)")
     @PutMapping("/requests/{requestId}/like")
     public Map<String, Long> like(@PathVariable UUID requestId, @AuthenticationPrincipal User currentUser) {
         return Map.of("likes", joinRequests.like(requestId, true, currentUser));
@@ -126,8 +106,8 @@ public class RequestController {
 
     // ------------------------------------------------------------------ leave requests and complaints
 
-    @Operation(summary = "The group's leave requests (the Leader and the Moderator see all, a member their own)")
-    @GetMapping("/groups/{groupId}/leave-requests")
+    @Operation(summary = "The room's leave requests (the Leader and the Moderator see all, a member their own)")
+    @GetMapping("/rooms/{groupId}/leave-requests")
     public List<LeaveRequestResponse> leaveRequestsOfGroup(@PathVariable UUID groupId,
                                                            @AuthenticationPrincipal User currentUser) {
         return leaveRequests.forGroup(groupId, currentUser);
@@ -166,20 +146,18 @@ public class RequestController {
         return LeaveRequestResponse.from(leaveRequests.moderatorDecide(requestId, body.approve(), body.note(), currentUser));
     }
 
-    @Operation(summary = "Complaints and leave requests waiting for the Moderator in a subject")
-    @GetMapping("/subjects/{subjectId}/complaints")
-    public List<LeaveRequestResponse> complaints(@PathVariable UUID subjectId, @RequestParam(required = false) UUID scopeId,
+    @Operation(summary = "Complaints and leave / transfer requests waiting for the Moderator in a semester")
+    @GetMapping("/semesters/{semester}/complaints")
+    public List<LeaveRequestResponse> complaints(@PathVariable String semester, @RequestParam(required = false) UUID majorId,
                                                  @AuthenticationPrincipal User currentUser) {
-        String semester = subjects.findById(subjectId).orElseThrow(() -> ResourceNotFoundException.of("Subject", subjectId))
-                .getSemesterCode();
-        return leaveRequests.waitingForModerator(subjectId, scopeId, semester, currentUser);
+        return leaveRequests.waitingForModerator(semester, majorId, currentUser);
     }
 
     // ------------------------------------------------------------------ Leader transfer
 
-    @Operation(summary = "Offer the Leader role to a member (optionally leaving the group when accepted)")
+    @Operation(summary = "Offer the Leader role to a member (optionally leaving the room when accepted)")
     @ApiResponse(responseCode = "201", description = "Created")
-    @PostMapping("/groups/{groupId}/leader-transfers")
+    @PostMapping("/rooms/{groupId}/leader-transfers")
     public ResponseEntity<TransferResponse> proposeTransfer(@PathVariable UUID groupId, @RequestBody TransferBody body,
                                                             @AuthenticationPrincipal User currentUser) {
         LeaderTransfer saved = transfers.propose(groupId, body.toUserId(), body.leaveAfter(), currentUser);

@@ -1,0 +1,62 @@
+@startuml SD19-finalize-round2-close
+!include _vp-style.iuml
+mainframe **sd** SD19 Finalize round 2 and close group formation (Moderator)
+
+actor Moderator as M
+boundary ":SemesterDashboard" as UI
+control ":SemesterController" as SC
+control ":PhaseService" as PS
+entity ":Semester" as SEM
+entity ":JoinRequestRepository" as JR
+entity ":LeaderTransferRepository" as TR
+entity ":StudentGroupRepository" as GR
+participant ":GroupCore" as CORE
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+M -> UI : clickFinalizeRound2()
+activate UI
+UI -> SC : POST /api/v1/semesters/{code}/finalize-round2
+activate SC
+SC -> PS : finalizeRound2(code, moderator)
+activate PS
+PS -> SEM : lock FOR UPDATE
+PS -> PS : check(semester, now)
+break not SUPPLEMENT / rooms below minimum / open complaints /\nfinalize requests waiting
+  PS --> UI : 409 CANNOT_FINALIZE (list of blockers)
+end
+PS -> SEM : setRound2FinalizedAt(now), setRound2FinalizedBy(moderator)
+PS -> AU : record(ROUND2_FINALIZED)
+
+group close(semester)
+  PS -> JR : cancelPendingOfSemester(code, CLOSED)
+  PS -> TR : cancelPendingOfSemester(code)
+  loop each major, each active room (room order)
+    PS -> GR : findActiveByScope(scope)
+    PS -> CORE : lock(room), size(room)
+    activate CORE
+    CORE --> PS : size
+    deactivate CORE
+    alt size = 0
+      PS -> CORE : close(room): dissolved CLOSED_EMPTY
+    else room not finalized yet
+      PS -> CORE : finalizeRoom(room): next code <SEM>-<MAJOR>-<nnn>
+    else already a finalized group
+      PS -> PS : keep its code
+    end
+  end
+  PS -> SEM : setPhase(CLOSED), setClosedAt(now)
+  PS -> AU : record(FORMATION_CLOSED, roomsBecameGroups, emptyRoomsClosed)
+  PS -> N : publish(FORMATION_CLOSED -> all students)
+end
+PS --> SC : semester
+deactivate PS
+SC --> UI : 200 SemesterResponse (phase CLOSED)
+deactivate SC
+UI --> M : final group list ready for export (SD20)
+deactivate UI
+note right of SEM
+  A CLOSED semester is read-only
+  and is never reopened.
+end note
+@enduml

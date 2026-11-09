@@ -13,33 +13,28 @@ import org.junit.jupiter.api.Test;
 class RequirementsV29IntegrationTest extends TestSupport {
 
     @Test
-    void aNewSemesterAutomaticallyHasCapstoneAndImportAutomaticallyCreatesMajorScopes() throws Exception {
+    void aNewSemesterHasDefaultRulesAndImportCreatesOneScopePerMajor() throws Exception {
         var admin = user("auto-cap-admin", Role.ADMIN);
         String semester = freeSemesterCode();
         postJson("/api/v1/semesters", admin, Map.of("code", semester, "startDate", LocalDate.now().toString(),
                 "endDate", LocalDate.now().plusDays(100).toString())).andExpect(status().isCreated());
-        var capstone = body(getAs("/api/v1/semesters/" + semester + "/subjects", admin));
-        assertThat(capstone.size()).isEqualTo(1);
-        assertThat(capstone.get(0).get("code").asText()).isEqualTo("CAP");
-        assertThat(capstone.get(0).get("requestTtlMinutes").asInt()).isEqualTo(15);
-        assertThat(capstone.get(0).get("minDeadlineNoticeMinutes").asInt()).isEqualTo(10);
+        var rules = body(getAs("/api/v1/semesters/" + semester + "/rules", admin).andExpect(status().isOk()));
+        assertThat(rules.get("maxGroupSize").asInt()).isEqualTo(5);
+        assertThat(rules.get("defaultMinRoomSize").asInt()).isEqualTo(3);
+        assertThat(rules.get("maxPendingRequests").asInt()).isEqualTo(3);
+        assertThat(rules.get("requestTtlMinutes").asInt()).isEqualTo(15);
+        assertThat(rules.get("minDeadlineNoticeMinutes").asInt()).isEqualTo(10);
         String csv = "MSSV,Họ tên,Email,Số điện thoại,Kỳ,Ngành\nAUTO" + suffix
                 + ",Imported,auto-" + suffix + "@gmail.com,0900000000,8,Auto " + suffix + "\n";
         upload("/api/v1/semesters/" + semester + "/imports/students", admin, "auto.csv", csv)
                 .andExpect(status().isOk());
-        capstone = body(getAs("/api/v1/semesters/" + semester + "/subjects", admin));
-        assertThat(capstone.get(0).get("scopes").size()).isEqualTo(1);
-        var subjectId = java.util.UUID.fromString(capstone.get(0).get("id").asText());
-        assertThat(enrollmentRepository.findBySubjectId(subjectId)).hasSize(1);
+        assertThat(scopeRepository.findBySemester(semester)).hasSize(1);
+        assertThat(enrollmentRepository.findBySemester(semester)).hasSize(1);
         var moderator = user("auto-cap-moderator", Role.LECTURER);
         putJson("/api/v1/semesters/" + semester + "/moderator", admin, Map.of("lecturerId", moderator.getId()))
                 .andExpect(status().isOk());
-        putJson("/api/v1/semesters/" + semester, moderator, Map.of(
-                "formationOpensAt", java.time.Instant.now().minusSeconds(60).toString(),
-                "defaultDeadline", java.time.Instant.now().plus(java.time.Duration.ofDays(5)).toString()))
-                .andExpect(status().isOk());
-        assertThat(scopeRepository.findBySubjectIdOrderByMajor_CodeAsc(subjectId).get(0).getPhase())
-                .isEqualTo(com.capstone.tracking.subject.ScopePhase.OPEN);
+        getAs("/api/v1/semesters/" + semester + "/majors", moderator).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].students").value(1));
     }
 
     @Test
@@ -49,18 +44,20 @@ class RequirementsV29IntegrationTest extends TestSupport {
         var target = createGroup(w, s.get(0), "Target");
         join(target, s.get(0), s.get(1));
         var source = createGroup(w, s.get(2), "Source");
-        postJson("/api/v1/groups/" + target + "/lock", s.get(0), Map.of()).andExpect(status().isOk());
-        postJson("/api/v1/groups/" + source + "/lock", s.get(2), Map.of()).andExpect(status().isOk());
-        postJson("/api/v1/groups/" + target + "/moderation/add", w.moderator(), Map.of("userId", s.get(3).getId()))
+        postJson("/api/v1/rooms/" + target + "/lock", s.get(0), Map.of()).andExpect(status().isOk());
+        postJson("/api/v1/rooms/" + source + "/lock", s.get(2), Map.of()).andExpect(status().isOk());
+        postJson("/api/v1/rooms/" + target + "/moderation/add", w.moderator(), Map.of("userId", s.get(3).getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.size").value(3));
-        postJson("/api/v1/groups/" + target + "/moderation/leader", w.moderator(), Map.of("userId", s.get(1).getId()))
+        postJson("/api/v1/rooms/" + target + "/moderation/leader", w.moderator(), Map.of("userId", s.get(1).getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.leaderId").value(s.get(1).getId().toString()));
-        postJson("/api/v1/groups/" + target + "/moderation/merge", w.moderator(), Map.of("sourceGroupId", source))
+        postJson("/api/v1/rooms/" + target + "/moderation/merge", w.moderator(), Map.of("sourceRoomId", source))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.size").value(4));
-        assertThat(groupRepository.findById(source).orElseThrow().isDissolved()).isTrue();
-        postJson("/api/v1/groups/" + target + "/moderation/add", w.moderator(), Map.of("userId", w.others().get(0).getId()))
+        // The source room went back to empty; it is kept.
+        assertThat(groupRepository.findById(source).orElseThrow().isDissolved()).isFalse();
+        assertThat(memberRepository.countActive(source)).isZero();
+        postJson("/api/v1/rooms/" + target + "/moderation/add", w.moderator(), Map.of("userId", w.others().get(0).getId()))
                 .andExpect(status().isConflict());
-        postJson("/api/v1/groups/" + target + "/moderation/leader", s.get(0), Map.of("userId", s.get(0).getId()))
+        postJson("/api/v1/rooms/" + target + "/moderation/leader", s.get(0), Map.of("userId", s.get(0).getId()))
                 .andExpect(status().isForbidden());
     }
 
@@ -74,33 +71,38 @@ class RequirementsV29IntegrationTest extends TestSupport {
         join(a, s.get(0), s.get(2));
         join(b, s.get(3), s.get(4));
         join(b, s.get(3), s.get(5));
-        postJson("/api/v1/groups/" + a + "/moderation/merge", w.moderator(), Map.of("sourceGroupId", b))
+        postJson("/api/v1/rooms/" + a + "/moderation/merge", w.moderator(), Map.of("sourceRoomId", b))
                 .andExpect(status().isConflict());
         assertThat(memberRepository.countActive(a)).isEqualTo(3);
         assertThat(memberRepository.countActive(b)).isEqualTo(3);
     }
 
     @Test
-    void moderatorMayChangeFinalizedRosterWhileStudentsRemainReadOnly() throws Exception {
+    void afterRound1TheModeratorPlacesLeftoversIntoApprovedGroupsWhileStudentsOnlyTransferTheLeaderRole() throws Exception {
         var w = world(4, 0);
         var s = w.students();
         var group = createGroup(w, s.get(0), "Finalized");
         join(group, s.get(0), s.get(1));
         join(group, s.get(0), s.get(2));
-        passDeadline(w.scope());
-        postJson("/api/v1/scopes/" + w.scope().getId() + "/finalize", w.moderator(), Map.of())
+        postJson("/api/v1/rooms/" + group + "/finalize-decision", w.moderator(), Map.of("approve", true))
                 .andExpect(status().isOk());
-        postJson("/api/v1/groups/" + group + "/moderation/add", w.moderator(), Map.of("userId", s.get(3).getId()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.finalized").value(true));
+        passDeadline(w);
+        postJson("/api/v1/semesters/" + w.code() + "/finalize-round1", w.moderator(), Map.of())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phase").value("SUPPLEMENT"));
+        // Students cannot walk in any more.
+        postJson("/api/v1/rooms/" + w.rooms().get(1) + "/join", s.get(3), Map.of()).andExpect(status().isConflict());
+        postJson("/api/v1/rooms/" + group + "/moderation/add", w.moderator(), Map.of("userId", s.get(3).getId()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.finalized").value(true)).andExpect(jsonPath("$.size").value(4));
         var ss = semesterStudentRepository.findBySemesterCodeAndUserId(w.code(), s.get(0).getId()).orElseThrow();
         putJson("/api/v1/semester-students/" + ss.getId(), w.moderator(), Map.of("fullName", "Changed"))
                 .andExpect(status().isOk());
-        putJson("/api/v1/me/profile", s.get(0), Map.of("phone", "0999999999", "profilePrivate", true))
-                .andExpect(status().isConflict());
-        var transfer = id(postJson("/api/v1/groups/" + group + "/leader-transfers", s.get(0),
+        var transfer = id(postJson("/api/v1/rooms/" + group + "/leader-transfers", s.get(0),
                 Map.of("toUserId", s.get(1).getId(), "leaveAfter", false)).andExpect(status().isCreated()));
         postJson("/api/v1/leader-transfers/" + transfer + "/accept", s.get(1), Map.of()).andExpect(status().isOk());
         assertThat(groupRepository.findById(group).orElseThrow().isFinalized()).isTrue();
+        // Nobody leaves an approved group by themselves: the request goes to the Moderator.
+        postJson("/api/v1/rooms/" + group + "/leave", s.get(2), Map.of("reason", "x")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.left").value(false)).andExpect(jsonPath("$.request.status").value("PENDING_MODERATOR"));
     }
 
     @Test
@@ -137,7 +139,7 @@ class RequirementsV29IntegrationTest extends TestSupport {
         hidden.setSkills("SecretSkill");
         userRepository.save(hidden);
         var group = createGroup(w, leader, "Privacy");
-        var invitation = id(postJson("/api/v1/groups/" + group + "/invitations", leader,
+        var invitation = id(postJson("/api/v1/rooms/" + group + "/invitations", leader,
                 Map.of("studentId", hidden.getId())).andExpect(status().isCreated()));
         assertThat(body(getAs("/api/v1/requests/" + invitation, leader)).toString()).doesNotContain("SecretSkill");
     }

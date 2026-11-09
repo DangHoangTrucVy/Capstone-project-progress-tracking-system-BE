@@ -18,10 +18,6 @@ import com.capstone.tracking.roster.importing.SpreadsheetReader.Line;
 import com.capstone.tracking.roster.importing.SpreadsheetReader.Table;
 import com.capstone.tracking.semester.Access;
 import com.capstone.tracking.semester.Semester;
-import com.capstone.tracking.subject.FormationScopeRepository;
-import com.capstone.tracking.subject.ScopePhase;
-import com.capstone.tracking.subject.Subject;
-import com.capstone.tracking.subject.SubjectRepository;
 import com.capstone.tracking.user.Role;
 import com.capstone.tracking.user.User;
 import com.capstone.tracking.user.UserRepository;
@@ -43,9 +39,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The semester's student list from the training department (4.1). Rows are matched by student code + semester, so
- * importing again never duplicates anyone; students missing from a later file are left as they are. Once a scope has
- * opened, a row may only update contact details (name, email, phone): new students and changes of major or term in
- * an opened scope are rejected. The same call previews (nothing written) or, confirmed, writes.
+ * importing again never duplicates anyone; students missing from a later file are left as they are. Once the semester
+ * has left OPENING, a row may only update contact details (name, email, phone): new students are rejected. A major
+ * never changes (3.3). The same call previews (nothing written) or, confirmed, writes.
  */
 @Service
 @RequiredArgsConstructor
@@ -58,14 +54,11 @@ public class StudentImportService {
     private final MajorRepository majors;
     private final SemesterStudentRepository semesterStudents;
     private final EnrollmentRepository enrollments;
-    private final SubjectRepository subjects;
-    private final FormationScopeRepository scopes;
     private final ImportBatchRepository batches;
     private final RosterSync sync;
     private final Access access;
     private final AuditService audit;
     private final ObjectMapper objectMapper;
-    private final com.capstone.tracking.semester.SemesterRepository semesters;
     private final com.capstone.tracking.common.Locks locks;
     private final com.capstone.tracking.roster.EligibilityService eligibilityService;
 
@@ -75,11 +68,8 @@ public class StudentImportService {
     @Transactional
     public ImportReport process(String semesterCode, String fileName, byte[] data, boolean commit, User actor) {
         access.requireAdmin(actor);
-        semesters.lockByCode(semesterCode).orElseThrow(() ->
-                com.capstone.tracking.common.exception.ResourceNotFoundException.of("Semester", semesterCode));
-        Semester semester = access.requireModerator(semesterCode, actor);
-        scopes.findBySemester(semesterCode).stream().map(com.capstone.tracking.subject.FormationScope::getId).sorted()
-                .forEach(id -> locks.write(com.capstone.tracking.subject.FormationScope.class, id));
+        access.requireModerator(semesterCode, actor);
+        Semester semester = locks.writeSemester(semesterCode);
         Table table = SpreadsheetReader.read(data);
         List<String> missing = new ArrayList<>();
         for (String[] col : new String[][]{{SpreadsheetReader.CODE, "Mã số sinh viên"}, {SpreadsheetReader.NAME, "Họ tên"},
@@ -105,7 +95,6 @@ public class StudentImportService {
                 codeCount.merge(code.toUpperCase(Locale.ROOT), 1, Integer::sum);
             }
         }
-        List<Subject> semesterSubjects = subjects.findBySemesterCodeOrderByCodeAsc(semesterCode);
         Map<String, String> newMajors = new LinkedHashMap<>(); // folded name -> display name
         List<RowError> errors = new ArrayList<>();
         List<Row> valid = new ArrayList<>();
@@ -169,7 +158,7 @@ public class StudentImportService {
             User user = byCode != null ? byCode : byEmail;
             SemesterStudent existing = user == null ? null
                     : semesterStudents.findBySemesterCodeAndUserId(semesterCode, user.getId()).orElse(null);
-            String locked = structuralLock(semesterSubjects, existing, term, major);
+            String locked = structuralLock(semester, existing, major);
             if (locked != null) {
                 errors.add(new RowError(line.rowNumber(), code, locked));
                 continue;
@@ -227,12 +216,11 @@ public class StudentImportService {
                 ss.setCurrentTerm(row.term());
             }
             ss = semesterStudents.saveAndFlush(ss);
-            sync.syncStudent(ss);
+            Enrollment e = sync.syncStudent(ss);
+            enrollments.flush();
             if (row.decision() != null) {
-                for (Enrollment e : enrollments.findBySemesterStudentId(ss.getId())) {
-                    eligibilityChanges.add(new com.capstone.tracking.roster.EligibilityService.Change(
-                            e.getId(), row.decision().value(), row.decision().reason()));
-                }
+                eligibilityChanges.add(new com.capstone.tracking.roster.EligibilityService.Change(
+                        e.getId(), row.decision().value(), row.decision().reason()));
             }
         }
         eligibilityService.apply(eligibilityChanges, actor);
@@ -254,45 +242,26 @@ public class StudentImportService {
     }
 
     /**
-     * Once a scope has opened, the list is fixed except for contact details (4.1): no new student in an opened scope,
-     * no change of major or term for a student whose scope opened.
+     * Once the semester has left OPENING the list is fixed except for contact details (4.1): no new student. A
+     * student's major never changes (3.3).
      */
-    private String structuralLock(List<Subject> semesterSubjects, SemesterStudent existing, int term, Major major) {
+    private String structuralLock(Semester semester, SemesterStudent existing, Major major) {
         if (existing == null) {
-            if (semesterSubjects.stream().anyMatch(s -> scopes.existsBySubjectIdAndPhaseNot(s.getId(), ScopePhase.PREPARING))) {
-                return "Phạm vi ghép nhóm đã mở: không thêm sinh viên mới";
-            }
-            return null;
+            return semester.getPhase() == com.capstone.tracking.semester.SemesterPhase.OPENING ? null
+                    : "Học kỳ đã qua giai đoạn Mở học kỳ: không thêm sinh viên mới";
         }
-        boolean changed = existing.getCurrentTerm() != term || major == null
-                || !existing.getMajor().getId().equals(major.getId());
         if (major == null || !existing.getMajor().getId().equals(major.getId())) {
-            return "không đổi ngành hoặc kỳ học: ngành của sinh viên không được thay đổi";
-        }
-        if (!changed) {
-            return null;
-        }
-        boolean currentOpened = enrollments.findBySemesterStudentId(existing.getId()).stream()
-                .map(Enrollment::getScope).anyMatch(s -> s.getPhase() != ScopePhase.PREPARING);
-        if (currentOpened || (major != null && opened(semesterSubjects, term, major))) {
-            return "Phạm vi ghép nhóm đã mở: không đổi ngành hoặc kỳ học";
+            return "Không đổi ngành: ngành của sinh viên không được thay đổi";
         }
         return null;
-    }
-
-    private boolean opened(List<Subject> semesterSubjects, int term, Major major) {
-        return semesterSubjects.stream()
-                .filter(s -> s.getTargetTerm() == term)
-                .map(s -> scopes.findBySubjectIdAndMajorId(s.getId(), major.getId()).orElse(null))
-                .anyMatch(scope -> scope != null && scope.getPhase() != ScopePhase.PREPARING);
     }
 
     private boolean changes(Row row) {
         User u = row.user();
         SemesterStudent ss = row.existing();
-        boolean eligibilityChanged = row.decision() != null && enrollments.findBySemesterStudentId(ss.getId()).stream()
-                .anyMatch(e -> e.getEligibility() != row.decision().value()
-                        || !Objects.equals(e.getEligibilityReason(), row.decision().reason()));
+        boolean eligibilityChanged = row.decision() != null && enrollments.findBySemesterStudentId(ss.getId())
+                .map(e -> e.getEligibility() != row.decision().value()
+                        || !Objects.equals(e.getEligibilityReason(), row.decision().reason())).orElse(true);
         return eligibilityChanged || !row.email().equalsIgnoreCase(u.getEmail()) || !row.name().equals(u.getFullName())
                 || (row.phone() != null && !row.phone().equals(u.getPhone()))
                 || ss.getCurrentTerm() != row.term() || row.major() == null

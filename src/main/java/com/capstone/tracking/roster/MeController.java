@@ -1,12 +1,12 @@
 package com.capstone.tracking.roster;
 
+import com.capstone.tracking.semester.Semester;
+import com.capstone.tracking.semester.SemesterPhase;
 import com.capstone.tracking.semester.SemesterRepository;
-import com.capstone.tracking.subject.FormationScope;
-import com.capstone.tracking.subject.ScopePhase;
-import com.capstone.tracking.subject.ScopeRules;
 import com.capstone.tracking.team.GroupCore;
 import com.capstone.tracking.team.GroupMember;
-import com.capstone.tracking.team.GroupState;
+import com.capstone.tracking.team.RoomStatus;
+import com.capstone.tracking.team.StudentGroup;
 import com.capstone.tracking.user.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The student's home: every semester they are listed in, newest first (where they land after signing in; older ones
- * are view-only, mục 9), with each subject's phase, deadline, their three-part status and their group.
+ * are view-only, mục 9), with the semester's phase and deadline, their status and their room.
  */
 @RestController
 @RequestMapping("/api/v1/me")
@@ -37,18 +37,21 @@ public class MeController {
     private final EnrollmentRepository enrollments;
     private final SemesterRepository semesters;
     private final GroupCore core;
-    private final ScopeRules rules;
 
-    public record MyGroup(UUID id, String code, String name, int size, GroupState state, boolean leader, boolean finalized, Instant finalizedAt) {}
+    public record MyRoom(UUID id, String code, String name, int size, int minSize, int maxSize, RoomStatus status,
+                         boolean leader, boolean finalized, Instant finalizedAt) {}
 
-    public record MySubject(UUID subjectId, String code, String name, UUID scopeId, ScopePhase phase, Instant deadline,
-                            boolean canAct, Eligibility eligibility, String eligibilityReason,
-                            NoGroupReason noGroupReason, MyGroup group) {}
+    /**
+     * {@code canJoinRooms}: free to join/leave rooms now (formation running, before the deadline, eligible, newest
+     * semester). {@code canAcceptInvites}: the supplement phase and still without a room.
+     */
+    public record MySemester(String semesterCode, String semesterName, SemesterPhase phase, String phaseLabel,
+                             Instant deadline, boolean beforeDeadline, UUID majorId, String majorCode, String majorName,
+                             int currentTerm, boolean readOnly, boolean canJoinRooms, boolean canAcceptInvites,
+                             UUID enrollmentId, Eligibility eligibility, String eligibilityReason,
+                             NoGroupReason noGroupReason, MyRoom room) {}
 
-    public record MySemester(String semesterCode, String semesterName, String majorCode,
-                             String majorName, int currentTerm, boolean readOnly, List<MySubject> subjects) {}
-
-    @Operation(summary = "My semesters and subjects, newest semester first (students)")
+    @Operation(summary = "My semesters, newest first, with phase, deadline, my status and my room (students)")
     @GetMapping("/semesters")
     @Transactional(readOnly = true)
     public List<MySemester> mySemesters(@AuthenticationPrincipal User currentUser) {
@@ -56,23 +59,27 @@ public class MeController {
         List<MySemester> result = new ArrayList<>();
         boolean first = true;
         for (SemesterStudent ss : semesterStudents.findByUserNewestFirst(currentUser.getId())) {
-            var semester = semesters.findById(ss.getSemesterCode()).orElseThrow();
+            Semester semester = semesters.findById(ss.getSemesterCode()).orElseThrow();
             boolean readOnly = !first;
-            List<MySubject> subjects = new ArrayList<>();
-            for (Enrollment e : enrollments.findBySemesterStudentId(ss.getId())) {
-                FormationScope scope = e.getScope();
-                GroupMember m = core.membershipOf(e.getId());
-                MyGroup group = m == null ? null : new MyGroup(m.getGroup().getId(), m.getGroup().getCode(),
-                        m.getGroup().getName(), (int) core.size(m.getGroup().getId()),
-                        core.state(m.getGroup(), core.size(m.getGroup().getId()), now), m.isLeader(), m.getGroup().isFinalized(), m.getGroup().getFinalizedAt());
-                subjects.add(new MySubject(e.getSubjectId(), scope.getSubject().getCode(), scope.getSubject().getName(),
-                        scope.getId(), scope.getPhase(), rules.deadline(scope),
-                        !readOnly && !e.isIneligible() && rules.isOpen(scope, now), e.getEligibility(),
-                        e.getEligibilityReason(), m == null ? e.getNoGroupReason() : null, group));
-            }
-            result.add(new MySemester(ss.getSemesterCode(), semester.getName(),
-                    ss.getMajor().getCode(), ss.getMajor().getName(), ss.getCurrentTerm(), readOnly, subjects));
             first = false;
+            Enrollment e = enrollments.findBySemesterStudentId(ss.getId()).orElse(null);
+            GroupMember m = e == null ? null : core.membershipOf(e.getId());
+            MyRoom room = null;
+            if (m != null) {
+                StudentGroup g = m.getGroup();
+                int size = (int) core.size(g.getId());
+                room = new MyRoom(g.getId(), g.getCode(), g.getName(), size, g.getMinSize(), semester.getMaxGroupSize(),
+                        core.status(g, size, semester, now), m.isLeader(), g.isFinalized(), g.getFinalizedAt());
+            }
+            boolean active = !readOnly && e != null && !e.isIneligible();
+            result.add(new MySemester(semester.getCode(), semester.getName(), semester.getPhase(),
+                    semester.getPhase().label(), semester.getDeadline(), semester.isBeforeDeadline(now),
+                    ss.getMajor().getId(), ss.getMajor().getCode(), ss.getMajor().getName(), ss.getCurrentTerm(),
+                    readOnly, active && semester.isBeforeDeadline(now),
+                    active && m == null && semester.getPhase() == SemesterPhase.SUPPLEMENT,
+                    e == null ? null : e.getId(), e == null ? null : e.getEligibility(),
+                    e == null ? null : e.getEligibilityReason(), m == null && e != null ? e.getNoGroupReason() : null,
+                    room));
         }
         return result;
     }

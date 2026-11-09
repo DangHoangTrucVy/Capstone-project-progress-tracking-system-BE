@@ -20,23 +20,28 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
             + "com.capstone.tracking.team.LeaveRequest.Status.PENDING_MODERATOR)")
     Optional<LeaveRequest> findOpenByEnrollment(@Param("enrollmentId") UUID enrollmentId);
 
-    /** Complaints and requests waiting for the Moderator, by subject and optionally scope. */
-    @Query("select r from LeaveRequest r where r.group.scope.subject.id = :subjectId "
-            + "and (:scopeId is null or r.group.scope.id = :scopeId) "
+    /** Complaints and requests waiting for the Moderator, by semester and optionally major. */
+    @Query("select r from LeaveRequest r where r.group.scope.semesterCode = :semester "
+            + "and (:majorId is null or r.group.scope.major.id = :majorId) "
             + "and r.status = com.capstone.tracking.team.LeaveRequest.Status.PENDING_MODERATOR order by r.createdAt")
-    List<LeaveRequest> findWaitingForModerator(@Param("subjectId") UUID subjectId, @Param("scopeId") UUID scopeId);
+    List<LeaveRequest> findWaitingForModerator(@Param("semester") String semester, @Param("majorId") UUID majorId);
+
+    @Query("select count(r) from LeaveRequest r where r.group.scope.semesterCode = :semester and r.status in "
+            + "(com.capstone.tracking.team.LeaveRequest.Status.PENDING_LEADER, "
+            + "com.capstone.tracking.team.LeaveRequest.Status.PENDING_MODERATOR)")
+    long countOpenInSemester(@Param("semester") String semester);
 
     @Query("select count(r) from LeaveRequest r where r.group.id in (select g.id from StudentGroup g where g.scope.id = :scopeId) and r.status in "
             + "(com.capstone.tracking.team.LeaveRequest.Status.PENDING_LEADER, "
             + "com.capstone.tracking.team.LeaveRequest.Status.PENDING_MODERATOR)")
     long countOpenInScope(@Param("scopeId") UUID scopeId);
 
-    /** At the deadline, requests the Leader has not answered become complaints to the Moderator (3.4). */
+    /** At the deadline, requests the Leader has not answered become complaints to the Moderator (7.1). */
     @Modifying
     @Query("update LeaveRequest r set r.status = com.capstone.tracking.team.LeaveRequest.Status.PENDING_MODERATOR, "
-            + "r.complaint = true where r.group.id in (select g.id from StudentGroup g where g.scope.id = :scopeId) "
+            + "r.complaint = true where r.group.id in (select g.id from StudentGroup g where g.scope.semesterCode = :semester) "
             + "and r.status = com.capstone.tracking.team.LeaveRequest.Status.PENDING_LEADER")
-    int escalatePendingOfScope(@Param("scopeId") UUID scopeId);
+    int escalatePendingOfSemester(@Param("semester") String semester);
 
     /** A dissolved group's open requests and complaints are closed (7.1). */
     @Modifying

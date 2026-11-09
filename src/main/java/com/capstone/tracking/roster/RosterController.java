@@ -31,14 +31,14 @@ public class RosterController {
 
     public record EligibilityRequest(@NotNull Eligibility eligibility, @NotBlank @Size(max = 500) String reason) {}
 
-    @Operation(summary = "Edit student contact details in every phase (Admin, assigned Moderator); major and term cannot change")
+    @Operation(summary = "Edit student contact details in every phase (Admin, assigned Moderator); major and term never change")
     @PutMapping("/semester-students/{semesterStudentId}")
     public StudentRow update(@PathVariable UUID semesterStudentId, @Valid @RequestBody StudentUpdate update,
                              @AuthenticationPrincipal User currentUser) {
         return roster.update(semesterStudentId, update, currentUser);
     }
 
-    @Operation(summary = "Change a student's eligibility in a subject, with a reason (Moderator)")
+    @Operation(summary = "Change a student's eligibility, with a reason (Moderator); flagged ineligible = taken out of their room")
     @PutMapping("/enrollments/{enrollmentId}/eligibility")
     public void changeEligibility(@PathVariable UUID enrollmentId, @Valid @RequestBody EligibilityRequest request,
                                   @AuthenticationPrincipal User currentUser) {

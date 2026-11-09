@@ -1,0 +1,58 @@
+@startuml SD16-deadline-auto-lock
+!include _vp-style.iuml
+mainframe **sd** SD16 Lock the rooms at the deadline and expire requests (Scheduler)
+
+control ":PhaseScheduler" as SCH
+entity ":SemesterRepository" as SR
+control ":PhaseService" as PS
+entity ":Semester" as SEM
+entity ":JoinRequestRepository" as JR
+entity ":LeaveRequestRepository" as LR
+entity ":LeaderTransferRepository" as TR
+participant ":AuditService" as AU
+participant ":Notifier" as N
+
+loop every app.formation.tick-ms (30 s)
+  SCH -> SR : findDueForRoomLock(FORMING, now)
+  activate SR
+  SR --> SCH : semesters past their deadline, rooms not locked
+  deactivate SR
+  loop each due semester
+    SCH -> PS : tick(code)
+    activate PS
+    PS -> SEM : lock FOR UPDATE (new transaction)
+    opt phase = FORMING and roomsLockedAt = null and now >= deadline
+      PS -> SEM : setRoomsLockedAt(now)
+      PS -> JR : cancelPendingOfSemester(code, DEADLINE)
+      activate JR
+      JR --> PS : cancelled
+      deactivate JR
+      PS -> LR : escalatePendingOfSemester(code)
+      activate LR
+      LR --> PS : PENDING_LEADER becomes PENDING_MODERATOR
+      deactivate LR
+      PS -> TR : cancelPendingLeavesOfSemester(code)
+      PS -> PS : check(semester): rooms below minimum,\nstudents without group, complaints
+      PS -> AU : record(ROOMS_LOCKED)
+      PS -> N : publish(SCOPE_LOCKED -> all students)
+      PS -> N : publish(COORDINATION_NEEDED -> Moderator)
+    end
+    PS --> SCH : done
+    deactivate PS
+  end
+  SCH -> PS : expireRequests()
+  activate PS
+  PS -> JR : expireDue(now)
+  activate JR
+  JR --> PS : expired count
+  deactivate JR
+  PS --> SCH : expired
+  deactivate PS
+end
+note over PS
+  Rooms below their minimum are NOT disbanded
+  automatically: the Moderator decides (SD17).
+  A failure in one semester is logged and the
+  next semester is still processed.
+end note
+@enduml

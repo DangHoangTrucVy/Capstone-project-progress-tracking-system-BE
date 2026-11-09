@@ -1,0 +1,100 @@
+@startuml SD21-notifications
+!include _vp-style.iuml
+mainframe **sd** SD21 Deliver notifications: web (SSE) and email (System)
+
+actor User as U
+boundary ":Website" as UI
+control ":NotificationController" as NC
+participant ":NotificationStreamRegistry" as REG
+control "Business service\n(e.g. :GroupService)" as BS
+participant ":Notifier" as N
+participant ":DomainEventRelay" as REL
+participant ":DomainEventDispatcher" as DIS
+participant ":EventSink" as SINK
+control ":NotificationHandler" as NH
+database ":PostgreSQL" as DB
+participant ":NotificationBroadcaster" as BR
+control ":EmailOutboxDispatcher" as ED
+participant "Gmail SMTP" as SMTP
+
+U -> UI : signIn()
+activate UI
+UI -> NC : GET /api/v1/notifications/stream (text/event-stream)
+activate NC
+NC -> REG : open(userId)
+activate REG
+REG --> UI : event "connected"
+deactivate REG
+deactivate NC
+
+BS -> N : publish(DomainEvent(type, message, recipients))
+activate N
+N -> REL : publishEvent(event)
+deactivate N
+activate REL
+REL -> DB : save DomainEventOutbox (BEFORE_COMMIT)
+note right of REL : the event is stored in the\nsame transaction as the change
+REL -> DIS : deliver(eventId) (AFTER_COMMIT)
+deactivate REL
+activate DIS
+DIS -> DB : lockById(eventId)
+alt delivered
+  DIS -> SINK : send(event)
+  activate SINK
+  SINK -> NH : handle(event)
+  activate NH
+  NH -> NH : recipients minus the actor
+  loop each recipient
+    NH -> DB : save Notification (skip duplicates)
+    opt event type is emailed
+      NH -> DB : save EmailOutbox(recipient, subject, body)
+    end
+  end
+  NH -> BR : broadcast(recipientId, notification) (after commit)
+  activate BR
+  BR -> REG : send(userId, notification)
+  activate REG
+  REG -> UI : SSE event "notification"
+  deactivate REG
+  deactivate BR
+  NH --> SINK : done
+  deactivate NH
+  SINK --> DIS : done
+  deactivate SINK
+  DIS -> DB : setDeliveredAt(now)
+else delivery failed
+  DIS -> DB : attempts + 1, nextAttemptAt = now + backoff
+end
+deactivate DIS
+
+loop every app.messaging.dispatch-delay-ms
+  DIS -> DB : due(now): retry undelivered events
+end
+
+loop every app.mail.dispatch-delay-ms
+  ED -> DB : lockDue(now) FOR UPDATE SKIP LOCKED
+  activate ED
+  loop each due email
+    ED -> SMTP : send(to, "[Ghép nhóm] ...", body)
+    alt sent
+      ED -> DB : mark SENT
+    else failed
+      ED -> DB : retry later, or give up after max attempts
+    end
+  end
+  deactivate ED
+end
+
+UI -> U : show toast and badge
+U -> UI : openNotifications()
+UI -> NC : GET /api/v1/notifications?unreadOnly= | GET /unread-count
+activate NC
+NC --> UI : Page<NotificationResponse>
+deactivate NC
+U -> UI : markRead(notification) | markAllRead()
+UI -> NC : PUT /api/v1/notifications/{id}/read | PUT /read-all
+activate NC
+NC --> UI : 200
+deactivate NC
+deactivate UI
+@enduml

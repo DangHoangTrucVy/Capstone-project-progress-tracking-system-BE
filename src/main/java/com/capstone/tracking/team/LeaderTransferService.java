@@ -11,10 +11,9 @@ import com.capstone.tracking.notification.DomainEvent;
 import com.capstone.tracking.notification.DomainEventType;
 import com.capstone.tracking.notification.Notifier;
 import com.capstone.tracking.roster.NoGroupReason;
-import com.capstone.tracking.subject.FormationScope;
-import com.capstone.tracking.subject.FormationScopeRepository;
-import com.capstone.tracking.subject.ScopePhase;
-import com.capstone.tracking.subject.ScopeRules;
+import com.capstone.tracking.semester.Semester;
+import com.capstone.tracking.semester.SemesterGuard;
+import com.capstone.tracking.semester.SemesterPhase;
 import com.capstone.tracking.team.LeaderTransfer.Status;
 import com.capstone.tracking.user.User;
 import java.time.Instant;
@@ -38,9 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class LeaderTransferService {
 
     private final LeaderTransferRepository transfers;
-    private final FormationScopeRepository scopes;
     private final GroupCore core;
-    private final ScopeRules rules;
+    private final SemesterGuard guard;
     private final Notifier notifier;
     private final AuditService audit;
     private final Locks locks;
@@ -60,17 +58,18 @@ public class LeaderTransferService {
     @Transactional
     public LeaderTransfer propose(UUID groupId, UUID toUserId, boolean leaveAfter, User leader) {
         StudentGroup group = core.get(groupId);
-        locks.read(FormationScope.class, group.getScope().getId());
-        gate.requireCanAct(group.getScope().getSubject().getId(), leader);
+        Semester semester = locks.readSemester(group.getScope().semesterCode());
+        gate.requireCanAct(semester.getCode(), leader);
         group = core.lock(groupId);
         GroupMember from = core.requireLeader(group, leader.getId());
-        FormationScope scope = group.getScope();
-        if (scope.getPhase() == ScopePhase.PREPARING) {
-            throw new ApiException(HttpStatus.CONFLICT, "SCOPE_NOT_OPEN", "Group formation has not opened yet");
+        if (semester.getPhase() == SemesterPhase.OPENING) {
+            throw new ApiException(HttpStatus.CONFLICT, "NOT_STARTED", "Group formation has not started yet");
         }
-        boolean afterFinalize = scope.getPhase() == ScopePhase.FINALIZED;
+        guard.requireNotClosed(semester);
+        boolean afterFinalize = group.isApproved() || semester.getRound1FinalizedAt() != null;
         if (leaveAfter) {
-            rules.requireOpen(scope); // nobody leaves by themselves after the deadline
+            guard.requireBeforeDeadline(semester); // nobody leaves by themselves after the deadline
+            GroupService.requireNotApproved(group);
         }
         if (toUserId == null || toUserId.equals(leader.getId())) {
             throw new BadRequestException("Choose another member of the group");
@@ -84,7 +83,7 @@ public class LeaderTransferService {
                 .group(group).fromUser(from.getUser()).toUser(to.getUser())
                 .leaveAfter(leaveAfter).afterFinalize(afterFinalize).build());
         notifier.publish(DomainEvent.of(DomainEventType.LEADER_TRANSFER_REQUESTED,
-                leader.getFullName() + " muốn chuyển chức Leader nhóm " + group.getName() + " cho bạn", toUserId)
+                leader.getFullName() + " muốn chuyển chức trưởng nhóm " + GroupCore.label(group) + " cho bạn", toUserId)
                 .about(groupId, transfer.getId()).by(leader.getId()));
         return transfer;
     }
@@ -92,8 +91,9 @@ public class LeaderTransferService {
     @Transactional
     public LeaderTransfer answer(UUID transferId, boolean accept, User user) {
         LeaderTransfer snapshot = find(transferId);
-        FormationScope scope = locks.read(FormationScope.class, snapshot.getGroup().getScope().getId());
-        gate.requireCanAct(scope.getSubject().getId(), user);
+        Semester semester = locks.readSemester(snapshot.getGroup().getScope().semesterCode());
+        gate.requireCanAct(semester.getCode(), user);
+        guard.requireNotClosed(semester);
         GroupMember fromSnapshot = core.activeMembers(snapshot.getGroup().getId()).stream()
                 .filter(m -> m.getUser().getId().equals(snapshot.getFromUser().getId())).findFirst().orElse(null);
         if (accept && snapshot.isLeaveAfter() && fromSnapshot != null) {
@@ -112,7 +112,7 @@ public class LeaderTransferService {
         if (!accept) {
             transfer.setStatus(Status.DECLINED);
             notifier.publish(DomainEvent.of(DomainEventType.LEADER_TRANSFER_ANSWERED,
-                    user.getFullName() + " đã từ chối nhận chức Leader nhóm " + group.getName(),
+                    user.getFullName() + " đã từ chối nhận chức trưởng nhóm " + GroupCore.label(group),
                     transfer.getFromUser().getId()).about(group.getId(), transfer.getId()).by(user.getId()));
             return transfer;
         }
@@ -124,7 +124,7 @@ public class LeaderTransferService {
             throw new ApiException(HttpStatus.CONFLICT, "TRANSFER_STALE", "The group changed; this transfer no longer applies");
         }
         if (transfer.isLeaveAfter()) {
-            rules.requireOpen(scope);
+            guard.requireBeforeDeadline(semester);
         }
         // One Leader per group is a unique index: clear the old one first.
         from.setLeader(false);
@@ -135,22 +135,22 @@ public class LeaderTransferService {
         if (transfer.isLeaveAfter()) {
             core.remove(from, GroupMember.LeftReason.LEFT, NoGroupReason.LEFT_GROUP, now, true);
         }
-        if (scope.getPhase() == ScopePhase.FINALIZED) {
-            FormationScope locked = scopes.findById(scope.getId()).orElseThrow();
-            String change = "Chuyển Leader nhóm " + group.getCode() + " từ " + from.getUser().getFullName() + " sang "
+        if (group.isApproved() || semester.getRound1FinalizedAt() != null) {
+            // 6.6: still allowed after finalization; the Moderator is told.
+            String change = "Chuyển trưởng " + GroupCore.label(group) + " từ " + from.getUser().getFullName() + " sang "
                     + user.getFullName() + " lúc " + VnTime.format(now);
             audit.record("StudentGroup", group.getId(), AuditAction.LEADER_TRANSFERRED_AFTER_FINALIZE, user,
-                    scope.semesterCode(), Map.of("from", from.getUser().getId().toString(), "to", user.getId().toString()));
+                    semester.getCode(), Map.of("from", from.getUser().getId().toString(), "to", user.getId().toString()));
             notifier.publish(DomainEvent.of(DomainEventType.LEADER_CHANGED_AFTER_FINALIZE, change,
-                    notifier.coordinators(scope.semesterCode())).about(group.getId(), transfer.getId()).by(user.getId()));
+                    notifier.coordinators(semester.getCode())).about(group.getId(), transfer.getId()).by(user.getId()));
         }
         notifier.publish(DomainEvent.of(DomainEventType.LEADER_CHANGED,
-                user.getFullName() + " là Leader mới của nhóm " + group.getName(),
+                user.getFullName() + " là trưởng nhóm mới của " + GroupCore.label(group),
                 core.activeMembers(group.getId()).stream().map(m -> m.getUser().getId()).toList())
                 .about(group.getId(), transfer.getId()).by(user.getId()));
         if (transfer.isLeaveAfter()) {
             notifier.publish(DomainEvent.of(DomainEventType.LEADER_TRANSFER_ANSWERED,
-                    user.getFullName() + " đã nhận chức Leader; bạn đã rời nhóm " + group.getName(),
+                    user.getFullName() + " đã nhận chức trưởng nhóm; bạn đã rời " + GroupCore.label(group),
                     transfer.getFromUser().getId()).about(group.getId(), transfer.getId()).by(user.getId()));
         }
         return transfer;
@@ -159,8 +159,8 @@ public class LeaderTransferService {
     @Transactional
     public LeaderTransfer cancel(UUID transferId, User user) {
         LeaderTransfer snapshot = find(transferId);
-        locks.read(FormationScope.class, snapshot.getGroup().getScope().getId());
-        gate.requireCanAct(snapshot.getGroup().getScope().getSubject().getId(), user);
+        Semester semester = locks.readSemester(snapshot.getGroup().getScope().semesterCode());
+        gate.requireCanAct(semester.getCode(), user);
         LeaderTransfer transfer = locks.write(LeaderTransfer.class, transferId);
         if (!transfer.getFromUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("Only the Leader who proposed it can cancel this transfer");

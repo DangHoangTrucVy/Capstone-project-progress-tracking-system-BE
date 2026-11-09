@@ -1,0 +1,61 @@
+' Visual Paradigm look for UML 2 sequence diagrams (v3.0).
+' VP conventions: "sd" frame, lifelines ":Class" with ECB icons, numbered messages "1:",
+' solid arrow = synchronous call, dashed arrow = return, guards in [brackets] on fragments.
+skinparam style strictuml
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam dpi 120
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 320
+skinparam ParticipantPadding 16
+skinparam BoxPadding 10
+skinparam noteTextAlignment left
+skinparam sequence {
+  ArrowColor #000000
+  ArrowFontSize 11
+  LifeLineBorderColor #000000
+  LifeLineBackgroundColor #FFFFFF
+  ParticipantBackgroundColor #C6DBF1
+  ParticipantBorderColor #24507E
+  ParticipantFontStyle plain
+  ActorBackgroundColor #C6DBF1
+  ActorBorderColor #24507E
+  GroupBorderColor #000000
+  GroupBackgroundColor #FFFFFF
+  GroupHeaderFontStyle bold
+  GroupFontStyle plain
+  ReferenceBorderColor #000000
+  ReferenceBackgroundColor #FFFFFF
+  ReferenceHeaderBackgroundColor #FFFFFF
+  DividerBackgroundColor #FFFFFF
+  DividerBorderColor #000000
+}
+skinparam boundary {
+  BackgroundColor #C6DBF1
+  BorderColor #24507E
+}
+skinparam control {
+  BackgroundColor #C6DBF1
+  BorderColor #24507E
+}
+skinparam entity {
+  BackgroundColor #C6DBF1
+  BorderColor #24507E
+}
+skinparam database {
+  BackgroundColor #C6DBF1
+  BorderColor #24507E
+}
+skinparam collections {
+  BackgroundColor #C6DBF1
+  BorderColor #24507E
+}
+skinparam note {
+  BackgroundColor #FFFFE1
+  BorderColor #8C8C5A
+}
+hide footbox
+autonumber "0:"

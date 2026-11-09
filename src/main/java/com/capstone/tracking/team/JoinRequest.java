@@ -20,8 +20,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * An Apply (student -> group; the Leader accepting it makes the student a member at once) or an Invite (Leader ->
- * student; the student accepting it joins). Neither holds a seat (6.2).
+ * An APPLY is a student's request to join a room the Leader locked (the Leader accepting it makes the student a member
+ * at once); an INVITE goes from a Leader to a student without a room, during formation or in the supplement phase
+ * (7.4). Neither holds a seat (6.2).
  */
 @Entity
 @Table(name = "join_requests")
@@ -40,7 +41,12 @@ public class JoinRequest extends BaseEntity {
      */
     public enum Status { PENDING, ACCEPTED, REJECTED, WITHDRAWN, EXPIRED, CANCELLED }
 
-    public enum CancelReason { JOINED_ANOTHER_GROUP, DEADLINE, INELIGIBLE, GROUP_DISSOLVED }
+    /**
+     * JOINED_ANOTHER_GROUP: the student joined a room. DEADLINE: the rooms locked at the deadline. INELIGIBLE: flagged.
+     * GROUP_DISSOLVED: the room was disbanded. ROOM_UNAVAILABLE: the room was approved, filled or unlocked. CLOSED:
+     * formation ended.
+     */
+    public enum CancelReason { JOINED_ANOTHER_GROUP, DEADLINE, INELIGIBLE, GROUP_DISSOLVED, ROOM_UNAVAILABLE, CLOSED }
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "group_id", nullable = false)
@@ -77,13 +83,13 @@ public class JoinRequest extends BaseEntity {
     @Column(nullable = false)
     private UUID createdBy;
 
-    @Column(nullable = false)
+    /** Null: never expires (invites of the supplement phase, 7.4). */
     private Instant expiresAt;
 
     private Instant respondedAt;
 
     /** PENDING past its lifetime counts as EXPIRED even before the sweeper writes it down. */
     public Status effectiveStatus(Instant now) {
-        return status == Status.PENDING && !expiresAt.isAfter(now) ? Status.EXPIRED : status;
+        return status == Status.PENDING && expiresAt != null && !expiresAt.isAfter(now) ? Status.EXPIRED : status;
     }
 }

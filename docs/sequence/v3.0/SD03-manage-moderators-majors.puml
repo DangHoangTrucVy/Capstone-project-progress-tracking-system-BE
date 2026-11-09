@@ -1,0 +1,77 @@
+@startuml SD03-manage-moderators-majors
+!include _vp-style.iuml
+mainframe **sd** SD03 Manage Moderator accounts and majors (Admin)
+
+actor Admin as A
+boundary ":AdminScreen" as UI
+control ":UserController" as UC
+control ":UserService" as US
+control ":MajorController" as MC
+entity ":UserRepository" as UR
+entity ":MajorRepository" as MR
+participant ":PasswordEncoder" as PE
+
+group Create a Moderator account
+  A -> UI : fillModeratorForm(email, fullName, password, phone)
+  activate UI
+  UI -> UC : POST /api/v1/users/moderators
+  activate UC
+  UC -> US : create(request with role = LECTURER)
+  activate US
+  US -> UR : existsByEmailIgnoreCase(email)
+  activate UR
+  UR --> US : exists
+  deactivate UR
+  break email already used
+    US --> UI : 409 CONFLICT
+  end
+  US -> PE : encode(password)
+  activate PE
+  PE --> US : passwordHash
+  deactivate PE
+  US -> UR : save(user)
+  activate UR
+  UR --> US : user
+  deactivate UR
+  US --> UC : user
+  deactivate US
+  UC --> UI : 201 UserResponse
+  deactivate UC
+  UI --> A : account created
+  deactivate UI
+end
+
+group Reset a Moderator password
+  A -> UI : resetPassword(userId, newPassword)
+  activate UI
+  UI -> UC : PUT /api/v1/users/{id}/password
+  activate UC
+  UC -> US : setModeratorPassword(id, password)
+  activate US
+  break not a Moderator / password < 8 characters
+    US --> UI : 400 BAD_REQUEST
+  end
+  US -> PE : encode(password)
+  US -> UR : save(user)
+  US --> UC : ok
+  deactivate US
+  UC --> UI : 204 No Content
+  deactivate UC
+  deactivate UI
+end
+
+group Create or rename a major
+  A -> UI : saveMajor(code, name)
+  activate UI
+  UI -> MC : POST /api/v1/majors | PUT /api/v1/majors/{id}
+  activate MC
+  MC -> MR : save(major)
+  activate MR
+  MR --> MC : major
+  deactivate MR
+  MC --> UI : 201 | 200 MajorResponse
+  deactivate MC
+  UI --> A : major list updated
+  deactivate UI
+end
+@enduml
